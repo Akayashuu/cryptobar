@@ -3,7 +3,21 @@ version = 2
 
 [licenses]
 version = 2
-allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "MPL-2.0"]
+# Toutes permissives et compatibles avec la MIT du projet.
+# « Apache-2.0 WITH LLVM-exception » vient de target-lexicon (chaîne glib/gtk),
+# « CDLA-Permissive-2.0 » de webpki-roots, qui embarque le magasin de
+# certificats de Mozilla.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Zlib",
+  "MPL-2.0",
+  "CDLA-Permissive-2.0",
+]
 
 [bans]
 multiple-versions = "warn"
