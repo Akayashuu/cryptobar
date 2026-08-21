@@ -2,7 +2,7 @@
 name = "cryptobar"
 version = "0.2.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 description = "Cours de cryptomonnaies dans Waybar, avec sparkline, courbe terminal et popup GTK4"
 repository = "https://github.com/Akayashuu/cryptobar"
 license = "MIT"
