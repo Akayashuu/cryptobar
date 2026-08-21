@@ -5,9 +5,11 @@ import QtQuick
 import qs.modules.ii.bar as Bar
 
 /**
- * Variante pour la barre verticale : la largeur disponible ne permet pas
- * d'afficher la ligne complète, on empile donc symbole, prix, courbe et
- * variation.
+ * Variante pour la barre verticale. Quarante pixels de large ne portent
+ * pas une ligne complète : on garde le strict nécessaire — le logo, qui dit
+ * déjà de quelle pièce il s'agit, le prix, et la variation sur 24 h. Le
+ * symbole, la courbe et le fond teinté restent à la barre horizontale et à
+ * l'infobulle, où ils ont la place d'être lisibles.
  */
 Item {
     id: root
@@ -21,24 +23,55 @@ Item {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
     }
 
+    Connections {
+        target: Crypto
+        function onSymbolChanged() {
+            swap.restart();
+        }
+    }
+
+    SequentialAnimation {
+        id: swap
+        PropertyAction { target: column; property: "opacity"; value: 0 }
+        NumberAnimation { target: column; property: "opacity"; to: 1; duration: 180; easing.type: Easing.OutCubic }
+    }
+
     Column {
         id: column
         anchors.centerIn: parent
         spacing: 1
 
-        Bar.CryptoCoinIcon {
+        Item {
             anchors.horizontalCenter: parent.horizontalCenter
-            visible: !Crypto.stale && !Crypto.loading
-            coin: Crypto.active
-            size: Appearance.font.pixelSize.large
-        }
+            implicitWidth: Appearance.font.pixelSize.large
+            implicitHeight: Appearance.font.pixelSize.large
 
-        StyledText {
-            anchors.horizontalCenter: parent.horizontalCenter
-            font.pixelSize: Appearance.font.pixelSize.smaller
-            font.weight: Font.DemiBold
-            color: root.accent
-            text: Crypto.symbol
+            Bar.CryptoCoinIcon {
+                anchors.centerIn: parent
+                visible: !Crypto.stale && !Crypto.loading
+                coin: Crypto.active
+                size: Appearance.font.pixelSize.large
+            }
+
+            // Pastille d'alerte : un seuil est franchi en ce moment.
+            Rectangle {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                visible: Crypto.alerting
+                implicitWidth: 7
+                implicitHeight: 7
+                radius: height / 2
+                color: Appearance.colors.colError
+                border.width: 1
+                border.color: Appearance.colors.colLayer1
+
+                SequentialAnimation on opacity {
+                    running: Crypto.alerting
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 0.35; duration: 900; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: 1; duration: 900; easing.type: Easing.InOutSine }
+                }
+            }
         }
 
         StyledText {
@@ -53,24 +86,18 @@ Item {
             text: Crypto.price
         }
 
-        Bar.CryptoSparkline {
-            anchors.horizontalCenter: parent.horizontalCenter
-            visible: Crypto.series.length > 1
-            implicitWidth: root.width - 8
-            implicitHeight: 12
-            series: Crypto.series
-            stroke: root.accent
-        }
-
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 1
 
             MaterialSymbol {
                 anchors.verticalCenter: parent.verticalCenter
+                // La flèche ne sert qu'à signaler le cache hors ligne : le
+                // signe du pourcentage dit déjà le sens de la variation.
+                visible: Crypto.stale
                 iconSize: Appearance.font.pixelSize.smaller
                 color: root.accent
-                text: Crypto.stale ? "cloud_off" : Crypto.icon(Crypto.trend)
+                text: "cloud_off"
             }
 
             StyledText {

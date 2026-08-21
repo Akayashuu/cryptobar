@@ -13,11 +13,44 @@ Item {
 
     property color accent: Crypto.stale ? Appearance.colors.colOnSurfaceVariant : Crypto.color(Crypto.trend)
 
-    implicitWidth: row.implicitWidth
+    implicitWidth: row.implicitWidth + 16
     implicitHeight: Appearance.sizes.barHeight
 
     Behavior on accent {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+    }
+
+    // Fond teinté par la tendance : assez léger pour rester lisible sur
+    // n'importe quel fond de barre, assez net pour se voir du coin de l'œil.
+    Rectangle {
+        anchors.fill: parent
+        anchors.topMargin: 3
+        anchors.bottomMargin: 3
+        radius: Appearance.rounding.small
+        color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, Crypto.stale || Crypto.loading ? 0.06 : 0.14)
+
+        Behavior on color {
+            animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+        }
+    }
+
+    // Changement de pièce : la ligne glisse et se fond plutôt que de sauter,
+    // ce qui laisse à l'œil le temps de suivre le symbole qui change.
+    Connections {
+        target: Crypto
+        function onSymbolChanged() {
+            swap.restart();
+        }
+    }
+
+    SequentialAnimation {
+        id: swap
+        PropertyAction { target: row; property: "opacity"; value: 0 }
+        PropertyAction { target: row; property: "anchors.verticalCenterOffset"; value: 6 }
+        ParallelAnimation {
+            NumberAnimation { target: row; property: "opacity"; to: 1; duration: 180; easing.type: Easing.OutCubic }
+            NumberAnimation { target: row; property: "anchors.verticalCenterOffset"; to: 0; duration: 180; easing.type: Easing.OutCubic }
+        }
     }
 
     RowLayout {
@@ -55,6 +88,29 @@ Item {
                 visible: !Crypto.stale && !Crypto.loading
                 coin: Crypto.active
                 size: Appearance.font.pixelSize.larger
+            }
+
+            // Pastille d'alerte : un seuil est franchi en ce moment. Elle bat
+            // lentement, le temps qu'on la remarque, sans happer le regard.
+            Rectangle {
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.rightMargin: -1
+                anchors.topMargin: -1
+                visible: Crypto.alerting
+                implicitWidth: 7
+                implicitHeight: 7
+                radius: height / 2
+                color: Appearance.colors.colError
+                border.width: 1
+                border.color: Appearance.colors.colLayer1
+
+                SequentialAnimation on opacity {
+                    running: Crypto.alerting
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 0.35; duration: 900; easing.type: Easing.InOutSine }
+                    NumberAnimation { to: 1; duration: 900; easing.type: Easing.InOutSine }
+                }
             }
         }
 

@@ -139,6 +139,122 @@ StyledPopup {
             }
         }
 
+        // Alertes franchies : rien la plupart du temps, une ligne par seuil
+        // sinon. C'est le même contenu que la notification de bureau, gardé
+        // sous la main après qu'elle a disparu.
+        Column {
+            Layout.fillWidth: true
+            visible: Crypto.alerts.length > 0
+            spacing: 2
+
+            Repeater {
+                model: Crypto.alerts
+
+                delegate: Row {
+                    required property var modelData
+                    spacing: 6
+
+                    MaterialSymbol {
+                        anchors.verticalCenter: parent.verticalCenter
+                        iconSize: Appearance.font.pixelSize.normal
+                        color: Appearance.colors.colError
+                        text: modelData.kind === "below" ? "trending_down" : modelData.kind === "above" ? "trending_up" : "bolt"
+                    }
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        textFormat: Text.PlainText
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colError
+                        text: modelData.title
+                    }
+                }
+            }
+        }
+
+        // Portefeuille : absent tant qu'aucune adresse publique n'est suivie.
+        Column {
+            Layout.fillWidth: true
+            visible: Crypto.portfolio !== null
+            spacing: 3
+
+            Row {
+                spacing: 8
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    font.pixelSize: Appearance.font.pixelSize.large
+                    font.weight: Font.DemiBold
+                    textFormat: Text.PlainText
+                    color: Appearance.colors.colOnLayer1
+                    text: Crypto.portfolio?.total ?? ""
+                }
+
+                StyledText {
+                    anchors.verticalCenter: parent.verticalCenter
+                    textFormat: Text.PlainText
+                    font.pixelSize: Appearance.font.pixelSize.smaller
+                    color: (Crypto.portfolio?.positive ?? true) ? Appearance.m3colors.m3primary : Appearance.colors.colError
+                    text: (Crypto.portfolio?.change_24h ?? "") + " " + (Crypto.portfolio?.change_24h_pct ?? "")
+                }
+            }
+
+            Repeater {
+                model: Crypto.portfolio?.positions ?? []
+
+                delegate: Row {
+                    required property var modelData
+                    spacing: 8
+
+                    // Part du portefeuille : une barre vaut mieux qu'un
+                    // pourcentage de plus dans une ligne déjà chargée.
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        implicitWidth: 40
+                        implicitHeight: 4
+                        radius: 2
+                        color: Appearance.colors.colLayer2
+
+                        Rectangle {
+                            width: Math.max(2, parent.width * (modelData.share ?? 0))
+                            height: parent.height
+                            radius: parent.radius
+                            color: modelData.color
+                        }
+                    }
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: root.symbolWidth
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colOnLayer1
+                        text: modelData.symbol
+                    }
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: root.priceWidth
+                        horizontalAlignment: Text.AlignRight
+                        textFormat: Text.PlainText
+                        elide: Text.ElideRight
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colOnSurfaceVariant
+                        text: modelData.quantity
+                    }
+
+                    StyledText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: root.changeWidth
+                        horizontalAlignment: Text.AlignRight
+                        textFormat: Text.PlainText
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colOnLayer1
+                        text: modelData.value
+                    }
+                }
+            }
+        }
+
         StyledText {
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignLeft

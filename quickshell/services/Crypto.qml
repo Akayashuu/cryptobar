@@ -48,9 +48,18 @@ Singleton {
     /// change_24h, change_7d, trend, series, active, icon, glyph, color,
     /// foreground }.
     property var coins: []
+    /// Alertes franchies à cet instant : { symbol, kind, title, body }. Vide
+    /// la plupart du temps — c'est ce qui allume la pastille de la barre.
+    property var alerts: []
+    /// Portefeuille valorisé, ou `null` si aucune adresse publique n'est
+    /// suivie : { total, change_24h, change_24h_pct, positive, positions }.
+    property var portfolio: null
 
     /// Vrai tant qu'aucune ligne n'a été reçue.
     readonly property bool loading: root.trend.length === 0
+
+    /// Vrai si au moins un seuil est franchi en ce moment.
+    readonly property bool alerting: root.alerts.length > 0
 
     signal failed(string reason)
 
@@ -75,6 +84,8 @@ Singleton {
         root.coins = payload.coins ?? [];
         root.stale = payload.stale ?? false;
         root.trend = payload.trend ?? "flat";
+        root.alerts = payload.alerts ?? [];
+        root.portfolio = payload.portfolio ?? null;
         const active = root.coins.find(coin => coin.active) ?? null;
         root.active = active;
         root.series = active?.series ?? [];
