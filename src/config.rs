@@ -102,7 +102,7 @@ impl Config {
             if let Some(parent) = path.parent() {
                 paths::ensure_dir(parent)?;
             }
-            Self::write_default(&path)?;
+            Self::write_default(&path, false)?;
         }
         Self::load_from(&path)
     }
@@ -131,12 +131,15 @@ impl Config {
     ///
     /// # Errors
     /// Échoue si le fichier existe déjà ou s'il ne peut pas être écrit.
-    pub fn write_default(path: &Path) -> Result<()> {
+    pub fn write_default(path: &Path, force: bool) -> Result<()> {
         if let Some(parent) = path.parent() {
             paths::ensure_dir(parent)?;
         }
-        if path.exists() {
-            bail!("{} existe déjà, refus de l'écraser", path.display());
+        if path.exists() && !force {
+            bail!(
+                "{} existe déjà, utilisez --force pour l'écraser",
+                path.display()
+            );
         }
         std::fs::write(path, DEFAULT_CONFIG)
             .with_context(|| format!("écriture de {}", path.display()))
@@ -271,7 +274,7 @@ mod tests {
     fn config_par_defaut_ecrite_puis_relue_est_valide() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
-        Config::write_default(&path).unwrap();
+        Config::write_default(&path, false).unwrap();
         let cfg = Config::load_from(&path).unwrap();
         assert!(!cfg.coins.is_empty());
     }
@@ -280,7 +283,7 @@ mod tests {
     fn write_default_refuse_decraser() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
-        Config::write_default(&path).unwrap();
-        assert!(Config::write_default(&path).is_err());
+        Config::write_default(&path, false).unwrap();
+        assert!(Config::write_default(&path, false).is_err());
     }
 }

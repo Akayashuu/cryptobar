@@ -32,8 +32,13 @@ impl Default for CoinGecko {
 
 impl CoinGecko {
     #[must_use]
+    /// Client par défaut. `CRYPTOBAR_API_BASE` permet de viser une autre
+    /// instance — c'est ce qui rend les tests bout en bout hermétiques.
     pub fn new() -> Self {
-        Self::with_base_url(DEFAULT_BASE_URL)
+        match std::env::var("CRYPTOBAR_API_BASE") {
+            Ok(base) if !base.trim().is_empty() => Self::with_base_url(base.trim()),
+            _ => Self::with_base_url(DEFAULT_BASE_URL),
+        }
     }
 
     #[must_use]

@@ -5,3 +5,4 @@
 
 pub mod format;
 pub mod sparkline;
+pub mod waybar;
