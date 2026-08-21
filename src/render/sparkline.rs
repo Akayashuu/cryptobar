@@ -13,7 +13,11 @@ fn downsample(points: &[f64], width: usize) -> Vec<f64> {
     }
     let mut out = Vec::with_capacity(width);
     for bucket in 0..width {
+        // `width` est non nul : `downsample` n'est appelée que depuis `sparkline`,
+        // qui retourne tôt sur une largeur nulle.
+        #[allow(clippy::integer_division, clippy::arithmetic_side_effects)]
         let start = bucket.saturating_mul(points.len()) / width;
+        #[allow(clippy::integer_division, clippy::arithmetic_side_effects)]
         let end = bucket.saturating_add(1).saturating_mul(points.len()) / width;
         let end = end.max(start.saturating_add(1));
         if let Some(slice) = points.get(start..end.min(points.len()))

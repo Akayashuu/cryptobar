@@ -48,7 +48,10 @@ fn group_thousands(rendered: &str) -> String {
         None => ("", int_part),
     };
 
-    let mut grouped = String::with_capacity(digits.len().saturating_add(digits.len() / 3));
+    // Division par une constante non nulle : la capacité est une estimation, pas un invariant.
+    #[allow(clippy::integer_division)]
+    let capacity = digits.len().saturating_add(digits.len() / 3);
+    let mut grouped = String::with_capacity(capacity);
     for (index, ch) in digits.chars().enumerate() {
         let remaining = digits.len().saturating_sub(index);
         if index > 0 && remaining % 3 == 0 {
