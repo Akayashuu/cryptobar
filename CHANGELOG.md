@@ -3,6 +3,18 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le
 versionnage sémantique.
 
+## [Non publié]
+
+### Ajouté
+
+- Intégration Quickshell pour dots-hyprland (`quickshell/`) : service singleton
+  partagé par tous les écrans, widget horizontal, widget vertical, infobulle,
+  installateur idempotent.
+- `cryptobar bar --markup none` : sortie sans balisage Pango pour les barres
+  qui affichent du texte brut.
+- Champs `symbol`, `price`, `percent` et `sparkline` dans la ligne JSON, pour
+  les mises en page trop étroites pour le champ `text`.
+
 ## [0.1.0] — 2026-08-21
 
 Première version.

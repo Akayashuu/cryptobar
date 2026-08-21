@@ -6,6 +6,7 @@ use clap::Parser as _;
 use cryptobar::app::App;
 use cryptobar::cli::{Cli, Command};
 use cryptobar::commands::{bar, chart, coins, config_cmd, nav, popup};
+use cryptobar::render::waybar::Markup;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -18,8 +19,11 @@ fn main() -> Result<()> {
 
     let app = App::new(cli.config).context("initialisation impossible")?;
 
-    match cli.command.unwrap_or(Command::Bar { watch: false }) {
-        Command::Bar { watch } => bar::run(&app, watch),
+    match cli.command.unwrap_or(Command::Bar {
+        watch: false,
+        markup: Markup::default(),
+    }) {
+        Command::Bar { watch, markup } => bar::run(&app, watch, markup),
         Command::Next => nav::step(&app, 1),
         Command::Prev => nav::step(&app, -1),
         Command::Refresh => nav::refresh(&app),

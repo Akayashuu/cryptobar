@@ -106,11 +106,42 @@ L'`interval` de Waybar et le `refresh_interval` de cryptobar sont indépendants.
 Waybar peut ticker toutes les 5 secondes sans générer la moindre requête : le
 cache disque sert les données tant qu'elles sont fraîches.
 
+## Intégration Quickshell
+
+```bash
+./quickshell/install.sh
+qs -c ii kill && qs -c ii -d
+```
+
+Widget pour la configuration `ii` de dots-hyprland, barre horizontale comme
+verticale, avec les mêmes gestes que sous Waybar. Détails, options et câblage
+manuel : [`quickshell/README.md`](quickshell/README.md).
+
+## Autres barres
+
+`cryptobar bar --markup none` produit la même ligne JSON sans balisage Pango,
+pour les barres qui affichent du texte brut — Quickshell, Ags, Eww. Au texte
+déjà mis en forme s'ajoutent des champs séparés, que Waybar ignore et dont une
+mise en page contrainte a besoin :
+
+```json
+{
+  "text": "BTC 65 974 € ▁▁▁▂▂▃▅█ +6,4 %",
+  "tooltip": "…",
+  "class": "up",
+  "symbol": "BTC",
+  "price": "65 974 €",
+  "percent": "+6,4 %",
+  "sparkline": "▁▁▁▂▂▃▅█"
+}
+```
+
 ## Commandes
 
 | Commande | Effet |
 |---|---|
 | `cryptobar bar` | Émet la ligne JSON attendue par Waybar |
+| `cryptobar bar --markup none` | Même ligne, sans balisage Pango (Quickshell, Ags, Eww) |
 | `cryptobar bar --watch` | Reste en avant-plan et réémet à chaque intervalle |
 | `cryptobar next` / `prev` | Change la cryptomonnaie affichée |
 | `cryptobar refresh` | Invalide le cache et réveille Waybar |

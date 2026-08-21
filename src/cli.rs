@@ -3,6 +3,7 @@
 use clap::{Parser, Subcommand};
 
 use crate::model::Range;
+use crate::render::waybar::Markup;
 
 /// Cours de cryptomonnaies pour Waybar, le terminal et le bureau.
 #[derive(Debug, Parser)]
@@ -23,6 +24,10 @@ pub enum Command {
         /// Reste en avant-plan et réémet à chaque intervalle.
         #[arg(long)]
         watch: bool,
+        /// Balisage du texte : `pango` pour Waybar, `none` pour Quickshell,
+        /// Ags, Eww et toute barre affichant du texte brut.
+        #[arg(long, default_value = "pango", value_name = "STYLE")]
+        markup: Markup,
     },
     /// Passe à la cryptomonnaie suivante.
     Next,
@@ -78,6 +83,19 @@ mod tests {
     #[test]
     fn la_definition_clap_est_coherente() {
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn le_balisage_de_la_barre_est_valide_par_clap() {
+        assert!(Cli::try_parse_from(["cryptobar", "bar", "--markup", "gras"]).is_err());
+        let cli = Cli::try_parse_from(["cryptobar", "bar", "--markup", "none"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(Command::Bar {
+                markup: Markup::None,
+                ..
+            })
+        ));
     }
 
     #[test]
