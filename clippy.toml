@@ -1,1 +1,3 @@
 msrv = "1.85"
+# Noms propres du domaine : ils n'ont pas à être écrits entre backticks.
+doc-valid-idents = ["CoinGecko", "Waybar", "Hyprland", "GTK", "GTK4", "Cairo", "Unicode", "..default"]
