@@ -80,7 +80,8 @@ impl Canvas {
 /// d'un terminal tiennent très largement dans la mantisse d'un `f64` ; le cas
 /// dégénéré est borné plutôt que d'être laissé imprécis.
 #[allow(clippy::cast_precision_loss)]
-fn as_f64(value: usize) -> f64 {
+#[must_use]
+pub fn as_f64(value: usize) -> f64 {
     value.min(1 << 52) as f64
 }
 

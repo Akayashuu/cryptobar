@@ -1,0 +1,29 @@
+/* Styles du module cryptobar. À coller dans ~/.config/waybar/style.css. */
+
+#custom-crypto {
+  padding: 0 10px;
+  font-family: "JetBrainsMono Nerd Font", monospace;
+}
+
+/* Les classes sont émises par cryptobar selon la variation sur 24 h. */
+#custom-crypto.up {
+  color: #3ba55d;
+}
+
+#custom-crypto.down {
+  color: #ed4245;
+}
+
+#custom-crypto.flat {
+  color: #9aa0a6;
+}
+
+/* Données servies depuis le cache faute de réseau. */
+#custom-crypto.stale {
+  opacity: 0.55;
+}
+
+#custom-crypto.error {
+  color: #ed4245;
+  opacity: 0.7;
+}

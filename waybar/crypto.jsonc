@@ -1,0 +1,22 @@
+// Module cryptobar pour Waybar.
+//
+// À fusionner dans ~/.config/waybar/config.jsonc : copiez le bloc
+// "custom/crypto" et ajoutez "custom/crypto" à l'un des tableaux
+// modules-left / modules-center / modules-right.
+{
+  "custom/crypto": {
+    "exec": "cryptobar bar",
+    "return-type": "json",
+    // Waybar peut ticker plus vite que l'API : le cache absorbe la différence,
+    // c'est `refresh_interval` de la configuration qui pilote le réseau.
+    "interval": 30,
+    // Doit correspondre à `waybar_signal` dans la configuration de cryptobar.
+    "signal": 8,
+    "tooltip": true,
+    "on-click": "cryptobar popup",
+    "on-click-right": "cryptobar chart --window",
+    "on-click-middle": "cryptobar refresh",
+    "on-scroll-up": "cryptobar next",
+    "on-scroll-down": "cryptobar prev"
+  }
+}
