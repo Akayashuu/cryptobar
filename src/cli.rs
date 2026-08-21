@@ -37,6 +37,9 @@ pub enum Command {
         /// Plage temporelle : 1h, 24h, 7d, 30d, 1y.
         #[arg(long, default_value = "7d")]
         range: Range,
+        /// Ouvre le graphique dans une nouvelle fenêtre de terminal.
+        #[arg(long)]
+        window: bool,
     },
     /// Ouvre la fenêtre graphique.
     Popup,

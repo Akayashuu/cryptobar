@@ -3,6 +3,7 @@
 //! Tout ce module est purement fonctionnel — aucune E/S — ce qui le rend
 //! entièrement couvrable par des tests unitaires et du property testing.
 
+pub mod braille;
 pub mod format;
 pub mod sparkline;
 pub mod waybar;

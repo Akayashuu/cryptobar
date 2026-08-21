@@ -5,7 +5,7 @@ use clap::Parser as _;
 
 use cryptobar::app::App;
 use cryptobar::cli::{Cli, Command, ConfigAction};
-use cryptobar::commands::{bar, nav};
+use cryptobar::commands::{bar, chart, nav};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -23,7 +23,18 @@ fn main() -> Result<()> {
         Command::Next => nav::step(&app, 1),
         Command::Prev => nav::step(&app, -1),
         Command::Refresh => nav::refresh(&app),
-        Command::Chart { .. } | Command::Popup | Command::Coins { .. } => {
+        Command::Chart {
+            coin,
+            range,
+            window,
+        } => {
+            if window {
+                chart::spawn_terminal(&app, coin.as_deref(), range)
+            } else {
+                chart::run(&app, coin.as_deref(), range)
+            }
+        }
+        Command::Popup | Command::Coins { .. } => {
             anyhow::bail!("commande pas encore disponible dans cette version")
         }
         Command::Config { .. } => unreachable!("traité avant l'initialisation du contexte"),
