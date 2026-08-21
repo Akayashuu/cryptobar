@@ -1,0 +1,42 @@
+[package]
+name = "cryptobar"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Cours de cryptomonnaies dans Waybar, avec sparkline, courbe terminal et popup GTK4"
+repository = "https://github.com/Akayashuu/cryptobar"
+license = "MIT"
+readme = "README.md"
+keywords = ["waybar", "crypto", "hyprland", "wayland", "cli"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "wrap_help"] }
+etcetera = "0.10"
+rustix = { version = "1", features = ["fs", "process"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+terminal_size = "0.4"
+thiserror = "2"
+toml = "0.9"
+ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "json"] }
+gtk4 = { version = "0.9", optional = true }
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+proptest = "1"
+serde_json = "1"
+tempfile = "3"
+
+[features]
+default = ["popup"]
+popup = ["dep:gtk4"]
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
