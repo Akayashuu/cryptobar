@@ -1,12 +1,11 @@
-//! Sérialisation du protocole des modules personnalisés Waybar.
+//! Serialisation of the Waybar custom module protocol.
 //!
-//! Waybar attend une ligne de JSON contenant `text`, `tooltip` et `class`.
-//! `text` et `tooltip` sont interprétés comme du balisage Pango : toute donnée
-//! venant du réseau doit donc être échappée.
+//! Waybar expects one line of JSON holding `text`, `tooltip` and `class`.
+//! `text` and `tooltip` are read as Pango markup: anything coming from the
+//! network therefore has to be escaped.
 //!
-//! D'autres barres — Quickshell, Ags, Eww — consomment le même JSON mais
-//! affichent du texte brut. [`Markup::None`] produit alors une sortie sans
-//! aucune balise ni entité.
+//! Other bars — Quickshell, Ags, Eww — consume the same JSON but display plain
+//! text. [`Markup::None`] then produces output without a single tag or entity.
 
 use serde::Serialize;
 
@@ -16,16 +15,16 @@ use crate::portfolio;
 
 use super::{badge, format, sparkline};
 
-/// Nombre de points conservés dans les séries transmises aux barres riches :
-/// assez pour dessiner une courbe lisible, assez peu pour que la ligne JSON
-/// reste courte à chaque intervalle.
+/// Number of points kept in the series handed to rich bars: enough to draw a
+/// readable curve, few enough for the JSON line to stay short at every
+/// interval.
 const SERIES_POINTS: usize = 48;
 
-/// Une cotation, découpée en champs prêts à afficher.
+/// One quote, split into display-ready fields.
 ///
-/// Les barres capables de composer leur propre mise en page — Quickshell,
-/// Ags, Eww — s'en servent pour dessiner une liste alignée et une courbe,
-/// là où `tooltip` ne leur offrirait qu'un bloc de texte à parser.
+/// Bars able to compose their own layout — Quickshell, Ags, Eww — use them to
+/// draw an aligned list and a curve, where `tooltip` would only hand them a
+/// block of text to parse.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct CoinRow {
     pub symbol: String,
@@ -34,94 +33,93 @@ pub struct CoinRow {
     pub change_1h: String,
     pub change_24h: String,
     pub change_7d: String,
-    /// "up", "down" ou "flat", suivant la variation sur 24 h.
+    /// "up", "down" or "flat", following the 24 h change.
     pub trend: &'static str,
-    /// Cours des sept derniers jours, normalisé dans [0, 1] : le
-    /// consommateur multiplie par la hauteur dont il dispose.
+    /// Prices over the last seven days, normalised to [0, 1]: the consumer
+    /// multiplies by whatever height it has.
     pub series: Vec<f64>,
-    /// Cotation actuellement mise en avant dans la barre.
+    /// Quote currently highlighted in the bar.
     pub active: bool,
-    /// Chemin local du logo officiel, vide s'il n'est pas encore en cache.
-    /// Les consommateurs qui savent afficher une image le préfèrent à la
-    /// pastille.
+    /// Local path of the official logo, empty when not cached yet. Consumers
+    /// able to display an image prefer it to the badge.
     pub icon: String,
-    /// Glyphe de la pastille de repli, un seul caractère.
+    /// Glyph of the fallback badge, a single character.
     pub glyph: String,
-    /// Couleur de marque du disque, `#rrggbb`.
+    /// Brand colour of the disc, `#rrggbb`.
     pub color: String,
-    /// Couleur lisible par-dessus [`CoinRow::color`], `#rrggbb`.
+    /// Colour readable on top of [`CoinRow::color`], `#rrggbb`.
     pub foreground: String,
 }
 
-/// Une ligne du portefeuille, prête à afficher.
+/// One portfolio line, ready to display.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct HoldingRow {
     pub symbol: String,
-    /// Quantité détenue, telle qu'écrite dans la configuration.
+    /// Quantity held, as read from the watched addresses.
     pub quantity: String,
-    /// Valeur de la ligne dans la devise de cotation.
+    /// Value of the line in the quote currency.
     pub value: String,
-    /// Part du portefeuille, dans [0, 1] : le consommateur en fait un arc,
-    /// une barre ou un pourcentage, selon la place dont il dispose.
+    /// Share of the portfolio, within [0, 1]: the consumer turns it into an
+    /// arc, a bar or a percentage, depending on the room it has.
     pub share: f64,
     pub color: String,
 }
 
-/// Portefeuille valorisé, absent si aucune quantité n'est déclarée.
+/// Valued portfolio, absent when no balance is known.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct PortfolioSummary {
     pub total: String,
-    /// Gain ou perte sur 24 h, déjà formaté avec son signe.
+    /// Gain or loss over 24 h, already formatted with its sign.
     pub change_24h: String,
     pub change_24h_pct: String,
-    /// Vrai si le portefeuille est en hausse sur 24 h.
+    /// True when the portfolio is up over 24 h.
     pub positive: bool,
     pub positions: Vec<HoldingRow>,
 }
 
-/// Une alerte actuellement franchie.
+/// An alert currently crossed.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct AlertRow {
     pub symbol: String,
-    /// "above", "below" ou "change".
+    /// "above", "below" or "change".
     pub kind: &'static str,
     pub title: String,
     pub body: String,
 }
 
-/// Charge utile d'un module Waybar.
+/// Payload of a Waybar module.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct Module {
     pub text: String,
     pub tooltip: String,
     pub class: String,
-    /// Champs additionnels ignorés par Waybar, utiles aux barres capables
-    /// de composer leur propre mise en page (Quickshell en vertical, où le
-    /// texte complet ne tiendrait pas dans la largeur disponible).
+    /// Extra fields Waybar ignores, useful to bars able to compose their own
+    /// layout (Quickshell in vertical mode, where the full text would not fit
+    /// the available width).
     pub symbol: String,
     pub price: String,
     pub percent: String,
     pub sparkline: String,
-    /// Tendance de la cotation active : "up", "down", "flat" ou "error".
+    /// Trend of the active quote: "up", "down", "flat" or "error".
     pub trend: &'static str,
-    /// Données servies depuis le cache, réseau indisponible.
+    /// Data served from the cache, network unavailable.
     pub stale: bool,
-    /// Logo et pastille de repli de la cotation active.
+    /// Logo and fallback badge of the active quote.
     pub icon: String,
     pub glyph: String,
     pub color: String,
     pub foreground: String,
-    /// Toutes les cotations suivies, dans l'ordre de la configuration.
+    /// Every watched quote, in configuration order.
     pub coins: Vec<CoinRow>,
-    /// Alertes franchies à cet instant. Vide la plupart du temps : c'est ce
-    /// qui permet à la barre d'allumer un indicateur sans rien recalculer.
+    /// Alerts crossed right now. Empty most of the time: that is what lets the
+    /// bar light an indicator up without recomputing anything.
     pub alerts: Vec<AlertRow>,
-    /// Portefeuille valorisé, `null` si aucune adresse suivie n'a de solde.
+    /// Valued portfolio, `null` when no watched address holds a balance.
     pub portfolio: Option<PortfolioSummary>,
 }
 
-/// Ramène une série dans [0, 1]. Une série plate se place au milieu plutôt
-/// que de diviser par une amplitude nulle.
+/// Brings a series into [0, 1]. A flat series sits in the middle rather than
+/// dividing by a zero amplitude.
 fn normalize(points: &[f64]) -> Vec<f64> {
     let finite: Vec<f64> = points.iter().copied().filter(|v| v.is_finite()).collect();
     let reduced = sparkline::downsample(&finite, SERIES_POINTS);
@@ -133,8 +131,8 @@ fn normalize(points: &[f64]) -> Vec<f64> {
     if span <= 0.0 {
         return vec![0.5; reduced.len()];
     }
-    // Trois décimales suffisent à un tracé au pixel près et divisent par
-    // cinq la longueur de la ligne JSON émise à chaque intervalle.
+    // Three decimals are enough for a pixel-accurate plot and divide by five
+    // the length of the JSON line emitted at every interval.
     reduced
         .iter()
         .map(|value| ((value - min) / span * 1000.0).round() / 1000.0)
@@ -142,32 +140,32 @@ fn normalize(points: &[f64]) -> Vec<f64> {
 }
 
 impl Module {
-    /// Sérialise en une ligne de JSON.
+    /// Serialises to one line of JSON.
     ///
     /// # Errors
-    /// Impossible en pratique : la structure ne contient que des chaînes.
+    /// Impossible in practice: the struct only holds strings.
     pub fn to_line(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string(self)
     }
 }
 
-/// Traitement du balisage dans la sortie.
+/// How markup is handled in the output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Markup {
-    /// Balises Pango et entités échappées : ce qu'attend Waybar.
+    /// Pango tags and escaped entities: what Waybar expects.
     #[default]
     Pango,
-    /// Texte brut, pour les barres qui n'interprètent aucun balisage.
+    /// Plain text, for bars that interpret no markup at all.
     None,
 }
 
 impl Markup {
-    /// Applique l'échappement correspondant à une donnée non fiable.
+    /// Applies the escaping matching untrusted data.
     fn escape(self, raw: &str) -> String {
         match self {
             Self::Pango => escape_pango(raw),
-            // Les caractères de contrôle sont retirés dans tous les cas :
-            // ils casseraient la ligne JSON attendue.
+            // Control characters are dropped in every case: they would break
+            // the expected JSON line.
             Self::None => raw
                 .chars()
                 .map(|c| if c.is_control() { ' ' } else { c })
@@ -175,7 +173,7 @@ impl Markup {
         }
     }
 
-    /// Ouvre et ferme une mise en gras, ou rien du tout.
+    /// Opens and closes a bold run, or nothing at all.
     fn bold(self, raw: &str) -> String {
         match self {
             Self::Pango => format!("<b>{raw}</b>"),
@@ -183,7 +181,7 @@ impl Markup {
         }
     }
 
-    /// Met en forme une note discrète.
+    /// Formats a quiet note.
     fn italic(self, raw: &str) -> String {
         match self {
             Self::Pango => format!("<i>{raw}</i>"),
@@ -199,13 +197,13 @@ impl std::str::FromStr for Markup {
             "pango" => Ok(Self::Pango),
             "none" | "plain" => Ok(Self::None),
             other => Err(format!(
-                "balisage inconnu : {other} ; attendu `pango` ou `none`"
+                "unknown markup: {other}; expected `pango` or `none`"
             )),
         }
     }
 }
 
-/// Échappe les caractères que Pango interpréterait comme du balisage.
+/// Escapes the characters Pango would read as markup.
 #[must_use]
 pub fn escape_pango(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
@@ -216,7 +214,7 @@ pub fn escape_pango(raw: &str) -> String {
             '>' => out.push_str("&gt;"),
             '\'' => out.push_str("&apos;"),
             '"' => out.push_str("&quot;"),
-            // Les caractères de contrôle casseraient la ligne JSON attendue.
+            // Control characters would break the expected JSON line.
             c if c.is_control() => out.push(' '),
             c => out.push(c),
         }
@@ -224,7 +222,7 @@ pub fn escape_pango(raw: &str) -> String {
     out
 }
 
-/// Construit le module à partir de la cotation active et de la liste complète.
+/// Builds the module from the active quote and the full list.
 #[must_use]
 pub fn render(
     quotes: &[Quote],
@@ -237,7 +235,7 @@ pub fn render(
     let Some(quote) = quotes.get(active).or_else(|| quotes.first()) else {
         return Module {
             text: "crypto —".to_owned(),
-            tooltip: "Aucune donnée disponible".to_owned(),
+            tooltip: "No data available".to_owned(),
             class: "error".to_owned(),
             symbol: "—".to_owned(),
             price: String::new(),
@@ -318,8 +316,8 @@ fn summary(wallet: &portfolio::Portfolio, config: &Config, markup: Markup) -> Po
     PortfolioSummary {
         total: money(wallet.total),
         change_24h: match wallet.change_24h {
-            // Le signe est explicite : « +12 € » et « 12 € » ne se lisent pas
-            // pareil au coin d'un écran.
+            // The sign is explicit: "+€12" and "€12" do not read the same in
+            // the corner of a screen.
             Some(gain) if gain >= 0.0 => format!("+{}", money(gain)),
             Some(gain) => money(gain),
             None => "—".to_owned(),
@@ -391,7 +389,7 @@ fn tooltip(
     for (index, quote) in quotes.iter().enumerate() {
         let marker = if index == active { "▸" } else { " " };
         lines.push(format!(
-            "{marker} {}  {}   1h {}  24h {}  7j {}",
+            "{marker} {}  {}   1h {}  24h {}  7d {}",
             markup.bold(&markup.escape(&quote.symbol.to_uppercase())),
             markup.escape(&format::price(quote.price, &config.currency, decimals)),
             markup.escape(&format::percent(quote.change_1h)),
@@ -405,7 +403,7 @@ fn tooltip(
         let gain = markup.escape(&format::percent(wallet.change_24h_pct));
         lines.push(format!(
             "{}  {total}   24h {gain}",
-            markup.bold("Portefeuille")
+            markup.bold("Portfolio")
         ));
     }
     for trigger in triggers {
@@ -414,14 +412,14 @@ fn tooltip(
     }
     if stale {
         lines.push(String::new());
-        lines.push(markup.italic("données périmées — réseau indisponible"));
+        lines.push(markup.italic("stale data — network unavailable"));
     }
     lines.join("\n")
 }
 
 #[cfg(test)]
-// Un test qui échoue doit s'arrêter net ; la normalisation pose exactement
-// 0.0 et 1.0 sur les extrêmes, la comparaison stricte y est donc exacte.
+// A failing test has to stop dead; normalisation puts exactly 0.0 and 1.0 on
+// the extremes, so the strict comparison is exact there.
 #[allow(clippy::unwrap_used, clippy::panic, clippy::float_cmp)]
 mod tests {
     use super::*;
@@ -452,7 +450,7 @@ mod tests {
     }
 
     #[test]
-    fn le_texte_contient_symbole_prix_et_variation() {
+    fn the_text_holds_symbol_price_and_change() {
         let module = render(
             &[quote("btc", 42_000.0, Some(1.5))],
             0,
@@ -463,11 +461,11 @@ mod tests {
         );
         assert!(module.text.contains("BTC"));
         assert!(module.text.contains("42"));
-        assert!(module.text.contains("1,5"), "texte : {}", module.text);
+        assert!(module.text.contains("1.5"), "text: {}", module.text);
     }
 
     #[test]
-    fn la_classe_suit_la_tendance() {
+    fn the_class_follows_the_trend() {
         let cfg = config();
         assert_eq!(
             render(
@@ -496,7 +494,7 @@ mod tests {
     }
 
     #[test]
-    fn letat_perime_sajoute_a_la_classe_et_au_tooltip() {
+    fn the_stale_state_joins_the_class_and_the_tooltip() {
         let module = render(
             &[quote("btc", 1.0, Some(1.0))],
             0,
@@ -506,11 +504,11 @@ mod tests {
             &std::collections::BTreeMap::new(),
         );
         assert!(module.class.contains("stale"));
-        assert!(module.tooltip.contains("périmées"));
+        assert!(module.tooltip.contains("stale"));
     }
 
     #[test]
-    fn une_liste_vide_donne_un_module_derreur_et_non_un_panic() {
+    fn an_empty_list_yields_an_error_module_not_a_panic() {
         let module = render(
             &[],
             0,
@@ -523,7 +521,7 @@ mod tests {
     }
 
     #[test]
-    fn un_indice_hors_bornes_retombe_sur_la_premiere_cotation() {
+    fn an_out_of_bounds_index_falls_back_to_the_first_quote() {
         let module = render(
             &[quote("btc", 1.0, Some(1.0))],
             9,
@@ -536,7 +534,7 @@ mod tests {
     }
 
     #[test]
-    fn le_balisage_pango_est_echappe() {
+    fn pango_markup_is_escaped() {
         let module = render(
             &[quote("<b>&x", 1.0, Some(1.0))],
             0,
@@ -551,7 +549,7 @@ mod tests {
     }
 
     #[test]
-    fn le_tooltip_marque_la_cotation_active() {
+    fn the_tooltip_marks_the_active_quote() {
         let quotes = vec![quote("btc", 1.0, Some(1.0)), quote("eth", 2.0, Some(1.0))];
         let tooltip = render(
             &quotes,
@@ -567,7 +565,7 @@ mod tests {
     }
 
     #[test]
-    fn la_sortie_est_du_json_sur_une_seule_ligne() {
+    fn the_output_is_json_on_a_single_line() {
         let line = render(
             &[quote("btc", 1.0, Some(1.0))],
             0,
@@ -583,7 +581,7 @@ mod tests {
     }
 
     #[test]
-    fn le_mode_sans_balisage_ne_produit_ni_balise_ni_entite() {
+    fn the_markup_free_mode_yields_no_tag_and_no_entity() {
         let quotes = vec![quote("<b>&x", 1.0, Some(1.0)), quote("eth", 2.0, Some(1.0))];
         let module = render(
             &quotes,
@@ -594,18 +592,18 @@ mod tests {
             &std::collections::BTreeMap::new(),
         );
         for field in [&module.text, &module.tooltip] {
-            // Aucune balise n'est ajoutée par le rendu : ni <b> ni <i>.
-            assert!(!field.contains("<b>"), "balise résiduelle : {field}");
-            assert!(!field.contains("<i>"), "balise résiduelle : {field}");
-            assert!(!field.contains("&amp;"), "entité résiduelle : {field}");
+            // The rendering adds no tag at all: neither <b> nor <i>.
+            assert!(!field.contains("<b>"), "leftover tag: {field}");
+            assert!(!field.contains("<i>"), "leftover tag: {field}");
+            assert!(!field.contains("&amp;"), "leftover entity: {field}");
         }
-        // La donnée réseau ressort littérale : c'est au consommateur de
-        // l'afficher en texte brut (Quickshell : `textFormat: Text.PlainText`).
-        assert!(module.text.contains("<B>&X"), "texte : {}", module.text);
+        // The network data comes out literal: it is up to the consumer to
+        // display it as plain text (Quickshell: `textFormat: Text.PlainText`).
+        assert!(module.text.contains("<B>&X"), "text: {}", module.text);
     }
 
     #[test]
-    fn le_mode_sans_balisage_neutralise_quand_meme_les_controles() {
+    fn the_markup_free_mode_still_neutralises_controls() {
         let module = render(
             &[quote("a\nb", 1.0, Some(1.0))],
             0,
@@ -618,14 +616,14 @@ mod tests {
     }
 
     #[test]
-    fn le_balisage_est_parse_depuis_une_chaine() {
+    fn the_markup_parses_from_a_string() {
         assert_eq!("pango".parse(), Ok(Markup::Pango));
         assert_eq!("none".parse(), Ok(Markup::None));
-        assert!("gras".parse::<Markup>().is_err());
+        assert!("bold".parse::<Markup>().is_err());
     }
 
     #[test]
-    fn les_champs_structures_accompagnent_le_texte() {
+    fn the_structured_fields_come_with_the_text() {
         let module = render(
             &[quote("btc", 42_000.0, Some(1.5))],
             0,
@@ -636,10 +634,10 @@ mod tests {
         );
         assert_eq!(module.symbol, "BTC");
         assert!(module.price.contains("42"));
-        assert!(module.percent.contains("1,5"));
+        assert!(module.percent.contains("1.5"));
         assert!(!module.sparkline.is_empty());
-        // Le texte reste la concaténation des champs : aucune divergence
-        // possible entre les deux représentations.
+        // The text stays the concatenation of the fields: no divergence is
+        // possible between the two representations.
         assert_eq!(
             module.text,
             format!(
@@ -650,7 +648,7 @@ mod tests {
     }
 
     #[test]
-    fn chaque_cotation_donne_une_ligne_structuree() {
+    fn every_quote_yields_a_structured_row() {
         let quotes = vec![
             quote("btc", 42_000.0, Some(1.5)),
             quote("eth", 2_000.0, Some(-1.0)),
@@ -664,10 +662,7 @@ mod tests {
             &std::collections::BTreeMap::new(),
         );
         let [first, second] = module.coins.as_slice() else {
-            panic!(
-                "deux cotations attendues, {} obtenue(s)",
-                module.coins.len()
-            );
+            panic!("expected two quotes, got {}", module.coins.len());
         };
         assert_eq!(first.symbol, "BTC");
         assert!(!first.active);
@@ -677,7 +672,7 @@ mod tests {
     }
 
     #[test]
-    fn les_series_transmises_tiennent_dans_zero_un() {
+    fn the_published_series_fit_within_zero_and_one() {
         let module = render(
             &[quote("btc", 1.0, Some(1.0))],
             0,
@@ -687,31 +682,31 @@ mod tests {
             &std::collections::BTreeMap::new(),
         );
         let Some(row) = module.coins.first() else {
-            panic!("une cotation attendue");
+            panic!("expected one quote");
         };
         let series = &row.series;
         assert!(!series.is_empty());
         assert!(series.iter().all(|value| (0.0..=1.0).contains(value)));
-        // Les extrêmes touchent les bornes : la courbe occupe toute la hauteur.
+        // The extremes touch the bounds: the curve fills the whole height.
         assert!(series.iter().copied().any(|value| value == 0.0));
         assert!(series.iter().copied().any(|value| value == 1.0));
     }
 
     #[test]
-    fn une_serie_plate_se_place_au_milieu() {
+    fn a_flat_series_sits_in_the_middle() {
         assert_eq!(normalize(&[3.0, 3.0, 3.0]), vec![0.5, 0.5, 0.5]);
         assert!(normalize(&[]).is_empty());
         assert!(normalize(&[f64::NAN]).is_empty());
     }
 
     #[test]
-    fn une_serie_longue_est_reduite() {
+    fn a_long_series_is_reduced() {
         let long: Vec<f64> = (0..500).map(f64::from).collect();
         assert_eq!(normalize(&long).len(), SERIES_POINTS);
     }
 
     #[test]
-    fn les_caracteres_de_controle_sont_neutralises() {
+    fn control_characters_are_neutralised() {
         assert_eq!(escape_pango("a\nb"), "a b");
     }
 }

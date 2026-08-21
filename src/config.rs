@@ -1,4 +1,4 @@
-//! Chargement, validation et écriture du fichier de configuration.
+//! Loading, validating and writing the configuration file.
 
 use std::path::Path;
 
@@ -9,48 +9,48 @@ use crate::model::{CoinId, Currency};
 use crate::paths;
 use crate::render::format::Decimals;
 
-/// Plancher de l'intervalle de rafraîchissement. En dessous, l'API publique
-/// CoinGecko renvoie des 429 et finit par bannir temporairement l'adresse.
+/// Floor of the refresh interval. Below it, the public CoinGecko API answers
+/// with 429s and eventually bans the address for a while.
 pub const MIN_REFRESH_INTERVAL: u64 = 15;
 
-pub(crate) const DEFAULT_CONFIG: &str = r#"# Configuration de cryptobar — https://github.com/Akayashuu/cryptobar
-# Identifiants CoinGecko ; cherchez-les avec `cryptobar coins <terme>`.
+pub(crate) const DEFAULT_CONFIG: &str = r#"# cryptobar configuration — https://github.com/Akayashuu/cryptobar
+# CoinGecko ids; look them up with `cryptobar coins <term>`.
 coins = ["bitcoin", "ethereum", "solana"]
 
-# Devise de cotation : eur, usd, gbp, chf, cad, jpy, btc, eth
+# Quote currency: eur, usd, gbp, chf, cad, jpy, btc, eth
 currency = "eur"
 
-# Intervalle de rafraîchissement des prix, en secondes (minimum 15).
+# Price refresh interval, in seconds (minimum 15).
 refresh_interval = 60
 
-# Rotation automatique entre les coins, en secondes. 0 = rotation manuelle à la molette.
+# Automatic rotation between coins, in seconds. 0 = manual scroll only.
 cycle_interval = 0
 
-# Sparkline inline dans la barre.
+# Inline sparkline in the bar.
 sparkline = true
 sparkline_width = 8
 
-# Décimales : "auto" s'adapte à l'ordre de grandeur, ou un entier pour les figer.
+# Decimals: "auto" adapts to the order of magnitude, or an integer to pin them.
 decimals = "auto"
 
-# Émulateur de terminal utilisé par le clic droit.
+# Terminal emulator opened by the right click.
 terminal = "kitty"
 
-# Signal temps réel utilisé pour rafraîchir Waybar : SIGRTMIN+<n>, 1..=30.
+# Real-time signal used to refresh Waybar: SIGRTMIN+<n>, 1..=30.
 waybar_signal = 8
 
-# Portefeuilles suivis en lecture seule. On ne renseigne qu'une ADRESSE
-# PUBLIQUE : cryptobar lit le solde sur la chaîne et l'ajoute au portefeuille.
-# Aucune clé privée, aucune phrase de récupération — elles sont refusées.
-# Chaînes acceptées : "bitcoin", "ethereum", "solana".
+# Wallets watched read-only. Only a PUBLIC ADDRESS goes here: cryptobar reads
+# its balance from the chain and adds it to the portfolio. No private key, no
+# recovery phrase — they are rejected.
+# Supported chains: "bitcoin", "ethereum", "solana".
 # [[wallets]]
 # chain = "bitcoin"
 # address = "bc1q…"
 # label = "Ledger"
 
-# Alertes de prix. Chaque bloc surveille une pièce ; « above » et « below »
-# s'expriment dans la devise ci-dessus, « change_pct » en pourcentage absolu de
-# variation sur 24 h. Une alerte se réarme dès que la condition retombe.
+# Price alerts. Each block watches one coin; `above` and `below` are expressed
+# in the currency above, `change_pct` as an absolute 24 h change in percent. An
+# alert re-arms as soon as its condition becomes false again.
 # [[alerts]]
 # coin = "bitcoin"
 # above = 100000
@@ -73,11 +73,10 @@ impl Default for DecimalsSetting {
     }
 }
 
-/// Seuil de notification sur une cryptomonnaie suivie.
+/// Notification threshold on a watched cryptocurrency.
 ///
-/// Les trois conditions sont indépendantes et cumulables : un même bloc peut
-/// notifier au franchissement d'un plafond, d'un plancher, et d'une amplitude
-/// de variation sur 24 h.
+/// The three conditions are independent and can be combined: a single block can
+/// notify on crossing a ceiling, a floor, and a 24 h change amplitude.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Alert {
@@ -112,11 +111,11 @@ pub struct Config {
     pub terminal: String,
     #[serde(default = "default_signal")]
     pub waybar_signal: u8,
-    /// Portefeuilles suivis en lecture seule, par adresse publique.
+    /// Wallets watched read-only, by public address.
     #[serde(default)]
     pub wallets: Vec<crate::onchain::Wallet>,
-    /// Seuils de notification. `[[alerts]]` étant un tableau de tables, il doit
-    /// rester le dernier champ sérialisé ; il l'est déjà par construction.
+    /// Notification thresholds. As `[[alerts]]` is an array of tables it has to
+    /// stay the last serialised field; it already is by construction.
     #[serde(default)]
     pub alerts: Vec<Alert>,
 }
@@ -141,7 +140,7 @@ impl Alert {
     fn validate(&self, coins: &[CoinId]) -> Result<()> {
         if !coins.contains(&self.coin) {
             bail!(
-                "l'alerte porte sur `{}`, qui n'est pas dans `coins` : ajoutez-la d'abord",
+                "the alert watches `{}`, which is not in `coins`: add it there first",
                 self.coin
             );
         }
@@ -153,12 +152,12 @@ impl Alert {
             if let Some(value) = value
                 && (!value.is_finite() || value <= 0.0)
             {
-                bail!("`alerts.{label}` = {value} doit être un nombre strictement positif");
+                bail!("`alerts.{label}` = {value} must be a strictly positive number");
             }
         }
         if self.above.is_none() && self.below.is_none() && self.change_pct.is_none() {
             bail!(
-                "l'alerte sur `{}` ne définit aucune condition : renseignez `above`, `below` ou \
+                "the alert on `{}` defines no condition: set `above`, `below` or \
                  `change_pct`",
                 self.coin
             );
@@ -167,8 +166,8 @@ impl Alert {
             && below >= above
         {
             bail!(
-                "l'alerte sur `{}` a `below` = {below} au-dessus de `above` = {above} : elle se \
-                 déclencherait en permanence",
+                "the alert on `{}` has `below` = {below} above `above` = {above}: it would \
+                 fire permanently",
                 self.coin
             );
         }
@@ -177,10 +176,10 @@ impl Alert {
 }
 
 impl Config {
-    /// Charge la configuration depuis le chemin XDG, en la créant si elle est absente.
+    /// Loads the configuration from the XDG path, creating it when missing.
     ///
     /// # Errors
-    /// Échoue si la configuration est illisible ou invalide.
+    /// Fails when the configuration is unreadable or invalid.
     pub fn load() -> Result<Self> {
         let path = paths::config_file()?;
         if !path.exists() {
@@ -192,76 +191,75 @@ impl Config {
         Self::load_from(&path)
     }
 
-    /// Charge et valide la configuration depuis un chemin explicite.
+    /// Loads and validates the configuration from an explicit path.
     ///
     /// # Errors
-    /// Échoue si le fichier est illisible ou invalide.
+    /// Fails when the file is unreadable or invalid.
     pub fn load_from(path: &Path) -> Result<Self> {
         let raw = std::fs::read_to_string(path)
-            .with_context(|| format!("lecture de la configuration {}", path.display()))?;
-        Self::parse(&raw).with_context(|| format!("configuration invalide : {}", path.display()))
+            .with_context(|| format!("reading the configuration {}", path.display()))?;
+        Self::parse(&raw).with_context(|| format!("invalid configuration: {}", path.display()))
     }
 
-    /// Parse et valide un contenu TOML.
+    /// Parses and validates a TOML payload.
     ///
     /// # Errors
-    /// Échoue si le TOML est mal formé ou si une valeur est hors contrat.
+    /// Fails when the TOML is malformed or when a value breaks the contract.
     pub fn parse(raw: &str) -> Result<Self> {
         let config: Self = toml::from_str(raw)?;
         config.validate()?;
         Ok(config)
     }
 
-    /// Écrit la configuration par défaut, sans jamais écraser un fichier existant.
+    /// Writes the default configuration, never overwriting an existing file.
     ///
     /// # Errors
-    /// Échoue si le fichier existe déjà ou s'il ne peut pas être écrit.
+    /// Fails when the file already exists or cannot be written.
     pub fn write_default(path: &Path, force: bool) -> Result<()> {
         if let Some(parent) = path.parent() {
             paths::ensure_dir(parent)?;
         }
         if path.exists() && !force {
             bail!(
-                "{} existe déjà, utilisez --force pour l'écraser",
+                "{} already exists, use --force to overwrite it",
                 path.display()
             );
         }
-        std::fs::write(path, DEFAULT_CONFIG)
-            .with_context(|| format!("écriture de {}", path.display()))
+        std::fs::write(path, DEFAULT_CONFIG).with_context(|| format!("writing {}", path.display()))
     }
 
     fn validate(&self) -> Result<()> {
         if self.coins.is_empty() {
-            bail!("`coins` doit contenir au moins une cryptomonnaie");
+            bail!("`coins` must hold at least one cryptocurrency");
         }
         let mut seen = std::collections::HashSet::new();
         for coin in &self.coins {
             if !seen.insert(coin.as_str()) {
-                bail!("`coins` contient un doublon : {coin}");
+                bail!("`coins` holds a duplicate: {coin}");
             }
         }
         if self.refresh_interval < MIN_REFRESH_INTERVAL {
             bail!(
-                "`refresh_interval` = {} est trop court ; minimum {MIN_REFRESH_INTERVAL} s pour \
-                 rester dans le quota de l'API publique CoinGecko",
+                "`refresh_interval` = {} is too short; {MIN_REFRESH_INTERVAL} s minimum to stay \
+                 within the public CoinGecko API quota",
                 self.refresh_interval
             );
         }
         if !(1..=30).contains(&self.waybar_signal) {
             bail!(
-                "`waybar_signal` = {} est hors plage ; attendu 1..=30 (SIGRTMIN+n)",
+                "`waybar_signal` = {} is out of range; expected 1..=30 (SIGRTMIN+n)",
                 self.waybar_signal
             );
         }
         if !(1..=64).contains(&self.sparkline_width) {
             bail!(
-                "`sparkline_width` = {} est hors plage ; attendu 1..=64",
+                "`sparkline_width` = {} is out of range; expected 1..=64",
                 self.sparkline_width
             );
         }
         for wallet in &self.wallets {
             if let Err(reason) = wallet.validate() {
-                bail!("`wallets.address` = {:?} : {reason}", wallet.address);
+                bail!("`wallets.address` = {:?}: {reason}", wallet.address);
             }
         }
         for alert in &self.alerts {
@@ -270,12 +268,12 @@ impl Config {
         if let DecimalsSetting::Auto(value) = &self.decimals
             && value != "auto"
         {
-            bail!("`decimals` doit valoir \"auto\" ou un entier, pas {value:?}");
+            bail!("`decimals` must be \"auto\" or an integer, not {value:?}");
         }
         Ok(())
     }
 
-    /// Traduit le réglage de décimales en valeur utilisable par le formateur.
+    /// Turns the decimals setting into a value the formatter can use.
     #[must_use]
     pub fn decimals(&self) -> Decimals {
         match &self.decimals {
@@ -291,7 +289,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn config_minimale_utilise_les_valeurs_par_defaut() {
+    fn a_minimal_config_uses_the_defaults() {
         let cfg = Config::parse(r#"coins = ["bitcoin"]"#).unwrap();
         assert_eq!(cfg.currency.as_str(), "eur");
         assert_eq!(cfg.refresh_interval, 60);
@@ -302,44 +300,44 @@ mod tests {
     }
 
     #[test]
-    fn liste_de_coins_vide_refusee() {
+    fn an_empty_coin_list_is_rejected() {
         let err = Config::parse("coins = []").unwrap_err().to_string();
-        assert!(err.contains("au moins une"), "message peu clair : {err}");
+        assert!(err.contains("at least one"), "unclear message: {err}");
     }
 
     #[test]
-    fn doublon_de_coin_refuse() {
+    fn a_duplicate_coin_is_rejected() {
         let err = Config::parse(r#"coins = ["bitcoin", "Bitcoin"]"#)
             .unwrap_err()
             .to_string();
-        assert!(err.contains("bitcoin"), "message peu clair : {err}");
+        assert!(err.contains("bitcoin"), "unclear message: {err}");
     }
 
     #[test]
-    fn intervalle_trop_court_refuse_pour_proteger_le_quota() {
+    fn too_short_an_interval_is_rejected_to_protect_the_quota() {
         let err = Config::parse("coins = [\"bitcoin\"]\nrefresh_interval = 5")
             .unwrap_err()
             .to_string();
-        assert!(err.contains("15"), "message peu clair : {err}");
+        assert!(err.contains("15"), "unclear message: {err}");
     }
 
     #[test]
-    fn signal_hors_plage_refuse() {
+    fn an_out_of_range_signal_is_rejected() {
         assert!(Config::parse("coins = [\"bitcoin\"]\nwaybar_signal = 0").is_err());
         assert!(Config::parse("coins = [\"bitcoin\"]\nwaybar_signal = 31").is_err());
         assert!(Config::parse("coins = [\"bitcoin\"]\nwaybar_signal = 30").is_ok());
     }
 
     #[test]
-    fn devise_invalide_refusee_avec_le_champ_fautif() {
+    fn an_invalid_currency_is_rejected_naming_the_field() {
         let err = Config::parse("coins = [\"bitcoin\"]\ncurrency = \"xyz\"")
             .unwrap_err()
             .to_string();
-        assert!(err.contains("currency"), "message peu clair : {err}");
+        assert!(err.contains("currency"), "unclear message: {err}");
     }
 
     #[test]
-    fn decimales_auto_ou_fixes() {
+    fn decimals_are_auto_or_fixed() {
         assert_eq!(
             Config::parse("coins = [\"bitcoin\"]").unwrap().decimals(),
             Decimals::Auto
@@ -353,18 +351,15 @@ mod tests {
     }
 
     #[test]
-    fn champ_inconnu_refuse_pour_attraper_les_fautes_de_frappe() {
+    fn an_unknown_field_is_rejected_to_catch_typos() {
         let err = Config::parse("coins = [\"bitcoin\"]\nrefresh_intervall = 60")
             .unwrap_err()
             .to_string();
-        assert!(
-            err.contains("refresh_intervall"),
-            "message peu clair : {err}"
-        );
+        assert!(err.contains("refresh_intervall"), "unclear message: {err}");
     }
 
     #[test]
-    fn config_par_defaut_ecrite_puis_relue_est_valide() {
+    fn the_default_config_written_then_reread_is_valid() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
         Config::write_default(&path, false).unwrap();
@@ -373,7 +368,7 @@ mod tests {
     }
 
     #[test]
-    fn write_default_refuse_decraser() {
+    fn write_default_refuses_to_overwrite() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
         Config::write_default(&path, false).unwrap();

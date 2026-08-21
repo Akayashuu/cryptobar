@@ -5,21 +5,21 @@ import QtQuick
 import QtQuick.Layouts
 
 /**
- * Tableau de bord des cotations suivies : une ligne par pièce, la ligne active
- * mise en avant, avec la courbe des sept derniers jours et les variations.
+ * Dashboard of the watched quotes: one row per coin, the active row
+ * highlighted, with the seven-day curve and the changes.
  */
 StyledPopup {
     id: root
 
-    // Largeurs fixes : les colonnes restent alignées d'une ligne à l'autre sans
-    // recourir à un GridLayout, dont le délégué de Repeater serait à plat.
+    // Fixed widths: the columns stay aligned from one row to the next without a
+    // GridLayout, whose Repeater delegate would be flattened.
     readonly property int curveWidth: 44
     readonly property int logoSize: 16
     readonly property int symbolWidth: 42
     readonly property int priceWidth: 88
     readonly property int changeWidth: 62
 
-    /// Ligne de trois variations, réutilisée par l'en-tête et par les cotations.
+    /// Row of three changes, reused by the header and by the quotes.
     component ChangeCells: Row {
         id: changeCells
         property var labels: []
@@ -48,14 +48,14 @@ StyledPopup {
 
         StyledPopupHeaderRow {
             icon: Crypto.stale ? "cloud_off" : "monitoring"
-            label: Crypto.stale ? Translation.tr("Crypto — cache hors ligne") : Translation.tr("Crypto")
+            label: Crypto.stale ? Translation.tr("Crypto — offline cache") : Translation.tr("Crypto")
         }
 
         Column {
             Layout.fillWidth: true
             spacing: 3
 
-            Row { // En-tête des colonnes
+            Row { // Column header
                 spacing: 8
 
                 Item {
@@ -64,7 +64,7 @@ StyledPopup {
                 }
 
                 ChangeCells {
-                    labels: ["1 h", "24 h", "7 j"]
+                    labels: ["1 h", "24 h", "7 d"]
                 }
             }
 
@@ -76,9 +76,9 @@ StyledPopup {
                     required property var modelData
                     readonly property color accent: Crypto.color(line.modelData.trend)
 
-                    // La largeur vient des colonnes fixes, pas du parent :
-                    // la lier au Column créerait une boucle de liaison, le
-                    // Column tirant sa largeur de ses enfants.
+                    // The width comes from the fixed columns, not from the
+                    // parent: binding it to the Column would create a binding
+                    // loop, since the Column sizes itself from its children.
                     width: cells.implicitWidth + 8
                     height: cells.implicitHeight + 6
                     radius: Appearance.rounding.verysmall
@@ -139,9 +139,9 @@ StyledPopup {
             }
         }
 
-        // Alertes franchies : rien la plupart du temps, une ligne par seuil
-        // sinon. C'est le même contenu que la notification de bureau, gardé
-        // sous la main après qu'elle a disparu.
+        // Crossed alerts: nothing most of the time, one row per threshold
+        // otherwise. Same content as the desktop notification, kept at hand
+        // after it has gone.
         Column {
             Layout.fillWidth: true
             visible: Crypto.alerts.length > 0
@@ -172,7 +172,7 @@ StyledPopup {
             }
         }
 
-        // Portefeuille : absent tant qu'aucune adresse publique n'est suivie.
+        // Portfolio: absent until a public address is watched.
         Column {
             Layout.fillWidth: true
             visible: Crypto.portfolio !== null
@@ -206,8 +206,8 @@ StyledPopup {
                     required property var modelData
                     spacing: 8
 
-                    // Part du portefeuille : une barre vaut mieux qu'un
-                    // pourcentage de plus dans une ligne déjà chargée.
+                    // Share of the portfolio: a bar beats one more percentage
+                    // in an already busy row.
                     Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         implicitWidth: 40
@@ -261,7 +261,7 @@ StyledPopup {
             wrapMode: Text.Wrap
             font.pixelSize: Appearance.font.pixelSize.smallest
             color: Appearance.colors.colOnSurfaceVariant
-            text: Translation.tr("Molette : pièce suivante • Clic droit : graphique • Clic milieu : rafraîchir")
+            text: Translation.tr("Scroll: next coin • Right click: chart • Middle click: refresh")
         }
     }
 }

@@ -1,13 +1,13 @@
-//! Sous-commande `popup` : ouverture de la fenêtre graphique.
+//! `popup` subcommand: opening the graphical window.
 
 use anyhow::Result;
 
 use crate::app::App;
 
-/// Ouvre la fenêtre à partir des données en cache.
+/// Opens the window from the cached data.
 ///
 /// # Errors
-/// Échoue si GTK ne peut pas s'initialiser.
+/// Fails when GTK cannot initialise.
 #[cfg(feature = "popup")]
 pub fn run(app: App) -> Result<()> {
     let (mut quotes, stale) = match app
@@ -18,16 +18,16 @@ pub fn run(app: App) -> Result<()> {
         Err(_) => (Vec::new(), true),
     };
     app.attach_icons(&mut quotes);
-    // La fenêtre complète les logos manquants elle-même, dans un fil dédié :
-    // elle s'ouvre immédiatement plutôt qu'après le téléchargement.
+    // The window tops the missing logos up itself, on a dedicated thread: it
+    // opens immediately rather than after the download.
     crate::ui::popup::show(app, quotes, stale)
 }
 
-/// Variante compilée sans GTK : la commande existe mais explique son absence.
+/// Variant compiled without GTK: the command exists but explains its absence.
 ///
 /// # Errors
-/// Échoue systématiquement.
+/// Always fails.
 #[cfg(not(feature = "popup"))]
 pub fn run(_app: App) -> Result<()> {
-    anyhow::bail!("binaire compilé sans la fonctionnalité `popup`")
+    anyhow::bail!("binary compiled without the `popup` feature")
 }

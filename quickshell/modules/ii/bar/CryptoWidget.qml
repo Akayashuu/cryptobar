@@ -5,8 +5,8 @@ import QtQuick
 import QtQuick.Layouts
 
 /**
- * Cotation active dans la barre horizontale : pastille de tendance, symbole,
- * prix, courbe sur sept jours et variation sur 24 h.
+ * Active quote in the horizontal bar: trend badge, symbol, price, seven-day
+ * curve and 24 h change.
  */
 Item {
     id: root
@@ -20,8 +20,8 @@ Item {
         animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
     }
 
-    // Fond teinté par la tendance : assez léger pour rester lisible sur
-    // n'importe quel fond de barre, assez net pour se voir du coin de l'œil.
+    // Background tinted by the trend: light enough to stay readable on any bar
+    // background, sharp enough to catch the corner of the eye.
     Rectangle {
         anchors.fill: parent
         anchors.topMargin: 3
@@ -34,8 +34,8 @@ Item {
         }
     }
 
-    // Changement de pièce : la ligne glisse et se fond plutôt que de sauter,
-    // ce qui laisse à l'œil le temps de suivre le symbole qui change.
+    // Coin change: the row slides and fades rather than jumping, which gives
+    // the eye time to follow the symbol as it changes.
     Connections {
         target: Crypto
         function onSymbolChanged() {
@@ -58,9 +58,9 @@ Item {
         anchors.centerIn: parent
         spacing: 5
 
-        // Le logo officiel remplace l'icône générique dès qu'il est en cache ;
-        // l'icône ne reste que pour les deux états qui n'ont pas de pièce à
-        // montrer : hors ligne et premier chargement.
+        // The official logo replaces the generic icon as soon as it is cached;
+        // the icon only remains for the two states that have no coin to show:
+        // offline and first load.
         Item {
             Layout.alignment: Qt.AlignVCenter
             implicitWidth: Appearance.font.pixelSize.larger
@@ -90,8 +90,8 @@ Item {
                 size: Appearance.font.pixelSize.larger
             }
 
-            // Pastille d'alerte : un seuil est franchi en ce moment. Elle bat
-            // lentement, le temps qu'on la remarque, sans happer le regard.
+            // Alert badge: a threshold is crossed right now. It pulses slowly,
+            // long enough to be noticed, without grabbing the eye.
             Rectangle {
                 anchors.right: parent.right
                 anchors.top: parent.top

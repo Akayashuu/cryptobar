@@ -1,4 +1,4 @@
-//! Sous-commande `portfolio` : valorisation dans le terminal.
+//! `portfolio` subcommand: valuation in the terminal.
 
 use std::fmt::Write as _;
 use std::io::Write as _;
@@ -10,11 +10,11 @@ use crate::config::Config;
 use crate::portfolio::{self, Portfolio};
 use crate::render::format;
 
-/// Affiche le portefeuille valorisé aux derniers cours connus.
+/// Prints the portfolio valued at the last known prices.
 ///
 /// # Errors
-/// Échoue si l'écriture sur la sortie standard échoue. Une panne réseau est
-/// signalée dans la sortie, pas par une erreur : le cache reste utile.
+/// Fails when writing to standard output fails. A network outage is reported in
+/// the output, not through an error: the cache stays useful.
 pub fn run(app: &App) -> Result<()> {
     let (mut quotes, stale) = match app
         .source
@@ -24,8 +24,8 @@ pub fn run(app: &App) -> Result<()> {
         Err(_) => (Vec::new(), true),
     };
     app.attach_icons(&mut quotes);
-    // Les soldes des adresses suivies sont rafraîchis ici : la commande est
-    // ponctuelle, l'utilisateur attend un chiffre à jour.
+    // The balances of the watched addresses are refreshed here: the command is
+    // one-shot, the user expects an up-to-date figure.
     let onchain = crate::onchain::totals(&app.watcher().refresh(&app.config.wallets));
     let wallet = portfolio::compute(&quotes, &onchain);
     let mut stdout = std::io::stdout().lock();
@@ -34,14 +34,13 @@ pub fn run(app: &App) -> Result<()> {
     Ok(())
 }
 
-/// Met en forme le portefeuille. Fonction pure : testable sans réseau.
+/// Formats the portfolio. Pure function: testable without network.
 #[must_use]
 pub fn render(wallet: Option<&Portfolio>, config: &Config, stale: bool) -> String {
     let Some(wallet) = wallet else {
-        return "Aucune adresse suivie. Ajoutez une ADRESSE PUBLIQUE à la \
-                configuration — jamais une clé privée ni une phrase de \
-                récupération :\n\n    [[wallets]]\n    chain = \"bitcoin\"\n    \
-                address = \"bc1q…\"\n"
+        return "No watched address. Add a PUBLIC ADDRESS to the configuration \
+                — never a private key, never a recovery phrase:\n\n    \
+                [[wallets]]\n    chain = \"bitcoin\"\n    address = \"bc1q…\"\n"
             .to_owned();
     };
     let decimals = config.decimals();
@@ -74,11 +73,10 @@ pub fn render(wallet: Option<&Portfolio>, config: &Config, stale: bool) -> Strin
         .max()
         .unwrap_or(0);
 
-    // Virgule décimale partout : le reste de la sortie est en français.
     let share_column: Vec<String> = wallet
         .positions
         .iter()
-        .map(|position| format!("{:.1} %", position.share * 100.0).replace('.', ","))
+        .map(|position| format!("{:.1} %", position.share * 100.0))
         .collect();
     let share_width = share_column
         .iter()
@@ -94,7 +92,7 @@ pub fn render(wallet: Option<&Portfolio>, config: &Config, stale: bool) -> Strin
         .zip(value_column.iter())
         .zip(share_column.iter())
     {
-        // L'écriture dans une `String` est infaillible.
+        // Writing into a `String` is infallible.
         let _ = writeln!(
             out,
             "{:<symbol_width$}  {:>quantity_width$}  {:>value_width$}  {:>share_width$}",
@@ -122,7 +120,7 @@ pub fn render(wallet: Option<&Portfolio>, config: &Config, stale: bool) -> Strin
         );
     }
     if stale {
-        let _ = writeln!(out, "\ndonnées périmées — réseau indisponible");
+        let _ = writeln!(out, "\nstale data — network unavailable");
     }
     out
 }
@@ -158,14 +156,14 @@ mod tests {
     }
 
     #[test]
-    fn sans_adresse_le_message_explique_quoi_faire() {
+    fn without_an_address_the_message_says_what_to_do() {
         let config = Config::parse("coins = [\"bitcoin\"]").unwrap();
         let out = render(None, &config, false);
-        assert!(out.contains("[[wallets]]"), "message peu clair : {out}");
+        assert!(out.contains("[[wallets]]"), "unclear message: {out}");
     }
 
     #[test]
-    fn le_tableau_montre_lignes_total_et_variation() {
+    fn the_table_shows_rows_total_and_change() {
         let config = Config::parse("coins = [\"bitcoin\"]").unwrap();
         let quotes = [quote("bitcoin", "BTC", 110.0, Some(10.0))];
         let wallet = portfolio::compute(&quotes, &held(2.0)).unwrap();
@@ -173,14 +171,14 @@ mod tests {
         assert!(out.contains("BTC"));
         assert!(out.contains("TOTAL"));
         assert!(out.contains("24 h"));
-        assert!(out.contains("100,0 %"), "part manquante : {out}");
+        assert!(out.contains("100.0 %"), "missing share: {out}");
     }
 
     #[test]
-    fn le_cache_perime_est_signale() {
+    fn the_stale_cache_is_reported() {
         let config = Config::parse("coins = [\"bitcoin\"]").unwrap();
         let quotes = [quote("bitcoin", "BTC", 1.0, None)];
         let wallet = portfolio::compute(&quotes, &held(1.0)).unwrap();
-        assert!(render(Some(&wallet), &config, true).contains("périmées"));
+        assert!(render(Some(&wallet), &config, true).contains("stale"));
     }
 }

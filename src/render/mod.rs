@@ -1,7 +1,7 @@
-//! Rendu : transformation de données en chaînes affichables.
+//! Rendering: turning data into displayable strings.
 //!
-//! Tout ce module est purement fonctionnel — aucune E/S — ce qui le rend
-//! entièrement couvrable par des tests unitaires et du property testing.
+//! The whole module is purely functional — no I/O — which makes it entirely
+//! coverable by unit tests and property testing.
 
 pub mod badge;
 pub mod braille;

@@ -1,15 +1,15 @@
-//! Évaluation des seuils de prix.
+//! Price threshold evaluation.
 //!
-//! Le module est volontairement pur : il transforme une configuration et un
-//! lot de cotations en déclenchements. La notification, elle, est un effet de
-//! bord isolé dans [`notify`], et la mémoire de ce qui a déjà sonné vit dans
-//! l'état d'exécution. Cette séparation rend la règle anti-répétition
-//! testable sans réseau ni serveur de notifications.
+//! The module is deliberately pure: it turns a configuration and a batch of
+//! quotes into triggers. The notification itself is a side effect isolated in
+//! [`notify`], and the memory of what already fired lives in the runtime state.
+//! That separation makes the anti-repeat rule testable without a network or a
+//! notification daemon.
 //!
-//! Règle de réarmement : une alerte reste « tirée » tant que sa condition est
-//! vraie, et se réarme dès qu'elle redevient fausse. Un prix qui oscille
-//! autour du seuil ne notifie donc qu'aux franchissements, et un prix qui
-//! reste au-dessus ne notifie qu'une fois.
+//! Re-arming rule: an alert stays "fired" as long as its condition holds, and
+//! re-arms as soon as it becomes false again. A price oscillating around the
+//! threshold therefore only notifies on crossings, and a price that stays above
+//! only notifies once.
 
 use std::collections::BTreeSet;
 
@@ -17,7 +17,7 @@ use crate::config::{Alert, Config};
 use crate::model::{Currency, Quote};
 use crate::render::format::{self, Decimals};
 
-/// Condition franchie, sous une forme comparable d'un tick à l'autre.
+/// A crossed condition, in a form comparable from one tick to the next.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Above,
@@ -36,29 +36,29 @@ impl Kind {
     }
 }
 
-/// Une condition vraie à cet instant.
+/// A condition that holds right now.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Trigger {
-    /// Identité stable de la condition, indépendante du prix courant : c'est
-    /// elle qui est mémorisée pour ne pas notifier deux fois la même chose.
+    /// Stable identity of the condition, independent of the current price: it
+    /// is what gets memorised so the same thing is not notified twice.
     pub key: String,
     pub symbol: String,
     pub kind: Kind,
-    /// Titre de la notification, court et lisible dans un coin d'écran.
+    /// Notification title, short and readable in a corner of the screen.
     pub title: String,
     pub body: String,
 }
 
-/// Clé d'une condition. Le seuil est intégré : modifier le seuil dans la
-/// configuration réarme naturellement l'alerte.
+/// Key of a condition. The threshold is part of it: changing the threshold in
+/// the configuration naturally re-arms the alert.
 fn key(coin: &str, kind: Kind, threshold: f64) -> String {
     format!("{coin}:{}:{threshold}", kind.slug())
 }
 
-/// Toutes les conditions vraies pour ce lot de cotations.
+/// Every condition that holds for this batch of quotes.
 ///
-/// Les alertes désactivées et celles dont la pièce n'a pas de cotation sont
-/// ignorées : une panne réseau ne doit ni notifier ni réarmer quoi que ce soit.
+/// Disabled alerts, and those whose coin has no quote, are ignored: a network
+/// outage must neither notify nor re-arm anything.
 #[must_use]
 pub fn evaluate(config: &Config, quotes: &[Quote]) -> Vec<Trigger> {
     let decimals = config.decimals();
@@ -90,11 +90,11 @@ fn triggers_for(
             symbol: quote.symbol.clone(),
             kind: Kind::Above,
             title: format!(
-                "{} au-dessus de {}",
+                "{} above {}",
                 quote.symbol,
-                seuil(threshold, currency, decimals)
+                threshold_label(threshold, currency, decimals)
             ),
-            body: format!("{} vaut {price}.", quote.name),
+            body: format!("{} is at {price}.", quote.name),
         });
     }
     if let Some(threshold) = alert.below.filter(|threshold| quote.price <= *threshold) {
@@ -103,16 +103,16 @@ fn triggers_for(
             symbol: quote.symbol.clone(),
             kind: Kind::Below,
             title: format!(
-                "{} sous {}",
+                "{} below {}",
                 quote.symbol,
-                seuil(threshold, currency, decimals)
+                threshold_label(threshold, currency, decimals)
             ),
-            body: format!("{} vaut {price}.", quote.name),
+            body: format!("{} is at {price}.", quote.name),
         });
     }
     if let Some(threshold) = alert.change_pct {
-        // L'amplitude est absolue : une chute de 6 % compte autant qu'une
-        // hausse de 6 %, ce qui est ce qu'on veut d'une alerte de volatilité.
+        // The amplitude is absolute: a 6% drop counts as much as a 6% rise,
+        // which is what a volatility alert should do.
         let amplitude = quote
             .change_24h
             .filter(|change| change.is_finite())
@@ -123,23 +123,23 @@ fn triggers_for(
                 symbol: quote.symbol.clone(),
                 kind: Kind::Change,
                 title: format!(
-                    "{} bouge de {}",
+                    "{} moved by {}",
                     quote.symbol,
                     format::percent(quote.change_24h)
                 ),
-                body: format!("{} vaut {price} après 24 h.", quote.name),
+                body: format!("{} is at {price} after 24 h.", quote.name),
             });
         }
     }
     triggers
 }
 
-fn seuil(value: f64, currency: &Currency, decimals: Decimals) -> String {
+fn threshold_label(value: f64, currency: &Currency, decimals: Decimals) -> String {
     format::price(value, currency, decimals)
 }
 
-/// Sépare les conditions vraies en « nouvelles » et « déjà connues », et rend
-/// l'ensemble à mémoriser pour le prochain tick.
+/// Splits the holding conditions into "new" and "already known", and returns
+/// the set to memorise for the next tick.
 #[must_use]
 pub fn diff(triggers: &[Trigger], fired: &BTreeSet<String>) -> (Vec<Trigger>, BTreeSet<String>) {
     let current: BTreeSet<String> = triggers.iter().map(|t| t.key.clone()).collect();
@@ -151,9 +151,9 @@ pub fn diff(triggers: &[Trigger], fired: &BTreeSet<String>) -> (Vec<Trigger>, BT
     (fresh, current)
 }
 
-/// Envoie une notification de bureau. L'absence de `notify-send` ou de démon
-/// de notification n'est pas une erreur : la barre continue d'afficher
-/// l'alerte, seule la bulle manque.
+/// Sends a desktop notification. A missing `notify-send` or notification
+/// daemon is not an error: the bar keeps showing the alert, only the bubble is
+/// missing.
 pub fn notify(trigger: &Trigger) {
     let urgency = if trigger.kind == Kind::Change {
         "normal"
@@ -164,8 +164,8 @@ pub fn notify(trigger: &Trigger) {
         .arg("--app-name=cryptobar")
         .arg("--icon=network-transmit-receive")
         .arg(format!("--urgency={urgency}"))
-        // Une alerte par pièce et par condition : les bulles se remplacent au
-        // lieu de s'empiler si le prix oscille autour du seuil.
+        // One alert per coin and per condition: the bubbles replace each other
+        // instead of stacking up when the price oscillates around the threshold.
         .arg(format!(
             "--hint=string:x-canonical-private-synchronous:cryptobar-{}",
             trigger.key
@@ -209,7 +209,7 @@ mod tests {
     }
 
     #[test]
-    fn un_plafond_franchi_declenche() {
+    fn a_crossed_ceiling_fires() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 100000\n");
         let triggers = evaluate(&config, &[quote("bitcoin", "BTC", 101_000.0, None)]);
         assert_eq!(triggers.len(), 1);
@@ -217,20 +217,20 @@ mod tests {
     }
 
     #[test]
-    fn un_plafond_non_atteint_ne_declenche_pas() {
+    fn an_unreached_ceiling_does_not_fire() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 100000\n");
         assert!(evaluate(&config, &[quote("bitcoin", "BTC", 99_000.0, None)]).is_empty());
     }
 
     #[test]
-    fn un_plancher_franchi_declenche() {
+    fn a_crossed_floor_fires() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nbelow = 50000\n");
         let triggers = evaluate(&config, &[quote("bitcoin", "BTC", 49_000.0, None)]);
         assert_eq!(triggers.first().unwrap().kind, Kind::Below);
     }
 
     #[test]
-    fn lamplitude_compte_dans_les_deux_sens() {
+    fn the_amplitude_counts_both_ways() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nchange_pct = 5\n");
         assert_eq!(
             evaluate(&config, &[quote("bitcoin", "BTC", 1.0, Some(-6.0))]).len(),
@@ -244,26 +244,26 @@ mod tests {
     }
 
     #[test]
-    fn une_variation_absente_ne_declenche_pas() {
+    fn a_missing_change_does_not_fire() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nchange_pct = 5\n");
         assert!(evaluate(&config, &[quote("bitcoin", "BTC", 1.0, None)]).is_empty());
         assert!(evaluate(&config, &[quote("bitcoin", "BTC", 1.0, Some(f64::NAN))]).is_empty());
     }
 
     #[test]
-    fn une_alerte_desactivee_est_ignoree() {
+    fn a_disabled_alert_is_ignored() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 1\nenabled = false\n");
         assert!(evaluate(&config, &[quote("bitcoin", "BTC", 100.0, None)]).is_empty());
     }
 
     #[test]
-    fn sans_cotation_rien_ne_declenche_ni_ne_se_rearme() {
+    fn without_a_quote_nothing_fires_or_re_arms() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 1\n");
         assert!(evaluate(&config, &[]).is_empty());
     }
 
     #[test]
-    fn une_condition_deja_tiree_ne_renotifie_pas() {
+    fn an_already_fired_condition_does_not_notify_again() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 100000\n");
         let triggers = evaluate(&config, &[quote("bitcoin", "BTC", 101_000.0, None)]);
         let (fresh, fired) = diff(&triggers, &BTreeSet::new());
@@ -274,19 +274,19 @@ mod tests {
     }
 
     #[test]
-    fn une_condition_retombee_se_rearme() {
+    fn a_condition_that_falls_back_re_arms() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 100000\n");
         let (_, fired) = diff(
             &evaluate(&config, &[quote("bitcoin", "BTC", 101_000.0, None)]),
             &BTreeSet::new(),
         );
-        // Le prix repasse sous le seuil : plus aucune condition vraie.
+        // The price falls back under the threshold: no condition holds any more.
         let (_, cleared) = diff(
             &evaluate(&config, &[quote("bitcoin", "BTC", 90_000.0, None)]),
             &fired,
         );
         assert!(cleared.is_empty());
-        // Puis il repasse au-dessus : ça doit notifier de nouveau.
+        // Then it rises above again: it has to notify once more.
         let (fresh, _) = diff(
             &evaluate(&config, &[quote("bitcoin", "BTC", 101_000.0, None)]),
             &cleared,
@@ -295,7 +295,7 @@ mod tests {
     }
 
     #[test]
-    fn changer_le_seuil_rearme_lalerte() {
+    fn changing_the_threshold_re_arms_the_alert() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 100000\n");
         let (_, fired) = diff(
             &evaluate(&config, &[quote("bitcoin", "BTC", 101_000.0, None)]),
@@ -310,7 +310,7 @@ mod tests {
     }
 
     #[test]
-    fn un_bloc_peut_cumuler_plusieurs_conditions() {
+    fn one_block_can_combine_several_conditions() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 100000\nchange_pct = 5\n");
         let triggers = evaluate(&config, &[quote("bitcoin", "BTC", 101_000.0, Some(9.0))]);
         assert_eq!(triggers.len(), 2);

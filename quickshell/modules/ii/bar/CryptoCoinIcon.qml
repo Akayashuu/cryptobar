@@ -3,16 +3,16 @@ import qs.modules.common.widgets
 import QtQuick
 
 /**
- * Identité visuelle d'une cryptomonnaie : son logo officiel dès qu'il est en
- * cache, sinon une pastille colorée portant son glyphe.
+ * Visual identity of a cryptocurrency: its official logo as soon as it is
+ * cached, otherwise a coloured badge carrying its glyph.
  *
- * Le repli n'est pas seulement un filet de sécurité au premier démarrage : il
- * couvre aussi les monnaies dont la source ne publie pas d'image.
+ * The fallback is not only a safety net on first start: it also covers the
+ * currencies for which the source publishes no image.
  */
 Item {
     id: root
 
-    /// Une entrée de `Crypto.coins`.
+    /// One entry of `Crypto.coins`.
     property var coin: null
     property real size: 16
 
@@ -37,8 +37,8 @@ Item {
     Image {
         id: image
         anchors.fill: parent
-        // Décoder à la taille d'affichage évite de garder une image de 250 px
-        // en mémoire pour un rendu de 16.
+        // Decoding at display size avoids keeping a 250 px image in memory for
+        // a 16 px render.
         sourceSize.width: Math.round(root.size * 2)
         sourceSize.height: Math.round(root.size * 2)
         fillMode: Image.PreserveAspectFit

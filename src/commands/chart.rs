@@ -1,4 +1,4 @@
-//! Sous-commande `chart` : graphique braille dans le terminal.
+//! `chart` subcommand: braille chart in the terminal.
 
 use std::fmt::Write as _;
 use std::io::Write as _;
@@ -9,36 +9,36 @@ use crate::app::App;
 use crate::model::{CoinId, Range, Series};
 use crate::render::{braille, format};
 
-/// Marges réservées autour du tracé : axe des ordonnées et bordures.
+/// Margins reserved around the plot: y axis and borders.
 const AXIS_WIDTH: usize = 12;
 const MIN_COLS: usize = 20;
 const MIN_ROWS: usize = 4;
-/// Au-delà, le graphique devient illisible plutôt que plus précis.
+/// Beyond it, the chart becomes unreadable rather than more precise.
 const MAX_ROWS: usize = 24;
 const DEFAULT_COLS: usize = 80;
 const DEFAULT_ROWS: usize = 24;
 
-/// Affiche le graphique de `coin` sur la plage demandée.
+/// Prints the chart of `coin` over the requested range.
 ///
 /// # Errors
-/// Échoue si l'identifiant est invalide ou si la série est indisponible et
-/// absente du cache.
+/// Fails when the id is invalid, or when the series is unavailable and missing
+/// from the cache.
 pub fn run(app: &App, coin: Option<&str>, range: Range) -> Result<()> {
     let id = match coin {
-        Some(raw) => CoinId::parse(raw).context("identifiant de cryptomonnaie invalide")?,
+        Some(raw) => CoinId::parse(raw).context("invalid cryptocurrency id")?,
         None => app
             .config
             .coins
             .get(app.active_index())
             .or_else(|| app.config.coins.first())
             .cloned()
-            .context("aucune cryptomonnaie configurée")?,
+            .context("no cryptocurrency configured")?,
     };
 
     let cached = app
         .source
         .series_cached(&id, range, &app.config.currency)
-        .with_context(|| format!("récupération de la série de {}", id.as_str()))?;
+        .with_context(|| format!("fetching the series of {}", id.as_str()))?;
 
     let (cols, rows) = viewport();
     let rendered = render(&cached.value, &app.config, cols, rows, cached.stale);
@@ -48,14 +48,14 @@ pub fn run(app: &App, coin: Option<&str>, range: Range) -> Result<()> {
     Ok(())
 }
 
-/// Dimensions utilisables, avec un repli quand la sortie n'est pas un terminal.
+/// Usable dimensions, with a fallback when the output is not a terminal.
 fn viewport() -> (usize, usize) {
     terminal_size::terminal_size().map_or((DEFAULT_COLS, DEFAULT_ROWS), |(w, h)| {
         (usize::from(w.0), usize::from(h.0))
     })
 }
 
-/// Compose l'en-tête, le tracé et l'axe. Fonction pure : entièrement testable.
+/// Composes the header, the plot and the axis. Pure function: fully testable.
 #[must_use]
 pub fn render(
     series: &Series,
@@ -65,8 +65,8 @@ pub fn render(
     stale: bool,
 ) -> String {
     let plot_cols = cols.saturating_sub(AXIS_WIDTH).max(MIN_COLS);
-    // Deux lignes d'en-tête et une de pied de page sont retirées de la hauteur,
-    // puis la hauteur en cellules est le quart de la hauteur en points.
+    // Two header lines and one footer line are taken off the height, then the
+    // height in cells is a quarter of the height in dots.
     let plot_rows = rows.saturating_sub(4).clamp(MIN_ROWS, MAX_ROWS);
 
     let decimals = config.decimals();
@@ -82,8 +82,8 @@ pub fn render(
     };
 
     let mut out = String::new();
-    // L'écriture dans une `String` est infaillible ; l'erreur est ignorée
-    // sciemment plutôt que remontée par toute la chaîne d'appel.
+    // Writing into a `String` is infallible; the error is ignored knowingly
+    // rather than bubbled up through the whole call chain.
     let _ = writeln!(
         out,
         "{}  {}   {}  ({})",
@@ -93,7 +93,7 @@ pub fn render(
         series.range.label(),
     );
     if stale {
-        out.push_str("données périmées — réseau indisponible\n");
+        out.push_str("stale data — network unavailable\n");
     }
     out.push('\n');
 
@@ -114,18 +114,18 @@ pub fn render(
     out
 }
 
-/// Ouvre le graphique dans une nouvelle fenêtre de terminal.
+/// Opens the chart in a new terminal window.
 ///
 /// # Errors
-/// Échoue si l'émulateur configuré est introuvable.
+/// Fails when the configured emulator cannot be found.
 pub fn spawn_terminal(app: &App, coin: Option<&str>, range: Range) -> Result<()> {
     let terminal = app.config.terminal.trim();
     if terminal.is_empty() {
-        bail!("aucun émulateur de terminal configuré");
+        bail!("no terminal emulator configured");
     }
-    let exe = std::env::current_exe().context("chemin de l'exécutable introuvable")?;
+    let exe = std::env::current_exe().context("executable path not found")?;
     let mut command = std::process::Command::new(terminal);
-    // `-e` est accepté par foot, kitty, alacritty et wezterm.
+    // `-e` is accepted by foot, kitty, alacritty and wezterm.
     command
         .arg("-e")
         .arg(exe)
@@ -137,7 +137,7 @@ pub fn spawn_terminal(app: &App, coin: Option<&str>, range: Range) -> Result<()>
     }
     command
         .spawn()
-        .with_context(|| format!("lancement de {terminal}"))?;
+        .with_context(|| format!("launching {terminal}"))?;
     Ok(())
 }
 
@@ -160,30 +160,27 @@ mod tests {
     }
 
     #[test]
-    fn len_tete_contient_le_symbole_le_prix_et_la_plage() {
+    fn the_header_holds_the_symbol_the_price_and_the_range() {
         let out = render(&series(vec![100.0, 110.0]), &config(), 80, 20, false);
         let header = out.lines().next().unwrap();
         assert!(header.contains("BITCOIN"));
-        assert!(
-            header.contains("7 jours") || header.contains('7'),
-            "en-tête : {header}"
-        );
+        assert!(header.contains("7d"), "header: {header}");
     }
 
     #[test]
-    fn la_variation_est_calculee_entre_le_premier_et_le_dernier_point() {
+    fn the_change_is_computed_between_the_first_and_last_point() {
         let out = render(&series(vec![100.0, 110.0]), &config(), 80, 20, false);
-        assert!(out.lines().next().unwrap().contains("10,0"));
+        assert!(out.lines().next().unwrap().contains("10.0"));
     }
 
     #[test]
-    fn letat_perime_est_signale() {
+    fn the_stale_state_is_reported() {
         let out = render(&series(vec![1.0, 2.0]), &config(), 80, 20, true);
-        assert!(out.contains("périmées"));
+        assert!(out.contains("stale"));
     }
 
     #[test]
-    fn laxe_porte_le_maximum_en_haut_et_le_minimum_en_bas() {
+    fn the_axis_carries_the_max_on_top_and_the_min_at_the_bottom() {
         let out = render(&series(vec![10.0, 50.0]), &config(), 80, 20, false);
         let plot: Vec<&str> = out.lines().filter(|l| l.contains('│')).collect();
         assert!(plot.first().unwrap().contains("50"));
@@ -191,19 +188,19 @@ mod tests {
     }
 
     #[test]
-    fn un_terminal_minuscule_ne_produit_pas_de_dimension_nulle() {
+    fn a_tiny_terminal_yields_no_zero_dimension() {
         let out = render(&series(vec![1.0, 2.0, 3.0]), &config(), 1, 1, false);
         assert!(out.contains('│'));
     }
 
     #[test]
-    fn une_serie_vide_ne_panique_pas() {
+    fn an_empty_series_does_not_panic() {
         let out = render(&series(Vec::new()), &config(), 80, 20, false);
         assert!(!out.is_empty());
     }
 
     #[test]
-    fn une_serie_partant_de_zero_nannonce_pas_de_variation() {
+    fn a_series_starting_at_zero_announces_no_change() {
         let out = render(&series(vec![0.0, 5.0]), &config(), 80, 20, false);
         assert!(out.lines().next().unwrap().contains('—'));
     }

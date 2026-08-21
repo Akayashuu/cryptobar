@@ -1,74 +1,72 @@
-# Journal des modifications
+# Changelog
 
-Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le
-versionnage sémantique.
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
+semantic versioning.
 
 ## [0.2.1] — 2026-08-22
 
-### Modifié
+### Changed
 
-- La fenêtre se navigue par onglets — Cours, Portefeuille, Alertes, Réglages —
-  au lieu d'une colonne unique où le portefeuille et les réglages tombaient
-  sous la ligne de flottaison, sans rien qui signale qu'il fallait faire
-  défiler pour les atteindre.
+- The window is navigated through tabs — Prices, Portfolio, Alerts, Settings —
+  instead of a single column where the portfolio and the settings fell below
+  the fold, with nothing to say they had to be scrolled to.
 
-### Corrigé
+### Fixed
 
-- La feuille de style de la fenêtre est chargée au-dessus de
-  `~/.config/gtk-4.0/gtk.css` : un thème de bureau qui repeint tous les boutons
-  ne décide plus de l'allure des onglets.
+- The window stylesheet is loaded above `~/.config/gtk-4.0/gtk.css`: a desktop
+  theme that repaints every button no longer decides how the tabs look.
 
 ## [0.2.0] — 2026-08-22
 
-### Ajouté
+### Added
 
-- Portefeuille en lecture seule suivi par **adresse publique** : soldes lus sur
-  mempool.space (Bitcoin), `ethereum-rpc.publicnode.com` (Ethereum) et
-  `api.mainnet-beta.solana.com` (Solana), sans clé d'API. Une clé privée ou une
-  phrase de récupération est refusée avant toute écriture sur le disque.
-- Commande `cryptobar portfolio` : valorisation, parts et gain sur 24 h dans le
+- Read-only portfolio watched by **public address**: balances read from
+  mempool.space (Bitcoin), `ethereum-rpc.publicnode.com` (Ethereum) and
+  `api.mainnet-beta.solana.com` (Solana), with no API key. A private key or a
+  recovery phrase is rejected before anything is written to disk.
+- `cryptobar portfolio` command: valuation, shares and 24 h gain in the
   terminal.
-- Alertes de prix (`[[alerts]]`) sur seuil haut, seuil bas et amplitude de
-  variation sur 24 h, avec réarmement au retour sous le seuil et notification
-  de bureau depuis `cryptobar bar --watch`.
-- Commande `cryptobar select <N>` pour afficher une cryptomonnaie donnée.
-- Fenêtre GTK4 complète : recherche de cryptomonnaies avec leur logo, courbe
-  sur cinq plages, export PNG et CSV, liste des cryptomonnaies suivies,
-  portefeuille, alertes et réglages groupés — toute la configuration se modifie
-  depuis la fenêtre, en préservant commentaires et ordre du fichier TOML.
-- Logos officiels des cryptomonnaies, mis en cache sur disque, dans la fenêtre
-  comme dans les widgets Quickshell.
-- Intégration Quickshell pour dots-hyprland (`quickshell/`) : service singleton
-  partagé par tous les écrans, widget horizontal, widget vertical, infobulle,
-  installateur idempotent.
-- `cryptobar bar --markup none` : sortie sans balisage Pango pour les barres
-  qui affichent du texte brut.
-- Ligne JSON étendue : `symbol`, `price`, `percent`, `sparkline`, `trend`,
-  `stale`, `icon`, `glyph`, `color`, `foreground`, `coins` (toutes les
-  cryptomonnaies suivies avec leur série normalisée dans `[0, 1]`), `alerts` et
+- Price alerts (`[[alerts]]`) on an upper threshold, a lower threshold and the
+  24 h change amplitude, re-arming when the price comes back under the
+  threshold, with a desktop notification from `cryptobar bar --watch`.
+- `cryptobar select <N>` command, to display a given cryptocurrency.
+- Complete GTK4 window: cryptocurrency search with logos, curve over five
+  ranges, PNG and CSV export, list of the watched cryptocurrencies, portfolio,
+  alerts and grouped settings — the whole configuration is editable from the
+  window, preserving the comments and the ordering of the TOML file.
+- Official cryptocurrency logos, cached on disk, in the window as well as in
+  the Quickshell widgets.
+- Quickshell integration for dots-hyprland (`quickshell/`): singleton service
+  shared by every screen, horizontal widget, vertical widget, tooltip,
+  idempotent installer.
+- `cryptobar bar --markup none`: output without Pango markup, for the bars that
+  display plain text.
+- Extended JSON line: `symbol`, `price`, `percent`, `sparkline`, `trend`,
+  `stale`, `icon`, `glyph`, `color`, `foreground`, `coins` (every watched
+  cryptocurrency with its series normalised within `[0, 1]`), `alerts` and
   `portfolio`.
 
-### Modifié
+### Changed
 
-- Les widgets Quickshell dessinent la courbe au canevas et affichent un panneau
-  natif au lieu d'un bloc de texte monospace. La barre verticale est réduite au
-  logo, au prix et à la variation.
+- The Quickshell widgets draw the curve on a canvas and show a native panel
+  instead of a monospace text block. The vertical bar is reduced to the logo,
+  the price and the change.
 
 ## [0.1.0] — 2026-08-21
 
-Première version.
+First release.
 
-### Ajouté
+### Added
 
-- Module Waybar : sparkline Unicode, cyclage à la molette, infobulle détaillée
-  avec les variations 1 h / 24 h / 7 j, classes CSS suivant la tendance.
-- Graphique braille dans le terminal, dimensionné sur la taille réelle de
-  celui-ci, avec axe des ordonnées étiqueté.
-- Fenêtre GTK4 avec courbe vectorielle, derrière une fonctionnalité optionnelle
-  activée par défaut.
-- Recherche d'identifiants CoinGecko (`cryptobar coins <terme>`).
-- Gestion de la configuration (`init`, `path`, `check`) avec validation stricte
-  et messages explicites.
-- Cache disque à TTL, écriture atomique, verrou consultatif et backoff
-  exponentiel ; dégradation en données périmées plutôt qu'en module vide.
-- Rafraîchissement instantané de Waybar par `SIGRTMIN+n`.
+- Waybar module: Unicode sparkline, scroll to cycle, detailed tooltip with the
+  1 h / 24 h / 7 d changes, CSS classes following the trend.
+- Braille chart in the terminal, sized to its actual dimensions, with a
+  labelled ordinate axis.
+- GTK4 window with a vector curve, behind an optional feature enabled by
+  default.
+- CoinGecko id search (`cryptobar coins <term>`).
+- Configuration management (`init`, `path`, `check`) with strict validation and
+  explicit messages.
+- Disk cache with a TTL, atomic writes, advisory lock and exponential backoff;
+  degrades to stale data rather than to an empty module.
+- Instant Waybar refresh through `SIGRTMIN+n`.

@@ -2,20 +2,20 @@ import qs.modules.common
 import QtQuick
 
 /**
- * Courbe des sept derniers jours : trait plein sous un aplat dégradé.
+ * Curve over the last seven days: a solid line above a gradient fill.
  *
- * La série arrive déjà normalisée dans [0, 1] et sous-échantillonnée par le
- * binaire ; le canevas se contente de la mettre à l'échelle, sans calcul de
- * minimum ni de maximum à chaque repeinte.
+ * The series arrives already normalised within [0, 1] and downsampled by the
+ * binary; the canvas merely scales it, with no minimum or maximum to compute
+ * on every repaint.
  */
 Canvas {
     id: root
 
-    /// Points dans [0, 1], du plus ancien au plus récent.
+    /// Points within [0, 1], oldest to newest.
     property var series: []
     property color stroke: Appearance.colors.colOnLayer1
     property real thickness: 1.5
-    /// Marge haute et basse, pour que le trait ne soit pas rogné.
+    /// Top and bottom margin, so the line is not clipped.
     property real inset: root.thickness
 
     onSeriesChanged: root.requestPaint()
@@ -39,7 +39,7 @@ Canvas {
         for (let i = 1; i < points.length; i++)
             ctx.lineTo(i * step, yOf(points[i]));
 
-        // L'aplat réutilise le tracé, refermé sur la base.
+        // The fill reuses the path, closed onto the baseline.
         ctx.lineTo(root.width, root.height);
         ctx.lineTo(0, root.height);
         ctx.closePath();

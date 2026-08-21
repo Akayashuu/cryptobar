@@ -1,15 +1,13 @@
-//! Suivi de portefeuilles en lecture seule.
+//! Read-only wallet watching.
 //!
-//! Le principe est celui d'un « watch-only » : on colle une **adresse
-//! publique**, cryptobar lit le solde sur la chaîne et le valorise. Aucune clé
-//! privée, aucune phrase de récupération, aucune signature — [`Wallet::validate`]
-//! refuse d'ailleurs explicitement tout ce qui y ressemble. Le programme ne
-//! peut pas dépenser, seulement regarder.
+//! The principle is "watch-only": you paste a **public address**, cryptobar
+//! reads the balance from the chain and values it. No private key, no recovery
+//! phrase, no signature — [`Wallet::validate`] explicitly rejects anything that
+//! looks like one. The program cannot spend, only look.
 //!
-//! Trois chaînes, trois points d'accès publics sans clé d'API : mempool.space
-//! pour Bitcoin, un RPC Ethereum public, le RPC Solana mainnet. Les soldes sont
-//! mis en cache sur disque, si bien que la barre n'ouvre jamais de connexion :
-//! elle relit un fichier.
+//! Three chains, three public endpoints with no API key: mempool.space for
+//! Bitcoin, a public Ethereum RPC, the Solana mainnet RPC. Balances are cached
+//! on disk, so the bar never opens a connection: it re-reads a file.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -19,8 +17,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::CoinId;
 
-/// Chaîne suivie. La liste est courte à dessein : chaque entrée demande un
-/// point d'accès public, sans clé, et un décodage propre du solde.
+/// A watched chain. The list is short on purpose: every entry needs a public,
+/// key-free endpoint and a clean balance decoder.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Chain {
@@ -30,7 +28,7 @@ pub enum Chain {
 }
 
 impl Chain {
-    /// Toutes les chaînes, dans l'ordre d'affichage.
+    /// Every chain, in display order.
     pub const ALL: [Self; 3] = [Self::Bitcoin, Self::Ethereum, Self::Solana];
 
     #[must_use]
@@ -42,7 +40,7 @@ impl Chain {
         }
     }
 
-    /// Symbole de l'actif natif de la chaîne.
+    /// Symbol of the chain's native asset.
     #[must_use]
     pub fn symbol(self) -> &'static str {
         match self {
@@ -52,8 +50,8 @@ impl Chain {
         }
     }
 
-    /// Identifiant CoinGecko de l'actif natif : c'est par lui que le solde
-    /// rejoint le portefeuille.
+    /// CoinGecko id of the native asset: that is how the balance joins the
+    /// portfolio.
     #[must_use]
     pub fn coin(self) -> CoinId {
         CoinId::trusted(self.slug())
@@ -68,19 +66,19 @@ impl std::str::FromStr for Chain {
             "bitcoin" | "btc" => Ok(Self::Bitcoin),
             "ethereum" | "eth" => Ok(Self::Ethereum),
             "solana" | "sol" => Ok(Self::Solana),
-            other => Err(format!("chaîne inconnue : {other}")),
+            other => Err(format!("unknown chain: {other}")),
         }
     }
 }
 
-/// Un portefeuille suivi, tel qu'il est écrit dans la configuration.
+/// A watched wallet, as written in the configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Wallet {
     pub chain: Chain,
-    /// Adresse publique. Voir [`Wallet::validate`] : rien d'autre n'est accepté.
+    /// Public address. See [`Wallet::validate`]: nothing else is accepted.
     pub address: String,
-    /// Nom affiché, sinon l'adresse abrégée fait l'affaire.
+    /// Display name; otherwise the shortened address will do.
     #[serde(default)]
     pub label: Option<String>,
     #[serde(default = "crate::config::default_true")]
@@ -88,23 +86,23 @@ pub struct Wallet {
 }
 
 impl Wallet {
-    /// Vérifie que l'adresse a la forme attendue par sa chaîne.
+    /// Checks that the address has the shape its chain expects.
     ///
-    /// Le contrôle est volontairement strict : une adresse mal formée ne
-    /// produirait qu'une requête inutile, et surtout on veut fermer la porte à
-    /// tout ce qui ressemblerait à un secret collé par erreur.
+    /// The check is deliberately strict: a malformed address would only produce
+    /// a useless request, and above all we want to shut the door on anything
+    /// that looks like a secret pasted by mistake.
     ///
     /// # Errors
-    /// Décrit ce qui cloche, en français, pour un affichage direct.
+    /// Describes what is wrong, ready to be displayed as is.
     pub fn validate(&self) -> Result<(), String> {
         let address = self.address.trim();
         if address.is_empty() {
-            return Err("adresse vide".to_owned());
+            return Err("empty address".to_owned());
         }
         if address.chars().any(char::is_whitespace) {
-            // Une suite de mots séparés par des espaces, c'est une phrase de
-            // récupération. On refuse net plutôt que de l'écrire sur disque.
-            return Err("une adresse publique ne contient pas d'espace".to_owned());
+            // A run of words separated by spaces is a recovery phrase. Refuse
+            // outright rather than writing it to disk.
+            return Err("a public address contains no space".to_owned());
         }
         let lowered = address.to_ascii_lowercase();
         for secret in [
@@ -114,7 +112,7 @@ impl Wallet {
             "0x0000000000000000000000000000000000000000",
         ] {
             if lowered.starts_with(secret) {
-                return Err("cette valeur n'est pas une adresse publique".to_owned());
+                return Err("this value is not a public address".to_owned());
             }
         }
         match self.chain {
@@ -124,7 +122,7 @@ impl Wallet {
         }
     }
 
-    /// Nom affiché : l'étiquette si elle existe, sinon l'adresse abrégée.
+    /// Display name: the label when there is one, otherwise the short address.
     #[must_use]
     pub fn title(&self) -> String {
         match self
@@ -139,7 +137,7 @@ impl Wallet {
     }
 }
 
-/// Abrège une adresse en gardant ses extrémités, comme le font les explorateurs.
+/// Shortens an address keeping both ends, the way explorers do.
 #[must_use]
 pub fn shorten(address: &str) -> String {
     let chars: Vec<char> = address.chars().collect();
@@ -160,7 +158,7 @@ pub fn shorten(address: &str) -> String {
 
 fn validate_bitcoin(address: &str) -> Result<(), String> {
     let lowered = address.to_ascii_lowercase();
-    // Bech32 (bc1…) : minuscules, sans les caractères ambigus « 1 b i o ».
+    // Bech32 (bc1…): lowercase, without the ambiguous characters `1 b i o`.
     if lowered.starts_with("bc1") {
         let body = lowered.get(3..).unwrap_or_default();
         let ok = (11..=87).contains(&body.len())
@@ -171,14 +169,14 @@ fn validate_bitcoin(address: &str) -> Result<(), String> {
             && !body.contains('1');
         return ok
             .then_some(())
-            .ok_or_else(|| "adresse bech32 mal formée".to_owned());
+            .ok_or_else(|| "malformed bech32 address".to_owned());
     }
-    // Base58 hérité : commence par 1 (P2PKH) ou 3 (P2SH).
+    // Legacy base58: starts with 1 (P2PKH) or 3 (P2SH).
     let ok = address.starts_with(['1', '3'])
         && (26..=35).contains(&address.chars().count())
         && address.chars().all(is_base58);
     ok.then_some(())
-        .ok_or_else(|| "adresse Bitcoin non reconnue".to_owned())
+        .ok_or_else(|| "unrecognised Bitcoin address".to_owned())
 }
 
 fn validate_ethereum(address: &str) -> Result<(), String> {
@@ -188,32 +186,32 @@ fn validate_ethereum(address: &str) -> Result<(), String> {
             .get(2..)
             .is_some_and(|body| body.chars().all(|c| c.is_ascii_hexdigit()));
     ok.then_some(())
-        .ok_or_else(|| "adresse Ethereum attendue : 0x suivi de 40 caractères".to_owned())
+        .ok_or_else(|| "expected an Ethereum address: 0x followed by 40 characters".to_owned())
 }
 
 fn validate_solana(address: &str) -> Result<(), String> {
     let ok = (32..=44).contains(&address.chars().count()) && address.chars().all(is_base58);
     ok.then_some(())
-        .ok_or_else(|| "adresse Solana non reconnue".to_owned())
+        .ok_or_else(|| "unrecognised Solana address".to_owned())
 }
 
-/// Alphabet base58 : ni zéro, ni O, ni I, ni l — trop faciles à confondre.
+/// Base58 alphabet: no zero, no O, no I, no l — too easy to confuse.
 fn is_base58(c: char) -> bool {
     c.is_ascii_alphanumeric() && !matches!(c, '0' | 'O' | 'I' | 'l')
 }
 
-/// Solde lu sur la chaîne, dans l'unité de l'actif natif.
+/// Balance read from the chain, in the unit of the native asset.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Balance {
     pub chain: Chain,
     pub address: String,
-    /// Quantité, en BTC, ETH ou SOL selon la chaîne.
+    /// Quantity, in BTC, ETH or SOL depending on the chain.
     pub amount: f64,
-    /// Instant Unix de la dernière lecture réussie.
+    /// Unix time of the last successful read.
     pub fetched_at: u64,
 }
 
-/// Somme des soldes par cryptomonnaie, prête à rejoindre le portefeuille.
+/// Balances summed per cryptocurrency, ready to join the portfolio.
 #[must_use]
 pub fn totals(balances: &[Balance]) -> BTreeMap<CoinId, f64> {
     let mut totals: BTreeMap<CoinId, f64> = BTreeMap::new();
@@ -230,12 +228,12 @@ const USER_AGENT: &str = concat!(
 );
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const TOTAL_TIMEOUT: Duration = Duration::from_secs(10);
-/// Les réponses attendues font quelques centaines d'octets ; ce plafond
-/// protège d'un serveur qui déraille sans jamais gêner un usage normal.
+/// The expected responses are a few hundred bytes; this ceiling guards against
+/// a server going haywire without ever getting in the way of normal use.
 const MAX_RESPONSE_BYTES: u64 = 64 * 1024;
-/// Durée de validité d'un solde en cache. Une chaîne se règle en minutes, pas
-/// en secondes : interroger plus souvent ne servirait qu'à charger les serveurs
-/// publics qui nous rendent service gratuitement.
+/// How long a cached balance stays valid. A chain settles in minutes, not in
+/// seconds: querying more often would only load the public servers that do us a
+/// favour for free.
 const TTL: Duration = Duration::from_secs(300);
 
 fn endpoint(chain: Chain) -> String {
@@ -250,7 +248,7 @@ fn endpoint(chain: Chain) -> String {
     }
 }
 
-/// Lecteur de soldes, avec son cache disque.
+/// Balance reader, with its disk cache.
 pub struct Watcher {
     agent: ureq::Agent,
     path: PathBuf,
@@ -271,7 +269,7 @@ impl Watcher {
         }
     }
 
-    /// Soldes en cache, sans aucun accès réseau. C'est ce que lit la barre.
+    /// Cached balances, with no network access at all. This is what the bar reads.
     #[must_use]
     pub fn cached(&self, wallets: &[Wallet]) -> Vec<Balance> {
         let stored = self.read();
@@ -282,9 +280,9 @@ impl Watcher {
             .collect()
     }
 
-    /// Soldes à jour : les entrées encore fraîches viennent du cache, les
-    /// autres de la chaîne. Une lecture qui échoue laisse la valeur précédente
-    /// en place plutôt que d'effacer le portefeuille.
+    /// Up-to-date balances: the still-fresh entries come from the cache, the
+    /// others from the chain. A failed read leaves the previous value in place
+    /// rather than wiping the portfolio.
     #[must_use]
     pub fn refresh(&self, wallets: &[Wallet]) -> Vec<Balance> {
         let mut stored = self.read();
@@ -312,8 +310,8 @@ impl Watcher {
             }
         }
 
-        // Le cache ne garde que les portefeuilles encore déclarés : retirer une
-        // adresse de la configuration doit l'effacer du disque.
+        // The cache only keeps the wallets still declared: removing an address
+        // from the configuration must erase it from disk.
         let known: std::collections::BTreeSet<&str> =
             wallets.iter().map(|w| w.address.as_str()).collect();
         let before = stored.len();
@@ -324,7 +322,7 @@ impl Watcher {
         self.cached(wallets)
     }
 
-    /// Interroge la chaîne pour une adresse.
+    /// Queries the chain for one address.
     fn fetch(&self, chain: Chain, address: &str) -> Result<f64, String> {
         let base = endpoint(chain);
         match chain {
@@ -374,7 +372,7 @@ impl Watcher {
     }
 
     fn read(&self) -> BTreeMap<String, Balance> {
-        // Un cache illisible est traité comme absent : jamais une erreur.
+        // An unreadable cache is treated as missing: never an error.
         std::fs::read_to_string(&self.path)
             .ok()
             .and_then(|raw| serde_json::from_str(&raw).ok())
@@ -399,8 +397,8 @@ fn now() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// Solde Bitcoin : la différence entre ce qui est entré et ce qui est sorti,
-/// confirmé comme en attente, convertie de satoshis en BTC.
+/// Bitcoin balance: what came in minus what went out, confirmed as well as
+/// pending, converted from satoshis to BTC.
 fn decode_bitcoin(body: &str) -> Result<f64, String> {
     #[derive(Deserialize, Default)]
     struct Stats {
@@ -426,7 +424,7 @@ fn decode_bitcoin(body: &str) -> Result<f64, String> {
     Ok(units(sats_to_f64(sats), 100_000_000.0))
 }
 
-/// Solde Ethereum : un entier hexadécimal en wei.
+/// Ethereum balance: a hexadecimal integer in wei.
 fn decode_ethereum(body: &str) -> Result<f64, String> {
     #[derive(Deserialize)]
     struct Reply {
@@ -436,13 +434,13 @@ fn decode_ethereum(body: &str) -> Result<f64, String> {
     let parsed: Reply = serde_json::from_str(body).map_err(|e| e.to_string())?;
     let raw = parsed
         .result
-        .ok_or_else(|| "réponse sans solde".to_owned())?;
+        .ok_or_else(|| "response without a balance".to_owned())?;
     let digits = raw.trim_start_matches("0x");
     let wei = u128::from_str_radix(digits, 16).map_err(|e| e.to_string())?;
     Ok(units(wei_to_f64(wei), 1e18))
 }
 
-/// Solde Solana : un entier de lamports.
+/// Solana balance: an integer number of lamports.
 fn decode_solana(body: &str) -> Result<f64, String> {
     #[derive(Deserialize)]
     struct Value {
@@ -458,11 +456,11 @@ fn decode_solana(body: &str) -> Result<f64, String> {
     let lamports = parsed
         .result
         .and_then(|result| result.value)
-        .ok_or_else(|| "réponse sans solde".to_owned())?;
+        .ok_or_else(|| "response without a balance".to_owned())?;
     Ok(units(lamports_to_f64(lamports), 1e9))
 }
 
-/// Conversion d'une unité de base vers l'unité affichée.
+/// Conversion from a base unit to the displayed unit.
 fn units(base: f64, divisor: f64) -> f64 {
     if divisor.abs() < f64::EPSILON {
         return 0.0;
@@ -471,9 +469,8 @@ fn units(base: f64, divisor: f64) -> f64 {
     if value.is_finite() { value } else { 0.0 }
 }
 
-// Les trois conversions ci-dessous perdent des chiffres au-delà de 2^53, ce qui
-// n'arrive qu'à des soldes irréels ; l'affichage se compte en décimales, pas en
-// satoshis.
+// The three conversions below lose digits beyond 2^53, which only happens to
+// unrealistic balances; the display counts in decimals, not in satoshis.
 #[allow(clippy::cast_precision_loss)]
 fn sats_to_f64(value: i64) -> f64 {
     value as f64
@@ -504,7 +501,7 @@ mod tests {
     }
 
     #[test]
-    fn une_adresse_bitcoin_valide_est_acceptee() {
+    fn a_valid_bitcoin_address_is_accepted() {
         assert!(
             wallet(Chain::Bitcoin, "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
                 .validate()
@@ -518,13 +515,13 @@ mod tests {
     }
 
     #[test]
-    fn une_adresse_bitcoin_mal_formee_est_refusee() {
+    fn a_malformed_bitcoin_address_is_rejected() {
         assert!(wallet(Chain::Bitcoin, "bc1!!!").validate().is_err());
         assert!(wallet(Chain::Bitcoin, "2Nabc").validate().is_err());
     }
 
     #[test]
-    fn une_adresse_ethereum_doit_faire_quarante_hexadecimaux() {
+    fn an_ethereum_address_must_be_forty_hex_digits() {
         assert!(
             wallet(
                 Chain::Ethereum,
@@ -537,7 +534,7 @@ mod tests {
     }
 
     #[test]
-    fn une_adresse_solana_est_du_base58() {
+    fn a_solana_address_is_base58() {
         assert!(
             wallet(
                 Chain::Solana,
@@ -550,57 +547,57 @@ mod tests {
     }
 
     #[test]
-    fn une_phrase_de_recuperation_est_refusee() {
+    fn a_recovery_phrase_is_rejected() {
         let phrase = wallet(Chain::Bitcoin, "abandon abandon abandon ability");
-        let error = phrase.validate().expect_err("doit être refusée");
-        assert!(error.contains("espace"), "{error}");
+        let error = phrase.validate().expect_err("must be rejected");
+        assert!(error.contains("space"), "{error}");
     }
 
     #[test]
-    fn une_cle_privee_etendue_est_refusee() {
+    fn an_extended_private_key_is_rejected() {
         let error = wallet(Chain::Bitcoin, "xprv9s21ZrQH143K3QTDL4LXw2F7Hek")
             .validate()
-            .expect_err("doit être refusée");
-        assert!(error.contains("publique"), "{error}");
+            .expect_err("must be rejected");
+        assert!(error.contains("public"), "{error}");
     }
 
     #[test]
-    fn le_solde_bitcoin_se_compte_en_btc() {
+    fn the_bitcoin_balance_counts_in_btc() {
         let body = r#"{"chain_stats":{"funded_txo_sum":150000000,"spent_txo_sum":50000000},
                        "mempool_stats":{"funded_txo_sum":0,"spent_txo_sum":0}}"#;
-        let amount = decode_bitcoin(body).expect("solde lisible");
+        let amount = decode_bitcoin(body).expect("readable balance");
         assert!((amount - 1.0).abs() < 1e-9, "{amount}");
     }
 
     #[test]
-    fn le_solde_bitcoin_tient_compte_du_mempool() {
+    fn the_bitcoin_balance_accounts_for_the_mempool() {
         let body = r#"{"chain_stats":{"funded_txo_sum":100000000,"spent_txo_sum":0},
                        "mempool_stats":{"funded_txo_sum":0,"spent_txo_sum":100000000}}"#;
-        assert!(decode_bitcoin(body).expect("solde lisible").abs() < 1e-12);
+        assert!(decode_bitcoin(body).expect("readable balance").abs() < 1e-12);
     }
 
     #[test]
-    fn le_solde_ethereum_se_lit_en_hexadecimal() {
+    fn the_ethereum_balance_reads_as_hexadecimal() {
         let body = r#"{"jsonrpc":"2.0","id":1,"result":"0x0de0b6b3a7640000"}"#;
-        let amount = decode_ethereum(body).expect("solde lisible");
+        let amount = decode_ethereum(body).expect("readable balance");
         assert!((amount - 1.0).abs() < 1e-9, "{amount}");
     }
 
     #[test]
-    fn une_reponse_ethereum_sans_resultat_est_une_erreur() {
+    fn an_ethereum_response_without_a_result_is_an_error() {
         let body = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000}}"#;
         assert!(decode_ethereum(body).is_err());
     }
 
     #[test]
-    fn le_solde_solana_se_compte_en_lamports() {
+    fn the_solana_balance_counts_in_lamports() {
         let body = r#"{"jsonrpc":"2.0","result":{"context":{"slot":1},"value":2500000000},"id":1}"#;
-        let amount = decode_solana(body).expect("solde lisible");
+        let amount = decode_solana(body).expect("readable balance");
         assert!((amount - 2.5).abs() < 1e-9, "{amount}");
     }
 
     #[test]
-    fn les_soldes_se_cumulent_par_cryptomonnaie() {
+    fn balances_add_up_per_cryptocurrency() {
         let balances = [
             Balance {
                 chain: Chain::Bitcoin,
@@ -621,7 +618,7 @@ mod tests {
     }
 
     #[test]
-    fn une_adresse_longue_saffiche_abregee() {
+    fn a_long_address_displays_shortened() {
         let short = shorten("bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq");
         assert!(short.starts_with("bc1qar"), "{short}");
         assert!(short.ends_with("wf5mdq"), "{short}");

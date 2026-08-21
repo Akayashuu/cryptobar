@@ -1,7 +1,7 @@
-//! cryptobar — cours de cryptomonnaies pour Waybar.
+//! cryptobar — cryptocurrency prices for your bar, terminal and desktop.
 //!
-//! La logique vit dans cette bibliothèque ; le binaire ne fait qu'analyser les
-//! arguments et appeler les commandes. Cela rend chaque module testable isolément.
+//! The logic lives in this library; the binary only parses arguments and calls
+//! into the commands. That keeps every module testable in isolation.
 
 pub mod alerts;
 pub mod app;

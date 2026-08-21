@@ -17,12 +17,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      # Le binaire publié est compilé sans GTK : il fonctionne partout et ne
-      # traîne aucune dépendance système. La fenêtre reste disponible pour qui
-      # compile depuis les sources.
+      # The published binary is compiled without GTK: it works everywhere and
+      # drags no system dependency along. The window stays available to whoever
+      # compiles from source.
       - run: cargo build --release --locked --no-default-features
 
-      - name: Préparer l'archive
+      - name: Prepare the archive
         run: |
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"

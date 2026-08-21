@@ -4,8 +4,8 @@ version = 2
 [licenses]
 version = 2
 # Toutes permissives et compatibles avec la MIT du projet.
-# « Apache-2.0 WITH LLVM-exception » vient de target-lexicon (chaîne glib/gtk),
-# « CDLA-Permissive-2.0 » de webpki-roots, qui embarque le magasin de
+# "Apache-2.0 WITH LLVM-exception" comes from target-lexicon (the glib/gtk
+# chain), "CDLA-Permissive-2.0" from webpki-roots, which embeds the store of
 # certificats de Mozilla.
 allow = [
   "MIT",

@@ -6,65 +6,65 @@ import Quickshell
 import Quickshell.Io
 
 /**
- * Cours des cryptomonnaies, fournis par le binaire `cryptobar`.
+ * Cryptocurrency prices, served by the `cryptobar` binary.
  *
- * Un seul processus dessert toute la session : le service est un singleton,
- * donc plusieurs écrans ou plusieurs widgets ne multiplient ni les appels
- * réseau ni la consommation mémoire. Le binaire tourne en mode `--watch` et
- * émet une ligne de JSON à chaque intervalle défini dans
- * ~/.config/cryptobar/config.toml ; aucun timer QML ne le réveille.
+ * A single process serves the whole session: the service is a singleton, so
+ * several screens or several widgets multiply neither the network calls nor
+ * the memory footprint. The binary runs in `--watch` mode and emits one JSON
+ * line per interval, as set in ~/.config/cryptobar/config.toml; no QML timer
+ * wakes it up.
  */
 Singleton {
     id: root
 
-    /// Chemin du binaire. Quickshell n'hérite pas du PATH interactif : un
-    /// simple « cryptobar » échoue si le binaire vit dans ~/.local/bin, qui
-    /// est l'emplacement d'installation par défaut de `install.sh`.
+    /// Path to the binary. Quickshell does not inherit the interactive PATH:
+    /// a bare `cryptobar` fails when the binary lives in ~/.local/bin, which is
+    /// where `install.sh` puts it by default.
     readonly property string binary: {
         const configured = Config.options.bar.crypto?.binary ?? "";
         return configured.length > 0 ? configured : `${Quickshell.env("HOME")}/.local/bin/cryptobar`;
     }
 
-    /// Ligne complète prête à afficher : « BTC 66 007 € ▁▂▅█ +6,0 % ».
+    /// Full line, ready to display: "BTC €66,007 ▁▂▅█ +6.0 %".
     property string text: "—"
-    /// Toutes les cotations suivies, une par ligne, avec 1 h / 24 h / 7 j.
-    property string tooltip: qsTr("En attente des cours…")
-    /// Champs séparés, pour les mises en page trop étroites pour `text`.
+    /// Every watched quote, one per line, with 1 h / 24 h / 7 d.
+    property string tooltip: qsTr("Waiting for prices…")
+    /// Separate fields, for layouts too narrow for `text`.
     property string symbol: "—"
     property string price: ""
     property string percent: ""
     property string sparkline: ""
-    /// Tendance sur 24 h : "up", "down", "flat", ou "error".
+    /// 24 h trend: "up", "down", "flat" or "error".
     property string trend: ""
-    /// Données servies depuis le cache : le réseau est indisponible.
+    /// Data served from the cache: the network is unavailable.
     property bool stale: false
-    /// Série de la pièce active, normalisée dans [0, 1].
+    /// Series of the active coin, normalised within [0, 1].
     property var series: []
-    /// Cotation active complète (symbole, logo, glyphe, couleurs, série), ou
-    /// `null` tant qu'aucune ligne n'a été reçue. `icon` est déjà pris par la
-    /// fonction de tendance : les widgets passent cet objet à CryptoCoinIcon.
+    /// The full active quote (symbol, logo, glyph, colours, series), or `null`
+    /// until a first line arrives. `icon` is already taken by the trend
+    /// function: widgets hand this object to CryptoCoinIcon.
     property var active: null
-    /// Toutes les cotations suivies : { symbol, name, price, change_1h,
+    /// Every watched quote: { symbol, name, price, change_1h,
     /// change_24h, change_7d, trend, series, active, icon, glyph, color,
     /// foreground }.
     property var coins: []
-    /// Alertes franchies à cet instant : { symbol, kind, title, body }. Vide
-    /// la plupart du temps — c'est ce qui allume la pastille de la barre.
+    /// Thresholds crossed right now: { symbol, kind, title, body }. Empty most
+    /// of the time — this is what lights up the badge in the bar.
     property var alerts: []
-    /// Portefeuille valorisé, ou `null` si aucune adresse publique n'est
-    /// suivie : { total, change_24h, change_24h_pct, positive, positions }.
+    /// Valued portfolio, or `null` when no public address is watched:
+    /// { total, change_24h, change_24h_pct, positive, positions }.
     property var portfolio: null
 
-    /// Vrai tant qu'aucune ligne n'a été reçue.
+    /// True until a first line arrives.
     readonly property bool loading: root.trend.length === 0
 
-    /// Vrai si au moins un seuil est franchi en ce moment.
+    /// True when at least one threshold is currently crossed.
     readonly property bool alerting: root.alerts.length > 0
 
     signal failed(string reason)
 
-    // Le binaire garantit une ligne de JSON valide ; une ligne tronquée
-    // (processus tué en pleine écriture) ne doit jamais casser la barre.
+    // The binary guarantees a valid JSON line; a truncated one (process killed
+    // mid-write) must never break the bar.
     function ingest(line) {
         const trimmed = line.trim();
         if (trimmed.length === 0)
@@ -73,7 +73,7 @@ Singleton {
         try {
             payload = JSON.parse(trimmed);
         } catch (e) {
-            return; // Ligne inexploitable : on garde la dernière valeur connue.
+            return; // Unusable line: keep the last known value.
         }
         root.text = payload.text ?? "—";
         root.tooltip = payload.tooltip ?? "";
@@ -91,8 +91,8 @@ Singleton {
         root.series = active?.series ?? [];
     }
 
-    /// Exécute une sous-commande (`next`, `refresh`, `popup`…) puis relit la
-    /// valeur courante, pour un retour immédiat sans attendre l'intervalle.
+    /// Runs a subcommand (`next`, `refresh`, `popup`…) then reads the current
+    /// value back, for immediate feedback without waiting for the interval.
     function run(argv) {
         actionProc.command = [root.binary].concat(argv);
         actionProc.running = true;
@@ -103,15 +103,15 @@ Singleton {
     function refresh() { root.run(["refresh"]); }
     function openPopup() { root.run(["popup"]); }
     function openChart() { root.run(["chart", "--window"]); }
-    /// Rend active la pièce d'indice donné dans la liste configurée.
+    /// Makes the coin at the given index in the configured list active.
     function select(index) { root.run(["select", String(index)]); }
 
-    /// Flèche Material correspondant à une tendance.
+    /// Material arrow matching a trend.
     function icon(trend) {
         return trend === "up" ? "trending_up" : trend === "down" ? "trending_down" : "trending_flat";
     }
 
-    /// Couleur correspondant à une tendance, dans la palette du thème.
+    /// Colour matching a trend, from the theme palette.
     function color(trend) {
         return trend === "up" ? Appearance.m3colors.m3primary : trend === "down" ? Appearance.colors.colError : Appearance.colors.colOnSurfaceVariant;
     }
@@ -124,11 +124,11 @@ Singleton {
             splitMarker: "\n"
             onRead: data => root.ingest(data)
         }
-        // Réseau coupé, binaire réinstallé, mise à jour du paquet : on relance
-        // sans marteler le système.
+        // Network down, binary reinstalled, package upgraded: restart without
+        // hammering the system.
         onExited: (exitCode, exitStatus) => {
             if (exitCode !== 0)
-                root.failed(qsTr("cryptobar s'est arrêté (code %1)").arg(exitCode));
+                root.failed(qsTr("cryptobar stopped (code %1)").arg(exitCode));
             restartTimer.restart();
         }
     }

@@ -1,4 +1,4 @@
-//! Implémentation des sous-commandes.
+//! Subcommand implementations.
 
 pub mod bar;
 pub mod chart;

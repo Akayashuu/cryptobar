@@ -1,20 +1,20 @@
-//! Sparkline en blocs Unicode. Fonction pure, sans E/S.
+//! Sparkline made of Unicode blocks. Pure function, no I/O.
 
-/// Les huit niveaux de remplissage, du plus bas au plus haut.
+/// The eight fill levels, from lowest to highest.
 const LEVELS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-/// Niveau utilisé quand tous les points sont égaux : le milieu de l'échelle.
+/// Level used when every point is equal: the middle of the scale.
 const FLAT_LEVEL: char = '▄';
 
-/// Réduit la série à au plus `width` points en moyennant des tranches contiguës.
-/// Moyenner plutôt qu'échantillonner évite qu'un pic isolé disparaisse ou domine.
+/// Reduces the series to at most `width` points by averaging contiguous slices.
+/// Averaging rather than sampling keeps a lone spike from vanishing or taking over.
 pub(crate) fn downsample(points: &[f64], width: usize) -> Vec<f64> {
     if points.len() <= width {
         return points.to_vec();
     }
     let mut out = Vec::with_capacity(width);
     for bucket in 0..width {
-        // `width` est non nul : `downsample` n'est appelée que depuis `sparkline`,
-        // qui retourne tôt sur une largeur nulle.
+        // `width` is non-zero: `downsample` is only called from `sparkline`,
+        // which returns early on a zero width.
         #[allow(clippy::integer_division, clippy::arithmetic_side_effects)]
         let start = bucket.saturating_mul(points.len()) / width;
         #[allow(clippy::integer_division, clippy::arithmetic_side_effects)]
@@ -31,11 +31,11 @@ pub(crate) fn downsample(points: &[f64], width: usize) -> Vec<f64> {
     out
 }
 
-/// Rend une série numérique sous forme de sparkline d'au plus `width` caractères.
+/// Renders a numeric series as a sparkline of at most `width` characters.
 ///
-/// Les valeurs non finies sont écartées. Une série vide, une largeur nulle ou une
-/// série entièrement non finie donnent une chaîne vide. Une série constante rend un
-/// niveau médian plutôt que de diviser par une amplitude nulle.
+/// Non-finite values are dropped. An empty series, a zero width or an entirely
+/// non-finite series yield an empty string. A constant series renders a median
+/// level rather than dividing by a zero amplitude.
 #[must_use]
 pub fn sparkline(points: &[f64], width: usize) -> String {
     if width == 0 {
@@ -78,47 +78,47 @@ mod tests {
     use super::*;
 
     #[test]
-    fn serie_croissante_monte_par_paliers() {
+    fn a_rising_series_climbs_in_steps() {
         assert_eq!(sparkline(&[1.0, 2.0, 3.0, 4.0], 4), "▁▃▆█");
     }
 
     #[test]
-    fn serie_plate_donne_un_niveau_median_sans_division_par_zero() {
+    fn a_flat_series_yields_a_median_level_without_dividing_by_zero() {
         assert_eq!(sparkline(&[5.0, 5.0, 5.0], 3), "▄▄▄");
     }
 
     #[test]
-    fn serie_vide_ou_largeur_nulle_donne_une_chaine_vide() {
+    fn an_empty_series_or_zero_width_yields_an_empty_string() {
         assert_eq!(sparkline(&[], 8), "");
         assert_eq!(sparkline(&[1.0, 2.0], 0), "");
     }
 
     #[test]
-    fn valeur_unique_donne_un_seul_caractere() {
+    fn a_single_value_yields_a_single_character() {
         assert_eq!(sparkline(&[42.0], 8), "▄");
     }
 
     #[test]
-    fn les_valeurs_non_finies_sont_ignorees() {
+    fn non_finite_values_are_ignored() {
         let out = sparkline(&[1.0, f64::NAN, 3.0, f64::INFINITY], 3);
         assert_eq!(out.chars().count(), 2);
         assert!(!out.contains('\u{fffd}'));
     }
 
     #[test]
-    fn la_serie_est_sous_echantillonnee_a_la_largeur_demandee() {
+    fn the_series_is_downsampled_to_the_requested_width() {
         let points: Vec<f64> = (0..1000).map(f64::from).collect();
         assert_eq!(sparkline(&points, 8).chars().count(), 8);
     }
 
     #[test]
-    fn une_serie_plus_courte_que_la_largeur_nest_pas_etiree() {
+    fn a_series_shorter_than_the_width_is_not_stretched() {
         assert_eq!(sparkline(&[1.0, 2.0, 3.0], 8).chars().count(), 3);
     }
 
     proptest::proptest! {
         #[test]
-        fn ne_panique_jamais_et_respecte_la_largeur(
+        fn never_panics_and_respects_the_width(
             points in proptest::collection::vec(proptest::num::f64::ANY, 0..200),
             width in 0usize..64,
         ) {

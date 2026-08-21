@@ -1,5 +1,5 @@
-//! Résolution des répertoires XDG. Les variables `CRYPTOBAR_*_DIR` priment,
-//! ce qui rend les tests d'intégration hermétiques.
+//! XDG directory resolution. The `CRYPTOBAR_*_DIR` variables take precedence,
+//! which keeps the integration tests hermetic.
 
 use std::path::{Path, PathBuf};
 
@@ -9,7 +9,7 @@ use etcetera::BaseStrategy as _;
 const APP: &str = "cryptobar";
 
 fn strategy() -> Result<etcetera::base_strategy::Xdg> {
-    etcetera::base_strategy::Xdg::new().context("impossible de résoudre les répertoires XDG")
+    etcetera::base_strategy::Xdg::new().context("could not resolve the XDG directories")
 }
 
 fn overridden(var: &str) -> Option<PathBuf> {
@@ -18,10 +18,10 @@ fn overridden(var: &str) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// Répertoire de configuration : `$CRYPTOBAR_CONFIG_DIR` ou `$XDG_CONFIG_HOME/cryptobar`.
+/// Configuration directory: `$CRYPTOBAR_CONFIG_DIR` or `$XDG_CONFIG_HOME/cryptobar`.
 ///
 /// # Errors
-/// Échoue si le répertoire personnel est introuvable.
+/// Fails when the home directory cannot be found.
 pub fn config_dir() -> Result<PathBuf> {
     if let Some(dir) = overridden("CRYPTOBAR_CONFIG_DIR") {
         return Ok(dir);
@@ -29,18 +29,18 @@ pub fn config_dir() -> Result<PathBuf> {
     Ok(strategy()?.config_dir().join(APP))
 }
 
-/// Chemin du fichier de configuration.
+/// Path of the configuration file.
 ///
 /// # Errors
-/// Voir [`config_dir`].
+/// See [`config_dir`].
 pub fn config_file() -> Result<PathBuf> {
     Ok(config_dir()?.join("config.toml"))
 }
 
-/// Répertoire de cache : `$CRYPTOBAR_CACHE_DIR` ou `$XDG_CACHE_HOME/cryptobar`.
+/// Cache directory: `$CRYPTOBAR_CACHE_DIR` or `$XDG_CACHE_HOME/cryptobar`.
 ///
 /// # Errors
-/// Échoue si le répertoire personnel est introuvable.
+/// Fails when the home directory cannot be found.
 pub fn cache_dir() -> Result<PathBuf> {
     if let Some(dir) = overridden("CRYPTOBAR_CACHE_DIR") {
         return Ok(dir);
@@ -48,11 +48,11 @@ pub fn cache_dir() -> Result<PathBuf> {
     Ok(strategy()?.cache_dir().join(APP))
 }
 
-/// Répertoire d'état volatil : `$CRYPTOBAR_RUNTIME_DIR`, `$XDG_RUNTIME_DIR/cryptobar`,
-/// ou le répertoire de cache en dernier recours (systèmes sans répertoire d'exécution).
+/// Volatile state directory: `$CRYPTOBAR_RUNTIME_DIR`, `$XDG_RUNTIME_DIR/cryptobar`,
+/// or the cache directory as a last resort (systems without a runtime directory).
 ///
 /// # Errors
-/// Échoue si aucun répertoire ne peut être déterminé.
+/// Fails when no directory can be determined.
 pub fn runtime_dir() -> Result<PathBuf> {
     if let Some(dir) = overridden("CRYPTOBAR_RUNTIME_DIR") {
         return Ok(dir);
@@ -63,29 +63,29 @@ pub fn runtime_dir() -> Result<PathBuf> {
     }
 }
 
-/// Crée le répertoire s'il n'existe pas, avec des permissions restreintes sous Unix.
+/// Creates the directory when missing, with restricted permissions on Unix.
 ///
 /// # Errors
-/// Remonte les erreurs d'E/S de la création.
+/// Propagates the I/O errors of the creation.
 pub fn ensure_dir(dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt as _;
-        // Un échec ici (montage exotique, système de fichiers sans permissions)
-        // ne doit pas empêcher le fonctionnement.
+        // A failure here (exotic mount, filesystem without permissions) must
+        // not get in the way.
         let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
     }
     Ok(())
 }
 
-/// Répertoire personnel, destination des exports de la fenêtre.
+/// Home directory, where the window writes its exports.
 ///
-/// `$CRYPTOBAR_EXPORT_DIR` prime, ce qui garde les tests hermétiques et permet
-/// de rediriger les fichiers ailleurs que dans `~`.
+/// `$CRYPTOBAR_EXPORT_DIR` takes precedence, which keeps the tests hermetic and
+/// allows redirecting the files somewhere other than `~`.
 ///
 /// # Errors
-/// Échoue si le répertoire personnel est introuvable.
+/// Fails when the home directory cannot be found.
 pub fn export_dir() -> Result<PathBuf> {
     if let Some(dir) = overridden("CRYPTOBAR_EXPORT_DIR") {
         return Ok(dir);

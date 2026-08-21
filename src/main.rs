@@ -1,4 +1,4 @@
-//! Point d'entrée : analyse des arguments et aiguillage vers les commandes.
+//! Entry point: parse the arguments and dispatch to the commands.
 
 use anyhow::{Context as _, Result};
 use clap::Parser as _;
@@ -11,13 +11,13 @@ use cryptobar::render::waybar::Markup;
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // `config` n'a pas besoin d'un contexte complet : elle doit fonctionner
-    // même quand la configuration est absente ou invalide.
+    // `config` does not need a full context: it has to work even when the
+    // configuration file is missing or invalid.
     if let Some(Command::Config { action }) = &cli.command {
         return config_cmd::run(action, cli.config.clone());
     }
 
-    let app = App::new(cli.config).context("initialisation impossible")?;
+    let app = App::new(cli.config).context("could not initialise")?;
 
     match cli.command.unwrap_or(Command::Bar {
         watch: false,
@@ -42,6 +42,6 @@ fn main() -> Result<()> {
         Command::Coins { term } => coins::run(&app, &term),
         Command::Popup => popup::run(app),
         Command::Portfolio => wallet::run(&app),
-        Command::Config { .. } => unreachable!("traité avant l'initialisation du contexte"),
+        Command::Config { .. } => unreachable!("handled before the context is built"),
     }
 }

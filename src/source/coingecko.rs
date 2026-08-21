@@ -1,4 +1,4 @@
-//! Client de l'API publique CoinGecko. Aucune clé requise.
+//! Client of the public CoinGecko API. No key required.
 
 use std::time::Duration;
 
@@ -15,8 +15,8 @@ const USER_AGENT: &str = concat!(
 );
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const TOTAL_TIMEOUT: Duration = Duration::from_secs(10);
-/// Plafond de lecture d'une réponse : au-delà, on refuse plutôt que de laisser
-/// la mémoire enfler sur une réponse anormale.
+/// Read ceiling for a response: beyond it, we refuse rather than let memory
+/// grow on an abnormal response.
 const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 
 pub struct CoinGecko {
@@ -32,8 +32,8 @@ impl Default for CoinGecko {
 
 impl CoinGecko {
     #[must_use]
-    /// Client par défaut. `CRYPTOBAR_API_BASE` permet de viser une autre
-    /// instance — c'est ce qui rend les tests bout en bout hermétiques.
+    /// Default client. `CRYPTOBAR_API_BASE` allows targeting another instance
+    /// — that is what makes the end-to-end tests hermetic.
     pub fn new() -> Self {
         match std::env::var("CRYPTOBAR_API_BASE") {
             Ok(base) if !base.trim().is_empty() => Self::with_base_url(base.trim()),
@@ -81,8 +81,8 @@ impl CoinGecko {
     }
 
     fn search_url(&self, term: &str) -> String {
-        // Le terme vient de l'utilisateur : on ne garde que des caractères sûrs
-        // plutôt que de faire confiance à un encodage approximatif.
+        // The term comes from the user: we keep only safe characters rather
+        // than trusting an approximate encoding.
         let encoded: String = term
             .chars()
             .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == ' ')
@@ -92,7 +92,7 @@ impl CoinGecko {
         format!("{}/search?query={encoded}", self.base_url)
     }
 
-    /// Exécute une requête GET et renvoie le corps en texte, plafonné en taille.
+    /// Runs a GET request and returns the body as text, capped in size.
     fn get(&self, url: &str) -> Result<String, SourceError> {
         match self.agent.get(url).call() {
             Ok(mut response) => response
@@ -105,7 +105,7 @@ impl CoinGecko {
                 Err(SourceError::RateLimited { retry_after: None })
             }
             Err(ureq::Error::StatusCode(code)) => {
-                Err(SourceError::Http(format!("code HTTP {code}")))
+                Err(SourceError::Http(format!("HTTP code {code}")))
             }
             Err(e) => Err(SourceError::Http(e.to_string())),
         }
@@ -149,11 +149,12 @@ struct RawMarket {
     ath_date: Option<String>,
 }
 
-/// Convertit une réponse `/coins/markets`. Les entrées inexploitables (identifiant
-/// invalide, prix absent) sont ignorées plutôt que de faire échouer tout le lot.
+/// Converts a `/coins/markets` response. Unusable entries (invalid id, missing
+/// price) are skipped rather than failing the whole batch.
 ///
 /// # Errors
-/// Renvoie [`SourceError::Decode`] si la réponse n'est pas un tableau JSON attendu.
+/// Returns [`SourceError::Decode`] when the response is not the expected JSON
+/// array.
 pub fn parse_markets(raw: &str) -> Result<Vec<Quote>, SourceError> {
     let entries: Vec<RawMarket> =
         serde_json::from_str(raw).map_err(|e| SourceError::Decode(e.to_string()))?;
@@ -201,11 +202,11 @@ struct RawChart {
     prices: Vec<(f64, f64)>,
 }
 
-/// Convertit une réponse `/coins/{id}/market_chart`.
+/// Converts a `/coins/{id}/market_chart` response.
 ///
 /// # Errors
-/// [`SourceError::Decode`] si le JSON est illisible, [`SourceError::Payload`] si la
-/// série est vide.
+/// [`SourceError::Decode`] when the JSON is unreadable, [`SourceError::Payload`]
+/// when the series is empty.
 pub fn parse_market_chart(id: &CoinId, range: Range, raw: &str) -> Result<Series, SourceError> {
     let chart: RawChart =
         serde_json::from_str(raw).map_err(|e| SourceError::Decode(e.to_string()))?;
@@ -216,7 +217,7 @@ pub fn parse_market_chart(id: &CoinId, range: Range, raw: &str) -> Result<Series
         .filter(|p| p.is_finite())
         .collect();
     if points.is_empty() {
-        return Err(SourceError::Payload(format!("série vide pour {id}")));
+        return Err(SourceError::Payload(format!("empty series for {id}")));
     }
     Ok(Series {
         id: id.clone(),
@@ -238,8 +239,8 @@ struct RawSearchCoin {
     symbol: String,
     #[serde(default)]
     name: String,
-    /// Vignette 25×25 : c'est exactement la taille affichée dans la liste des
-    /// résultats, inutile de tirer le logo pleine taille.
+    /// 25×25 thumbnail: exactly the size shown in the result list, no need to
+    /// pull the full-size logo.
     #[serde(default)]
     thumb: Option<String>,
     #[serde(default)]
@@ -288,7 +289,7 @@ mod tests {
     const CHART: &str = include_str!("../../tests/fixtures/market_chart.json");
 
     #[test]
-    fn parse_markets_lit_une_reponse_nominale() {
+    fn parse_markets_reads_a_nominal_response() {
         let quotes = parse_markets(MARKETS).unwrap();
         assert_eq!(quotes.len(), 2);
         let btc = quotes.first().unwrap();
@@ -300,34 +301,34 @@ mod tests {
     }
 
     #[test]
-    fn parse_markets_tolere_une_reponse_degradee() {
+    fn parse_markets_tolerates_a_degraded_response() {
         let quotes = parse_markets(DEGRADED).unwrap();
         assert_eq!(quotes.len(), 2);
         let btc = quotes.first().unwrap();
         assert_eq!(btc.change_24h, None);
         assert!(btc.sparkline.is_empty());
         let doge = quotes.get(1).unwrap();
-        // Sans `name`, on retombe sur le symbole plutôt que d'échouer.
+        // Without `name`, we fall back to the symbol rather than failing.
         assert_eq!(doge.name, "DOGE");
     }
 
     #[test]
-    fn parse_markets_rejette_un_json_qui_nest_pas_un_tableau() {
+    fn parse_markets_rejects_json_that_is_not_an_array() {
         assert!(matches!(parse_markets("{}"), Err(SourceError::Decode(_))));
         assert!(matches!(
-            parse_markets("pas du json"),
+            parse_markets("not json"),
             Err(SourceError::Decode(_))
         ));
     }
 
     #[test]
-    fn parse_markets_ignore_les_entrees_sans_identifiant_valide() {
+    fn parse_markets_skips_entries_without_a_valid_id() {
         let raw = r#"[{"id": "bit coin", "symbol": "x", "current_price": 1.0}]"#;
         assert!(parse_markets(raw).unwrap().is_empty());
     }
 
     #[test]
-    fn parse_market_chart_extrait_les_prix_dans_lordre() {
+    fn parse_market_chart_extracts_the_prices_in_order() {
         let id = CoinId::parse("bitcoin").unwrap();
         let series = parse_market_chart(&id, Range::H24, CHART).unwrap();
         assert_eq!(series.points.len(), 4);
@@ -336,7 +337,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_market_chart_rejette_une_serie_vide() {
+    fn parse_market_chart_rejects_an_empty_series() {
         let id = CoinId::parse("bitcoin").unwrap();
         let raw = r#"{"prices": []}"#;
         assert!(matches!(
@@ -346,23 +347,23 @@ mod tests {
     }
 
     #[test]
-    fn lurl_markets_encode_correctement_les_parametres() {
-        let gecko = CoinGecko::with_base_url("https://exemple.test/api/v3");
+    fn the_markets_url_encodes_the_parameters_correctly() {
+        let gecko = CoinGecko::with_base_url("https://example.test/api/v3");
         let ids = [
             CoinId::parse("bitcoin").unwrap(),
             CoinId::parse("ethereum").unwrap(),
         ];
         let currency = Currency::parse("eur").unwrap();
         let url = gecko.markets_url(&ids, &currency);
-        assert!(url.starts_with("https://exemple.test/api/v3/coins/markets?"));
+        assert!(url.starts_with("https://example.test/api/v3/coins/markets?"));
         assert!(url.contains("ids=bitcoin%2Cethereum"));
         assert!(url.contains("vs_currency=eur"));
         assert!(url.contains("sparkline=true"));
     }
 
     #[test]
-    fn lurl_de_recherche_filtre_les_caracteres_dangereux() {
-        let gecko = CoinGecko::with_base_url("https://exemple.test/api/v3");
+    fn the_search_url_filters_the_dangerous_characters() {
+        let gecko = CoinGecko::with_base_url("https://example.test/api/v3");
         let url = gecko.search_url("sol&query=../../etc");
         assert!(!url.contains('&'));
         assert!(!url.contains(".."));

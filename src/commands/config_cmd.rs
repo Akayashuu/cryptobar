@@ -1,7 +1,7 @@
-//! Sous-commande `config` : initialisation, chemin et validation.
+//! `config` subcommand: initialisation, path and validation.
 //!
-//! Elle doit fonctionner sans contexte applicatif : c'est la commande qu'on
-//! lance justement quand la configuration est absente ou cassée.
+//! It has to work without any application context: it is the very command one
+//! runs when the configuration is missing or broken.
 
 use std::path::PathBuf;
 
@@ -10,26 +10,26 @@ use anyhow::{Context as _, Result};
 use crate::cli::ConfigAction;
 use crate::config::Config;
 
-/// Exécute l'action demandée sur le fichier de configuration.
+/// Runs the requested action on the configuration file.
 ///
 /// # Errors
-/// Échoue si le chemin ne peut être résolu, si `init` refuse d'écraser un
-/// fichier existant, ou si `check` trouve une configuration invalide.
+/// Fails when the path cannot be resolved, when `init` refuses to overwrite an
+/// existing file, or when `check` finds an invalid configuration.
 pub fn run(action: &ConfigAction, override_path: Option<PathBuf>) -> Result<()> {
     let path = match override_path {
         Some(path) => path,
-        None => crate::paths::config_file().context("résolution du chemin de configuration")?,
+        None => crate::paths::config_file().context("resolving the configuration path")?,
     };
     match action {
         ConfigAction::Path => println!("{}", path.display()),
         ConfigAction::Init { force } => {
             Config::write_default(&path, *force)?;
-            println!("configuration écrite dans {}", path.display());
+            println!("configuration written to {}", path.display());
         }
         ConfigAction::Check => {
             let config = Config::load_from(&path)?;
             println!(
-                "configuration valide : {} ({} cryptomonnaies, rafraîchissement {} s)",
+                "valid configuration: {} ({} cryptocurrencies, refresh {} s)",
                 path.display(),
                 config.coins.len(),
                 config.refresh_interval,

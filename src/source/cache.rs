@@ -1,8 +1,7 @@
-//! Cache disque avec TTL, écriture atomique et verrou consultatif.
+//! Disk cache with TTL, atomic writes and an advisory lock.
 //!
-//! Objectif : quel que soit le nombre de ticks Waybar, l'API n'est appelée qu'une
-//! fois par intervalle, et deux processus concurrents ne partent jamais en double
-//! requête.
+//! The goal: whatever the number of Waybar ticks, the API is called only once
+//! per interval, and two concurrent processes never fire a duplicate request.
 
 use std::fs::File;
 use std::io::Write as _;
@@ -14,17 +13,17 @@ use serde::{Deserialize, Serialize};
 use super::{PriceSource, SearchHit, SourceError};
 use crate::model::{CoinId, Currency, Quote, Range, Series};
 
-/// Premier délai de backoff après un échec réseau.
+/// First backoff delay after a network failure.
 const BACKOFF_MIN: u64 = 60;
-/// Plafond du backoff : au-delà, inutile d'espacer davantage.
+/// Backoff ceiling: beyond it, spacing further out is pointless.
 const BACKOFF_MAX: u64 = 1800;
 
-/// Valeur issue du cache, avec l'instant du dernier succès réseau.
+/// Value coming from the cache, with the time of the last network success.
 #[derive(Debug, Clone)]
 pub struct Cached<T> {
     pub value: T,
     pub fetched_at: u64,
-    /// `true` si la valeur servie n'a pas pu être rafraîchie.
+    /// `true` when the served value could not be refreshed.
     pub stale: bool,
 }
 
@@ -36,9 +35,9 @@ struct Entry<T> {
 
 #[derive(Serialize, Deserialize, Default)]
 struct Backoff {
-    /// Horodatage Unix avant lequel aucune requête ne doit être tentée.
+    /// Unix timestamp before which no request must be attempted.
     retry_after: u64,
-    /// Délai courant, doublé à chaque échec consécutif.
+    /// Current delay, doubled on every consecutive failure.
     delay: u64,
 }
 
@@ -48,9 +47,9 @@ fn now() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// Nom de fichier sûr dérivé d'une clé logique. La clé ne contient que des
-/// caractères déjà validés, mais on filtre à nouveau pour qu'aucun chemin ne
-/// puisse s'échapper du répertoire de cache.
+/// Safe file name derived from a logical key. The key only holds already
+/// validated characters, but it is filtered again so that no path can escape
+/// the cache directory.
 fn sanitize(key: &str) -> String {
     key.chars()
         .map(|c| {
@@ -64,7 +63,7 @@ fn sanitize(key: &str) -> String {
         .collect()
 }
 
-/// Enveloppe une source avec un cache disque.
+/// Wraps a source with a disk cache.
 pub struct CachedSource<S: PriceSource> {
     source: S,
     dir: PathBuf,
@@ -87,7 +86,7 @@ impl<S: PriceSource> CachedSource<S> {
 
     fn read<T: for<'de> Deserialize<'de>>(&self, key: &str) -> Option<Entry<T>> {
         let raw = std::fs::read_to_string(self.path(key)).ok()?;
-        // Un cache corrompu est traité comme absent : on ne veut jamais échouer là-dessus.
+        // A corrupt cache is treated as missing: we never want to fail on that.
         serde_json::from_str(&raw).ok()
     }
 
@@ -105,8 +104,8 @@ impl<S: PriceSource> CachedSource<S> {
         std::fs::rename(&tmp_path, &final_path)
     }
 
-    /// Prend le verrou d'écriture. `None` si un autre processus l'a déjà :
-    /// dans ce cas l'appelant sert le cache existant au lieu d'attendre.
+    /// Takes the write lock. `None` when another process already holds it: the
+    /// caller then serves the existing cache instead of waiting.
     fn try_lock(&self) -> Option<File> {
         crate::paths::ensure_dir(&self.dir).ok()?;
         let file = File::create(self.dir.join(".lock")).ok()?;
@@ -151,7 +150,7 @@ impl<S: PriceSource> CachedSource<S> {
         let _ = std::fs::remove_file(self.backoff_path());
     }
 
-    /// Cœur de la logique de cache, partagé par toutes les méthodes.
+    /// Heart of the cache logic, shared by every method.
     fn get_or_refresh<T, F>(&self, key: &str, fetch: F) -> Result<Cached<T>, SourceError>
     where
         T: Serialize + for<'de> Deserialize<'de> + Clone,
@@ -175,7 +174,7 @@ impl<S: PriceSource> CachedSource<S> {
         let lock = if blocked { None } else { self.try_lock() };
 
         if lock.is_none() {
-            // Backoff actif ou verrou pris ailleurs : on sert ce qu'on a.
+            // Backoff active or lock held elsewhere: we serve what we have.
             return match existing {
                 Some(entry) => Ok(Cached {
                     value: entry.value,
@@ -183,7 +182,7 @@ impl<S: PriceSource> CachedSource<S> {
                     stale: true,
                 }),
                 None if blocked => Err(SourceError::Http(
-                    "backoff actif après un échec réseau, aucune donnée en cache".into(),
+                    "backoff active after a network failure, no cached data".into(),
                 )),
                 None => fetch().map(|value| {
                     let _ = self.write(
@@ -236,10 +235,10 @@ impl<S: PriceSource> CachedSource<S> {
         }
     }
 
-    /// Cotations, servies depuis le cache tant qu'il est frais.
+    /// Quotes, served from the cache as long as it is fresh.
     ///
     /// # Errors
-    /// Échoue uniquement si le réseau échoue **et** qu'aucun cache n'existe.
+    /// Fails only when the network fails **and** no cache exists.
     pub fn markets_cached(
         &self,
         ids: &[CoinId],
@@ -253,10 +252,10 @@ impl<S: PriceSource> CachedSource<S> {
         self.get_or_refresh(&key, || self.source.markets(ids, vs))
     }
 
-    /// Série de prix, cachée par couple (cryptomonnaie, plage).
+    /// Price series, cached per (cryptocurrency, range) pair.
     ///
     /// # Errors
-    /// Échoue uniquement si le réseau échoue **et** qu'aucun cache n'existe.
+    /// Fails only when the network fails **and** no cache exists.
     pub fn series_cached(
         &self,
         id: &CoinId,
@@ -267,18 +266,18 @@ impl<S: PriceSource> CachedSource<S> {
         self.get_or_refresh(&key, || self.source.series(id, range, vs))
     }
 
-    /// Recherche : jamais cachée, elle est ponctuelle et interactive.
+    /// Search: never cached, it is one-shot and interactive.
     ///
     /// # Errors
-    /// Voir [`SourceError`].
+    /// See [`SourceError`].
     pub fn search(&self, term: &str) -> Result<Vec<SearchHit>, SourceError> {
         self.source.search(term)
     }
 
-    /// Supprime tout le contenu du cache et remet le backoff à zéro.
+    /// Removes the whole cache content and resets the backoff.
     ///
     /// # Errors
-    /// Remonte les erreurs d'E/S autres que « fichier absent ».
+    /// Bubbles up I/O errors other than "file not found".
     pub fn invalidate(&self) -> std::io::Result<()> {
         self.clear_failure();
         let entries = match std::fs::read_dir(&self.dir) {
@@ -302,7 +301,7 @@ mod tests {
     use super::*;
     use std::cell::Cell;
 
-    /// Source de test : compte les appels et peut être forcée en échec.
+    /// Test source: counts calls and can be forced to fail.
     struct FakeSource {
         calls: Cell<usize>,
         fail: bool,
@@ -321,7 +320,7 @@ mod tests {
         fn markets(&self, ids: &[CoinId], _vs: &Currency) -> Result<Vec<Quote>, SourceError> {
             self.calls.set(self.calls.get().saturating_add(1));
             if self.fail {
-                return Err(SourceError::Http("panne simulée".into()));
+                return Err(SourceError::Http("simulated outage".into()));
             }
             Ok(ids
                 .iter()
@@ -348,7 +347,7 @@ mod tests {
         fn series(&self, id: &CoinId, range: Range, _vs: &Currency) -> Result<Series, SourceError> {
             self.calls.set(self.calls.get().saturating_add(1));
             if self.fail {
-                return Err(SourceError::Http("panne simulée".into()));
+                return Err(SourceError::Http("simulated outage".into()));
             }
             Ok(Series {
                 id: id.clone(),
@@ -373,7 +372,7 @@ mod tests {
     }
 
     #[test]
-    fn le_second_appel_dans_le_ttl_ne_refait_pas_de_requete() {
+    fn the_second_call_within_the_ttl_makes_no_new_request() {
         let (_dir, cached) = setup(Duration::from_secs(3600), false);
         let vs = Currency::default();
         let first = cached.markets_cached(&ids(), &vs).unwrap();
@@ -384,7 +383,7 @@ mod tests {
     }
 
     #[test]
-    fn un_ttl_expire_declenche_une_nouvelle_requete() {
+    fn an_expired_ttl_triggers_a_new_request() {
         let (_dir, cached) = setup(Duration::from_secs(0), false);
         let vs = Currency::default();
         cached.markets_cached(&ids(), &vs).unwrap();
@@ -393,7 +392,7 @@ mod tests {
     }
 
     #[test]
-    fn une_panne_reseau_sert_le_cache_marque_perime() {
+    fn a_network_outage_serves_the_cache_marked_stale() {
         let dir = tempfile::tempdir().unwrap();
         let vs = Currency::default();
         {
@@ -415,13 +414,13 @@ mod tests {
     }
 
     #[test]
-    fn une_panne_sans_cache_remonte_lerreur() {
+    fn an_outage_without_a_cache_bubbles_the_error_up() {
         let (_dir, cached) = setup(Duration::from_secs(60), true);
         assert!(cached.markets_cached(&ids(), &Currency::default()).is_err());
     }
 
     #[test]
-    fn le_backoff_empeche_de_marteler_lapi_apres_un_echec() {
+    fn the_backoff_keeps_the_api_from_being_hammered_after_a_failure() {
         let dir = tempfile::tempdir().unwrap();
         let vs = Currency::default();
         {
@@ -439,12 +438,12 @@ mod tests {
         );
         broken.markets_cached(&ids(), &vs).unwrap();
         broken.markets_cached(&ids(), &vs).unwrap();
-        // Le second appel est bloqué par le backoff : une seule requête réseau.
+        // The second call is blocked by the backoff: a single network request.
         assert_eq!(broken.source().calls.get(), 1);
     }
 
     #[test]
-    fn changer_de_devise_ou_de_liste_change_la_cle_de_cache() {
+    fn changing_currency_or_list_changes_the_cache_key() {
         let (_dir, cached) = setup(Duration::from_secs(3600), false);
         cached
             .markets_cached(&ids(), &Currency::parse("eur").unwrap())
@@ -456,7 +455,7 @@ mod tests {
     }
 
     #[test]
-    fn invalidate_force_une_nouvelle_requete() {
+    fn invalidate_forces_a_new_request() {
         let (_dir, cached) = setup(Duration::from_secs(3600), false);
         let vs = Currency::default();
         cached.markets_cached(&ids(), &vs).unwrap();
@@ -466,13 +465,13 @@ mod tests {
     }
 
     #[test]
-    fn un_cache_corrompu_est_traite_comme_absent() {
+    fn a_corrupt_cache_is_treated_as_missing() {
         let (dir, cached) = setup(Duration::from_secs(3600), false);
         let vs = Currency::default();
         cached.markets_cached(&ids(), &vs).unwrap();
         for entry in std::fs::read_dir(dir.path()).unwrap().flatten() {
             if entry.path().extension().is_some_and(|e| e == "json") {
-                std::fs::write(entry.path(), b"{ pas du json").unwrap();
+                std::fs::write(entry.path(), b"{ not json").unwrap();
             }
         }
         cached.markets_cached(&ids(), &vs).unwrap();
@@ -480,7 +479,7 @@ mod tests {
     }
 
     #[test]
-    fn les_series_sont_cachees_par_plage() {
+    fn the_series_are_cached_per_range() {
         let (_dir, cached) = setup(Duration::from_secs(3600), false);
         let vs = Currency::default();
         let id = CoinId::parse("bitcoin").unwrap();

@@ -1,4 +1,4 @@
-//! Sous-commande `bar` : émission du module Waybar.
+//! `bar` subcommand: emission of the Waybar module.
 
 use std::io::Write as _;
 use std::path::Path;
@@ -9,16 +9,16 @@ use anyhow::Result;
 use crate::app::App;
 use crate::render::waybar::{self, Markup};
 
-/// Pas de la boucle d'attente en mode suivi. Deux `stat` par pas : le coût est
-/// invisible, et c'est ce qui rend un clic ou un réglage instantané dans la
-/// barre au lieu d'attendre le prochain intervalle.
+/// Step of the wait loop in watch mode. Two `stat` calls per step: the cost is
+/// invisible, and that is what makes a click or a setting instant in the bar
+/// instead of waiting for the next interval.
 const POLL: Duration = Duration::from_millis(400);
 
-/// Émet une ligne JSON sur la sortie standard.
+/// Emits one JSON line on standard output.
 ///
 /// # Errors
-/// Échoue si l'écriture sur la sortie standard échoue. Une panne réseau ne
-/// fait jamais échouer la commande tant qu'un cache existe.
+/// Fails when writing to standard output fails. A network outage never fails
+/// the command as long as a cache exists.
 pub fn run(app: App, watch: bool, markup: Markup) -> Result<()> {
     if watch {
         watch_loop(app, markup)
@@ -27,16 +27,16 @@ pub fn run(app: App, watch: bool, markup: Markup) -> Result<()> {
     }
 }
 
-/// Réémet à chaque intervalle, et sans attendre dès que la sélection change ou
-/// que la configuration est modifiée — par la fenêtre graphique, par exemple.
+/// Re-emits on every interval, and without waiting as soon as the selection
+/// changes or the configuration is edited — from the graphical window, say.
 fn watch_loop(mut app: App, markup: Markup) -> Result<()> {
     let state_path = crate::state::State::default_path()?;
     let mut config_stamp = stamp(app.config_path());
     let mut state_stamp = stamp(&state_path);
 
     loop {
-        // Le mode suivi n'est pas dans le chemin critique d'un tick : c'est
-        // le bon endroit pour compléter le cache de logos.
+        // Watch mode is not on the critical path of a tick: this is the right
+        // place to top the logo cache up.
         emit(&app, markup, true)?;
 
         let deadline =
@@ -61,9 +61,9 @@ fn watch_loop(mut app: App, markup: Markup) -> Result<()> {
         }
 
         if config_changed {
-            // Une configuration devenue invalide ne doit pas tuer la barre :
-            // on continue avec la dernière version connue et l'utilisateur
-            // voit son erreur au prochain enregistrement.
+            // A configuration that turned invalid must not kill the bar: we
+            // keep the last known version and the user sees the error on the
+            // next save.
             if let Ok(reloaded) = app.reload() {
                 app = reloaded;
             }
@@ -71,20 +71,19 @@ fn watch_loop(mut app: App, markup: Markup) -> Result<()> {
     }
 }
 
-/// Empreinte de modification d'un fichier. `None` couvre aussi bien l'absence
-/// que l'illisibilité : dans les deux cas, rien à signaler tant que ça ne change pas.
+/// Modification fingerprint of a file. `None` covers both absence and
+/// unreadability: either way, nothing to report until it changes.
 fn stamp(path: &Path) -> Option<SystemTime> {
     std::fs::metadata(path)
         .ok()
         .and_then(|meta| meta.modified().ok())
 }
 
-/// Notifie les alertes nouvellement franchies et mémorise l'ensemble courant.
+/// Notifies the newly crossed alerts and remembers the current set.
 ///
-/// N'est appelé qu'en mode suivi : un tick `exec` ponctuel ne doit pas faire
-/// sonner une alerte que le mode suivi vient déjà de traiter, et une barre qui
-/// tourne en `exec` toutes les secondes ne doit pas transformer un
-/// franchissement en avalanche de bulles.
+/// Only called in watch mode: a one-shot `exec` tick must not ring an alert
+/// watch mode has just handled, and a bar running `exec` every second must not
+/// turn one crossing into an avalanche of bubbles.
 fn dispatch_alerts(app: &App, quotes: &[crate::model::Quote]) {
     if app.config.alerts.is_empty() {
         return;
@@ -97,22 +96,22 @@ fn dispatch_alerts(app: &App, quotes: &[crate::model::Quote]) {
     }
     if current != state.fired {
         state.fired = current;
-        // L'échec d'écriture n'est pas fatal : au pire une alerte est
-        // renotifiée au prochain tick.
+        // A failed write is not fatal: at worst an alert is notified again on
+        // the next tick.
         let _ = app.save_state(&state);
     }
 }
 
-/// `live` distingue le mode suivi du tick ponctuel : lui seul complète le
-/// cache de logos et fait sonner les alertes.
+/// `live` tells watch mode from the one-shot tick: only it tops the logo cache
+/// up and rings the alerts.
 fn emit(app: &App, markup: Markup, live: bool) -> Result<()> {
     let (mut quotes, stale) = match app
         .source
         .markets_cached(&app.config.coins, &app.config.currency)
     {
         Ok(cached) => (cached.value, cached.stale),
-        // Aucune donnée du tout : on affiche un module dégradé plutôt que
-        // de laisser un trou dans la barre.
+        // No data at all: we show a degraded module rather than leaving a hole
+        // in the bar.
         Err(_) => (Vec::new(), true),
     };
     if live {
@@ -121,8 +120,8 @@ fn emit(app: &App, markup: Markup, live: bool) -> Result<()> {
     } else {
         app.attach_icons(&mut quotes);
     }
-    // En mode suivi, le processus vit assez longtemps pour interroger les
-    // chaînes ; un tick ponctuel se contente du cache, pour rester instantané.
+    // In watch mode the process lives long enough to query the chains; a
+    // one-shot tick sticks to the cache, to stay instant.
     let watcher = app.watcher();
     let balances = if live {
         watcher.refresh(&app.config.wallets)

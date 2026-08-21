@@ -1,7 +1,7 @@
-"""Pré-remplit le cache pour la mesure de performance en CI.
+"""Seeds the cache for the CI performance measurement.
 
-Le budget de démarrage doit être mesuré sur cache chaud : c'est le cas
-courant, celui qui s'exécute à chaque tick de Waybar.
+The startup budget has to be measured on a warm cache: that is the common
+case, the one running at every Waybar tick.
 """
 
 import json

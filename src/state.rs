@@ -1,9 +1,8 @@
-//! État d'exécution partagé entre les invocations ponctuelles du binaire.
+//! Runtime state shared across the one-shot invocations of the binary.
 //!
-//! En mode `exec`, chaque tick Waybar lance un nouveau processus : l'indice de
-//! la cryptomonnaie affichée doit donc vivre sur disque. Il est stocké dans
-//! `$XDG_RUNTIME_DIR`, volatile par nature — le perdre au redémarrage est
-//! sans conséquence.
+//! In `exec` mode every Waybar tick spawns a new process: the index of the
+//! displayed cryptocurrency therefore has to live on disk. It is stored under
+//! `$XDG_RUNTIME_DIR`, volatile by nature — losing it on reboot is harmless.
 
 use std::fs::File;
 use std::io::Write as _;
@@ -12,19 +11,19 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-/// État persistant minimal.
+/// Minimal persistent state.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct State {
-    /// Indice de la cryptomonnaie affichée dans la liste configurée.
+    /// Index of the displayed cryptocurrency in the configured list.
     pub index: usize,
-    /// Instant du dernier changement d'indice, pour la rotation automatique.
+    /// Time of the last index change, for the automatic rotation.
     pub rotated_at: u64,
-    /// Indice figé par une action manuelle : la rotation automatique reprend
-    /// après `manual_hold` secondes.
+    /// Index pinned by a manual action: the automatic rotation resumes after
+    /// `manual_hold` seconds.
     pub manual: bool,
-    /// Conditions d'alerte déjà notifiées. Une clé disparaît dès que sa
-    /// condition redevient fausse, ce qui réarme l'alerte.
+    /// Alert conditions already notified. A key disappears as soon as its
+    /// condition becomes false again, which re-arms the alert.
     pub fired: std::collections::BTreeSet<String>,
 }
 
@@ -35,7 +34,7 @@ fn now() -> u64 {
 }
 
 impl State {
-    /// Lit l'état, ou retourne l'état par défaut si le fichier est absent ou illisible.
+    /// Reads the state, or returns the default when the file is missing or unreadable.
     #[must_use]
     pub fn load(path: &Path) -> Self {
         std::fs::read_to_string(path)
@@ -44,10 +43,10 @@ impl State {
             .unwrap_or_default()
     }
 
-    /// Écrit l'état de façon atomique.
+    /// Writes the state atomically.
     ///
     /// # Errors
-    /// Remonte les erreurs d'E/S sur la création du répertoire ou l'écriture.
+    /// Propagates the I/O errors of the directory creation or of the write.
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         if let Some(parent) = path.parent() {
             crate::paths::ensure_dir(parent)?;
@@ -63,8 +62,8 @@ impl State {
         std::fs::rename(&tmp, path)
     }
 
-    /// Avance de `delta` positions dans une liste de `len` éléments et fige la
-    /// sélection. `delta` peut être négatif.
+    /// Moves `delta` positions through a list of `len` items and pins the
+    /// selection. `delta` may be negative.
     pub fn step(&mut self, delta: isize, len: usize) {
         if len == 0 {
             self.index = 0;
@@ -72,14 +71,14 @@ impl State {
         }
         let len_i = isize::try_from(len).unwrap_or(isize::MAX);
         let current = isize::try_from(self.index).unwrap_or(0);
-        // `rem_euclid` avec un modulo strictement positif : toujours dans 0..len.
+        // `rem_euclid` with a strictly positive modulus: always within 0..len.
         let next = current.saturating_add(delta).rem_euclid(len_i);
         self.index = usize::try_from(next).unwrap_or(0);
         self.rotated_at = now();
         self.manual = true;
     }
 
-    /// Sélectionne un indice explicite et fige la sélection.
+    /// Selects an explicit index and pins the selection.
     pub fn select(&mut self, index: usize, len: usize) {
         self.index = if len == 0 {
             0
@@ -90,17 +89,17 @@ impl State {
         self.manual = true;
     }
 
-    /// Indice à afficher maintenant, rotation automatique comprise.
+    /// Index to display right now, automatic rotation included.
     ///
-    /// `rotate_every` à zéro désactive la rotation. `manual_hold` est la durée
-    /// pendant laquelle une sélection manuelle reste figée.
+    /// A `rotate_every` of zero disables the rotation. `manual_hold` is how long
+    /// a manual selection stays pinned.
     #[must_use]
     pub fn effective_index(&self, len: usize, rotate_every: u64, manual_hold: u64) -> usize {
         if len == 0 {
             return 0;
         }
-        // `checked_rem` évite toute arithmétique non prouvée : `len` est non nul ici,
-        // mais on laisse le compilateur le vérifier plutôt que de l'affirmer.
+        // `checked_rem` avoids any unproven arithmetic: `len` is non-zero here,
+        // but let the compiler check it rather than asserting it.
         let index = self.index.checked_rem(len).unwrap_or(0);
         if rotate_every == 0 {
             return index;
@@ -109,8 +108,8 @@ impl State {
         if self.manual && elapsed < manual_hold {
             return index;
         }
-        // La rotation est dérivée du temps écoulé : aucun état à réécrire à
-        // chaque tick, ce qui garde le mode `exec` sans effet de bord.
+        // The rotation is derived from the elapsed time: no state to rewrite on
+        // every tick, which keeps `exec` mode free of side effects.
         let steps = elapsed.checked_div(rotate_every).unwrap_or(0);
         let len_u64 = u64::try_from(len).unwrap_or(u64::MAX);
         let wrapped = steps.checked_rem(len_u64).unwrap_or(0);
@@ -118,10 +117,10 @@ impl State {
         index.saturating_add(offset).checked_rem(len).unwrap_or(0)
     }
 
-    /// Chemin par défaut du fichier d'état.
+    /// Default path of the state file.
     ///
     /// # Errors
-    /// Remonte l'erreur de résolution du répertoire d'exécution.
+    /// Propagates the runtime directory resolution error.
     pub fn default_path() -> anyhow::Result<PathBuf> {
         Ok(crate::paths::runtime_dir()?.join("state.json"))
     }
@@ -133,7 +132,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn step_avance_et_boucle() {
+    fn step_advances_and_wraps() {
         let mut state = State::default();
         state.step(1, 3);
         assert_eq!(state.index, 1);
@@ -142,14 +141,14 @@ mod tests {
     }
 
     #[test]
-    fn step_negatif_boucle_par_la_fin() {
+    fn a_negative_step_wraps_through_the_end() {
         let mut state = State::default();
         state.step(-1, 3);
         assert_eq!(state.index, 2);
     }
 
     #[test]
-    fn step_sur_liste_vide_ne_panique_pas() {
+    fn step_on_an_empty_list_does_not_panic() {
         let mut state = State {
             index: 5,
             ..State::default()
@@ -159,7 +158,7 @@ mod tests {
     }
 
     #[test]
-    fn select_borne_lindice() {
+    fn select_clamps_the_index() {
         let mut state = State::default();
         state.select(99, 3);
         assert_eq!(state.index, 2);
@@ -167,7 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn rotation_desactivee_rend_lindice_brut() {
+    fn a_disabled_rotation_yields_the_raw_index() {
         let state = State {
             index: 1,
             rotated_at: 0,
@@ -178,15 +177,15 @@ mod tests {
     }
 
     #[test]
-    fn une_selection_manuelle_recente_fige_la_rotation() {
+    fn a_recent_manual_selection_pins_the_rotation() {
         let mut state = State::default();
         state.step(1, 3);
         assert_eq!(state.effective_index(3, 1, 3600), 1);
     }
 
     #[test]
-    fn la_rotation_automatique_derive_du_temps_ecoule() {
-        // `rotated_at` très ancien : la rotation a eu le temps de tourner.
+    fn the_automatic_rotation_derives_from_the_elapsed_time() {
+        // Very old `rotated_at`: the rotation had time to advance.
         let state = State {
             index: 0,
             rotated_at: 0,
@@ -198,7 +197,7 @@ mod tests {
     }
 
     #[test]
-    fn effective_index_borne_un_indice_hors_liste() {
+    fn effective_index_clamps_an_out_of_list_index() {
         let state = State {
             index: 42,
             rotated_at: now(),
@@ -209,7 +208,7 @@ mod tests {
     }
 
     #[test]
-    fn sauvegarde_et_relecture_conservent_letat() {
+    fn saving_and_reloading_preserve_the_state() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("sub").join("state.json");
         let state = State {
@@ -223,11 +222,11 @@ mod tests {
     }
 
     #[test]
-    fn un_etat_absent_ou_corrompu_retombe_sur_le_defaut() {
+    fn a_missing_or_corrupt_state_falls_back_to_the_default() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("state.json");
         assert_eq!(State::load(&path), State::default());
-        std::fs::write(&path, b"nawak").unwrap();
+        std::fs::write(&path, b"garbage").unwrap();
         assert_eq!(State::load(&path), State::default());
     }
 }

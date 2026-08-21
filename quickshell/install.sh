@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Installe l'intégration Quickshell de cryptobar dans une configuration
-# dots-hyprland (« ii »).
+# Installs the cryptobar Quickshell integration into a dots-hyprland ("ii")
+# configuration.
 #
-# Les fichiers du widget sont copiés tels quels. Les trois fichiers
-# amont — Config.qml, BarContent.qml, VerticalBarContent.qml — reçoivent un
-# ajout idempotent : le script détecte sa propre marque et ne l'applique
-# qu'une fois. Une mise à jour de dots-hyprland les écrase : relancer ce
-# script après coup.
+# The widget files are copied as they are. The three upstream files —
+# Config.qml, BarContent.qml, VerticalBarContent.qml — receive an idempotent
+# addition: the script detects its own marker and applies it only once. A
+# dots-hyprland update overwrites them: run this script again afterwards.
 set -euo pipefail
 
 QS_DIR="${QS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/ii}"
@@ -15,8 +14,8 @@ MARK="// cryptobar"
 
 die() { printf '%s\n' "$*" >&2; exit 1; }
 
-[ -d "$QS_DIR" ] || die "Configuration Quickshell introuvable : $QS_DIR"
-[ -f "$QS_DIR/modules/common/Config.qml" ] || die "$QS_DIR ne ressemble pas à une configuration dots-hyprland « ii »."
+[ -d "$QS_DIR" ] || die "Quickshell configuration not found: $QS_DIR"
+[ -f "$QS_DIR/modules/common/Config.qml" ] || die "$QS_DIR does not look like a dots-hyprland \"ii\" configuration."
 
 backup() { cp -n "$1" "$1.bak-cryptobar" 2>/dev/null || true; }
 
@@ -26,16 +25,16 @@ install -Dm644 "$SRC/modules/ii/bar/CryptoCoinIcon.qml" "$QS_DIR/modules/ii/bar/
 install -Dm644 "$SRC/modules/ii/bar/CryptoSparkline.qml" "$QS_DIR/modules/ii/bar/CryptoSparkline.qml"
 install -Dm644 "$SRC/modules/ii/bar/CryptoWidgetPopup.qml" "$QS_DIR/modules/ii/bar/CryptoWidgetPopup.qml"
 install -Dm644 "$SRC/modules/ii/verticalBar/VerticalCryptoWidget.qml" "$QS_DIR/modules/ii/verticalBar/VerticalCryptoWidget.qml"
-echo "Widgets installés."
+echo "Widgets installed."
 
 patch_file() {
     local file="$1" anchor="$2" addition="$3"
-    [ -f "$file" ] || die "Fichier absent : $file"
+    [ -f "$file" ] || die "Missing file: $file"
     if grep -qF "$MARK" "$file"; then
-        echo "Déjà câblé : ${file#"$QS_DIR"/}"
+        echo "Already wired: ${file#"$QS_DIR"/}"
         return
     fi
-    grep -qF "$anchor" "$file" || die "Point d'ancrage introuvable dans ${file#"$QS_DIR"/} ; câblage manuel nécessaire (voir quickshell/README.md)."
+    grep -qF "$anchor" "$file" || die "Anchor point not found in ${file#"$QS_DIR"/}; wire it by hand (see quickshell/README.md)."
     backup "$file"
     ANCHOR="$anchor" ADDITION="$addition" python3 - "$file" <<'PY'
 import os, sys
@@ -43,14 +42,14 @@ path = sys.argv[1]
 anchor, addition = os.environ["ANCHOR"], os.environ["ADDITION"]
 with open(path, encoding="utf-8") as handle:
     text = handle.read()
-# Une seule occurrence : l'ancre est choisie unique dans chaque fichier amont.
+# A single occurrence: the anchor is picked to be unique in each upstream file.
 with open(path, "w", encoding="utf-8") as handle:
     handle.write(text.replace(anchor, anchor + addition, 1))
 PY
-    echo "Câblé : ${file#"$QS_DIR"/}"
+    echo "Wired: ${file#"$QS_DIR"/}"
 }
 
-# L'option se déclare AVANT son ancre : cas unique, traité à part.
+# This option is declared BEFORE its anchor: a unique case, handled apart.
 if ! grep -qF "$MARK" "$QS_DIR/modules/common/Config.qml"; then
     backup "$QS_DIR/modules/common/Config.qml"
     python3 - "$QS_DIR/modules/common/Config.qml" <<'PY'
@@ -59,17 +58,17 @@ path = sys.argv[1]
 anchor = "                property JsonObject indicators: JsonObject {"
 addition = """                property JsonObject crypto: JsonObject { // cryptobar
                     property bool enable: true
-                    property string binary: "" // Vide : ~/.local/bin/cryptobar
+                    property string binary: "" // Empty: ~/.local/bin/cryptobar
                 }
 """
 with open(path, encoding="utf-8") as handle:
     text = handle.read()
 if anchor not in text:
-    sys.exit("Point d'ancrage introuvable dans Config.qml")
+    sys.exit("Anchor point not found in Config.qml")
 with open(path, "w", encoding="utf-8") as handle:
     handle.write(text.replace(anchor, addition + anchor, 1))
 PY
-    echo "Câblé : modules/common/Config.qml"
+    echo "Wired: modules/common/Config.qml"
 fi
 
 patch_file "$QS_DIR/modules/ii/bar/BarContent.qml" \
@@ -79,7 +78,7 @@ patch_file "$QS_DIR/modules/ii/bar/BarContent.qml" \
             }' \
 '
 
-            // Cours des cryptomonnaies
+            // Cryptocurrency prices
             Loader { // cryptobar
                 Layout.leftMargin: 4
                 active: Config.options.bar.crypto?.enable ?? true
@@ -103,7 +102,7 @@ patch_file "$QS_DIR/modules/ii/verticalBar/VerticalBarContent.qml" \
                 visible: cryptoLoader.active
             }
 
-            // Cours des cryptomonnaies
+            // Cryptocurrency prices
             Loader { // cryptobar
                 id: cryptoLoader
                 active: Config.options.bar.crypto?.enable ?? true
@@ -113,5 +112,5 @@ patch_file "$QS_DIR/modules/ii/verticalBar/VerticalBarContent.qml" \
             }'
 
 echo
-echo "Terminé. Redémarrez Quickshell pour charger le widget :"
+echo "Done. Restart Quickshell to load the widget:"
 echo "    qs -c ii kill && qs -c ii -d"

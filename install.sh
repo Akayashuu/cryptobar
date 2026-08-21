@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installation de cryptobar : binaire, configuration et fichiers d'intégration.
+# cryptobar installation: binary, configuration and integration files.
 set -euo pipefail
 
 PREFIX="${PREFIX:-$HOME/.local}"
@@ -8,44 +8,44 @@ CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 info() { printf '\033[1;34m::\033[0m %s\n' "$1"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$1" >&2; }
 
-command -v cargo >/dev/null || { warn "cargo est requis"; exit 1; }
+command -v cargo >/dev/null || { warn "cargo is required"; exit 1; }
 
-info "compilation en mode release"
+info "building in release mode"
 cargo build --release --locked
 
-info "installation du binaire dans $PREFIX/bin"
+info "installing the binary into $PREFIX/bin"
 install -Dm755 target/release/cryptobar "$PREFIX/bin/cryptobar"
 
-info "écriture de la configuration par défaut si elle est absente"
-"$PREFIX/bin/cryptobar" config init 2>/dev/null || info "configuration déjà présente, conservée"
+info "writing the default configuration when missing"
+"$PREFIX/bin/cryptobar" config init 2>/dev/null || info "configuration already present, kept"
 
-# Les fichiers d'intégration ne sont jamais fusionnés automatiquement : ils
-# sont déposés à côté pour que l'utilisateur les copie dans sa propre config.
-info "dépôt des exemples d'intégration"
+# The integration files are never merged automatically: they are dropped
+# alongside so the user copies them into their own configuration.
+info "dropping the integration samples"
 install -Dm644 waybar/crypto.jsonc "$CONFIG_HOME/waybar/cryptobar.jsonc"
 install -Dm644 waybar/style.css "$CONFIG_HOME/waybar/cryptobar.css"
 install -Dm644 hypr/cryptobar.conf "$CONFIG_HOME/hypr/cryptobar.conf"
 
 cat <<'MSG'
 
-Installation terminée. Il reste à brancher, selon votre environnement :
+Installation complete. What is left to wire up, depending on your setup:
 
-  0. Quickshell (dots-hyprland « ii ») — si c'est votre barre :
+  0. Quickshell (dots-hyprland "ii") — if that is your bar:
        ./quickshell/install.sh && qs -c ii kill && qs -c ii -d
 
-  1. Waybar — dans ~/.config/waybar/config.jsonc, copiez le bloc
-     "custom/crypto" de ~/.config/waybar/cryptobar.jsonc et ajoutez
-     "custom/crypto" à modules-right (ou left/center).
-     Puis dans ~/.config/waybar/style.css :
+  1. Waybar — in ~/.config/waybar/config.jsonc, copy the "custom/crypto"
+     block from ~/.config/waybar/cryptobar.jsonc and add "custom/crypto" to
+     modules-right (or left/center).
+     Then in ~/.config/waybar/style.css:
        @import "cryptobar.css";
 
-  2. Hyprland — dans ~/.config/hypr/hyprland.conf :
+  2. Hyprland — in ~/.config/hypr/hyprland.conf:
        source = ~/.config/hypr/cryptobar.conf
 
-Assurez-vous que ~/.local/bin est dans votre PATH, puis :
+Make sure ~/.local/bin is in your PATH, then:
   cryptobar bar
 
-Pour suivre un portefeuille, ajoutez une ADRESSE PUBLIQUE depuis la fenêtre
-(cryptobar popup, section « Adresses suivies »). cryptobar n'accepte jamais
-une clé privée ni une phrase de récupération.
+To watch a wallet, add a PUBLIC ADDRESS from the window (cryptobar popup,
+"Watched addresses" section). cryptobar never accepts a private key nor a
+recovery phrase.
 MSG

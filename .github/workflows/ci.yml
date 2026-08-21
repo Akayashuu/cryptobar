@@ -51,11 +51,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release --no-default-features
-      - name: Budget de démarrage sur cache chaud
+      - name: Startup budget on a warm cache
         run: |
           set -euo pipefail
-          # Le module s'exécute à chaque tick de Waybar : au-delà de 25 ms sur un
-          # runner partagé, quelque chose a régressé.
+          # The module runs at every Waybar tick: beyond 25 ms on a shared
+          # runner, something has regressed.
           dir=$(mktemp -d)
           mkdir -p "$dir/cache" "$dir/run"
           printf 'coins = ["bitcoin"]\ncurrency = "eur"\nrefresh_interval = 3600\n' > "$dir/config.toml"
@@ -63,7 +63,7 @@ jobs:
           export CRYPTOBAR_CACHE_DIR="$dir/cache" CRYPTOBAR_RUNTIME_DIR="$dir/run"
           export CRYPTOBAR_API_BASE=http://127.0.0.1:1
           bin=./target/release/cryptobar
-          # Première exécution ignorée : elle paie le chargement des pages.
+          # First run skipped: it pays for the page loading.
           "$bin" --config "$dir/config.toml" bar > /dev/null
           start=$(date +%s%N)
           for _ in $(seq 20); do "$bin" --config "$dir/config.toml" bar > /dev/null; done
@@ -71,6 +71,6 @@ jobs:
           avg=$(( (end - start) / 20 / 1000000 ))
           echo "moyenne : ${avg} ms par tick"
           if [ "$avg" -gt 25 ]; then
-            echo "::error::budget de démarrage dépassé : ${avg} ms > 25 ms"
+            echo "::error::startup budget exceeded: ${avg} ms > 25 ms"
             exit 1
           fi

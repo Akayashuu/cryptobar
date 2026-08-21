@@ -1,7 +1,7 @@
-//! Interfaces graphiques optionnelles.
+//! Optional graphical interfaces.
 //!
-//! Tout ce module est derrière la fonctionnalité `popup` : une compilation
-//! `--no-default-features` produit un binaire sans aucune dépendance GTK.
+//! The whole module sits behind the `popup` feature: a `--no-default-features`
+//! build produces a binary with no GTK dependency at all.
 
 #[cfg(feature = "popup")]
 pub mod popup;

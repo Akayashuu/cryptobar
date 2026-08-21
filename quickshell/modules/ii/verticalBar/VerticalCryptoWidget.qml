@@ -5,11 +5,11 @@ import QtQuick
 import qs.modules.ii.bar as Bar
 
 /**
- * Variante pour la barre verticale. Quarante pixels de large ne portent
- * pas une ligne complète : on garde le strict nécessaire — le logo, qui dit
- * déjà de quelle pièce il s'agit, le prix, et la variation sur 24 h. Le
- * symbole, la courbe et le fond teinté restent à la barre horizontale et à
- * l'infobulle, où ils ont la place d'être lisibles.
+ * Variant for the vertical bar. Forty pixels of width cannot carry a full
+ * row: only the essentials remain — the logo, which already says which coin
+ * this is, the price, and the 24 h change. The symbol, the curve and the
+ * tinted background stay with the horizontal bar and the tooltip, where they
+ * have the room to be readable.
  */
 Item {
     id: root
@@ -53,7 +53,7 @@ Item {
                 size: Appearance.font.pixelSize.large
             }
 
-            // Pastille d'alerte : un seuil est franchi en ce moment.
+            // Alert badge: a threshold is crossed right now.
             Rectangle {
                 anchors.right: parent.right
                 anchors.top: parent.top
@@ -92,8 +92,8 @@ Item {
 
             MaterialSymbol {
                 anchors.verticalCenter: parent.verticalCenter
-                // La flèche ne sert qu'à signaler le cache hors ligne : le
-                // signe du pourcentage dit déjà le sens de la variation.
+                // The arrow only signals the offline cache: the sign of the
+                // percentage already tells the direction of the change.
                 visible: Crypto.stale
                 iconSize: Appearance.font.pixelSize.smaller
                 color: root.accent

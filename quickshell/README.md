@@ -1,65 +1,65 @@
-# Intégration Quickshell
+# Quickshell integration
 
-Widget de barre pour [Quickshell](https://quickshell.outfoxxed.me/), conçu
-pour la configuration `ii` de [dots-hyprland](https://github.com/end-4/dots-hyprland).
-Les barres horizontale et verticale sont toutes deux prises en charge.
+Bar widget for [Quickshell](https://quickshell.outfoxxed.me/), designed for the
+`ii` configuration of [dots-hyprland](https://github.com/end-4/dots-hyprland).
+Both the horizontal and the vertical bar are supported.
 
 ## Installation
 
 ```bash
-./quickshell/install.sh          # dans ~/.config/quickshell/ii
-QS_DIR=/autre/chemin ./quickshell/install.sh
-qs -c ii kill && qs -c ii -d     # redémarrer pour charger le widget
+./quickshell/install.sh          # into ~/.config/quickshell/ii
+QS_DIR=/another/path ./quickshell/install.sh
+qs -c ii kill && qs -c ii -d     # restart to load the widget
 ```
 
-Le script est idempotent : il repère sa propre marque `// cryptobar` et ne
-recâble pas deux fois. Il sauvegarde chaque fichier amont modifié en
-`<fichier>.bak-cryptobar` avant sa première intervention.
+The script is idempotent: it looks for its own `// cryptobar` marker and never
+wires anything twice. It backs up every upstream file it modifies as
+`<file>.bak-cryptobar` before its first change.
 
-> Une mise à jour de dots-hyprland écrase `Config.qml`, `BarContent.qml` et
-> `VerticalBarContent.qml`. Relancez le script après coup ; les widgets, eux,
-> vivent dans des fichiers qui n'appartiennent pas à l'amont.
+> A dots-hyprland update overwrites `Config.qml`, `BarContent.qml` and
+> `VerticalBarContent.qml`. Run the script again afterwards; the widgets
+> themselves live in files that do not belong to upstream.
 
-## Fichiers
+## Files
 
-| Fichier | Rôle |
+| File | Role |
 | --- | --- |
-| `services/Crypto.qml` | Singleton : un seul `cryptobar bar --watch` pour toute la session, quel que soit le nombre d'écrans. Expose `text`, `symbol`, `price`, `percent`, `sparkline`, `tooltip`, `trend`, `stale`, `alerts` et `portfolio`. |
-| `modules/ii/bar/CryptoSparkline.qml` | Canevas de la courbe sur sept jours, trait plein sous un aplat dégradé. |
-| `modules/ii/bar/CryptoWidget.qml` | Barre horizontale : logo, symbole, prix, courbe et variation, fond teinté par la tendance, pastille d'alerte et transition au changement de pièce. |
-| `modules/ii/bar/CryptoWidgetPopup.qml` | Panneau commun aux deux orientations : une ligne par cryptomonnaie, plus les alertes franchies et le portefeuille valorisé. |
-| `modules/ii/verticalBar/VerticalCryptoWidget.qml` | Barre verticale : logo, prix et variation, volontairement dépouillés — la largeur disponible ne pardonne pas l'encombrement. |
+| `services/Crypto.qml` | Singleton: a single `cryptobar bar --watch` for the whole session, whatever the number of screens. Exposes `text`, `symbol`, `price`, `percent`, `sparkline`, `tooltip`, `trend`, `stale`, `alerts` and `portfolio`. |
+| `modules/ii/bar/CryptoSparkline.qml` | Canvas for the seven-day curve, a solid line above a gradient fill. |
+| `modules/ii/bar/CryptoWidget.qml` | Horizontal bar: logo, symbol, price, curve and change, background tinted by the trend, alert badge and a transition when the coin changes. |
+| `modules/ii/bar/CryptoWidgetPopup.qml` | Panel shared by both orientations: one row per cryptocurrency, plus the crossed alerts and the valued portfolio. |
+| `modules/ii/verticalBar/VerticalCryptoWidget.qml` | Vertical bar: logo, price and change, deliberately stripped down — the available width does not forgive clutter. |
 
 ## Interactions
 
-| Geste | Effet |
+| Gesture | Effect |
 | --- | --- |
-| Molette haut / bas | Pièce suivante / précédente |
-| Clic gauche | Fenêtre détaillée (GTK) |
-| Clic droit | Graphique dans un terminal |
-| Clic milieu | Rafraîchissement forcé |
-| Survol | Toutes les cotations, avec 1 h / 24 h / 7 j |
+| Scroll up / down | Next / previous coin |
+| Left click | Detailed window (GTK) |
+| Right click | Chart in a terminal |
+| Middle click | Forced refresh |
+| Hover | Every quote, with 1 h / 24 h / 7 d |
 
-Après une action, le widget relit immédiatement la valeur courante au lieu
-d'attendre le prochain intervalle.
+After an action the widget reads the current value back immediately instead of
+waiting for the next interval.
 
 ## Options
 
-Dans `~/.config/illogical-impulse/config.json` :
+In `~/.config/illogical-impulse/config.json`:
 
 ```json
 { "bar": { "crypto": { "enable": true, "binary": "" } } }
 ```
 
-`binary` vide pointe sur `~/.local/bin/cryptobar`, l'emplacement d'installation
-par défaut. Un chemin absolu est nécessaire : Quickshell n'hérite pas du `PATH`
-d'un shell interactif.
+An empty `binary` points at `~/.local/bin/cryptobar`, the default install
+location. An absolute path is required: Quickshell does not inherit the `PATH`
+of an interactive shell.
 
-Les pièces suivies, la devise, l'intervalle et la largeur de la sparkline se
-règlent dans `~/.config/cryptobar/config.toml` (`cryptobar config init`).
+The watched coins, the currency, the interval and the sparkline width are set
+in `~/.config/cryptobar/config.toml` (`cryptobar config init`).
 
-## Autres barres
+## Other bars
 
-Le widget consomme la sortie de `cryptobar bar --markup none` : une ligne de
-JSON par intervalle, sans balisage Pango. Ags et Eww peuvent s'en servir tels
-quels. Waybar utilise le mode par défaut, `--markup pango`.
+The widget consumes the output of `cryptobar bar --markup none`: one JSON line
+per interval, with no Pango markup. Ags and Eww can use it as it is. Waybar
+uses the default mode, `--markup pango`.

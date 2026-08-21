@@ -1,10 +1,10 @@
-//! Tests bout en bout du binaire, sans réseau.
+//! End-to-end tests of the binary, without network.
 //!
-//! Le cache est pré-rempli à la main : le client CoinGecko n'est donc jamais
-//! sollicité, ce qui rend ces tests hermétiques et rapides.
+//! The cache is seeded by hand: the CoinGecko client is therefore never called,
+//! which makes these tests hermetic and fast.
 
-// L'indexation d'un `serde_json::Value` retourne `Null` au lieu de paniquer :
-// le lint ne s'applique pas ici, et un test doit rester lisible.
+// Indexing a `serde_json::Value` returns `Null` instead of panicking: the lint
+// does not apply here, and a test has to stay readable.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
 use std::path::Path;
@@ -41,7 +41,7 @@ fn setup() -> Env {
     }
 }
 
-/// Écrit une entrée de cache correspondant à la clé attendue par `markets_cached`.
+/// Writes a cache entry matching the key `markets_cached` expects.
 fn seed_cache(cache: &Path) {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -73,7 +73,7 @@ fn cryptobar(env: &Env) -> Command {
     let mut cmd = Command::cargo_bin("cryptobar").unwrap();
     cmd.env("CRYPTOBAR_CACHE_DIR", &env.cache)
         .env("CRYPTOBAR_RUNTIME_DIR", &env.runtime)
-        // Base injoignable : aucun test ne doit dépendre du réseau.
+        // Unreachable base: no test may depend on the network.
         .env("CRYPTOBAR_API_BASE", "http://127.0.0.1:1/api")
         .arg("--config")
         .arg(&env.config);
@@ -84,20 +84,16 @@ fn bar_json(env: &Env) -> serde_json::Value {
     let output = cryptobar(env).arg("bar").output().unwrap();
     assert!(
         output.status.success(),
-        "stderr : {}",
+        "stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert_eq!(
-        stdout.lines().count(),
-        1,
-        "Waybar attend exactement une ligne"
-    );
+    assert_eq!(stdout.lines().count(), 1, "Waybar expects exactly one line");
     serde_json::from_str(stdout.trim()).unwrap()
 }
 
 #[test]
-fn bar_emet_un_json_waybar_valide_depuis_le_cache() {
+fn bar_emits_valid_waybar_json_from_the_cache() {
     let env = setup();
     seed_cache(&env.cache);
     let value = bar_json(&env);
@@ -107,7 +103,7 @@ fn bar_emet_un_json_waybar_valide_depuis_le_cache() {
 }
 
 #[test]
-fn next_fait_basculer_la_cotation_affichee() {
+fn next_switches_the_displayed_quote() {
     let env = setup();
     seed_cache(&env.cache);
     assert!(bar_json(&env)["text"].as_str().unwrap().contains("BTC"));
@@ -120,10 +116,10 @@ fn next_fait_basculer_la_cotation_affichee() {
 }
 
 #[test]
-fn sans_cache_ni_reseau_le_module_reste_valide() {
+fn without_cache_or_network_the_module_stays_valid() {
     let env = setup();
-    // Aucune entrée de cache et pas de réseau autorisé : la sortie doit rester
-    // du JSON exploitable par Waybar plutôt qu'une erreur.
+    // No cache entry and no network allowed: the output has to stay JSON
+    // Waybar can use rather than an error.
     let output = cryptobar(&env).arg("bar").output().unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     let value: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
@@ -131,20 +127,20 @@ fn sans_cache_ni_reseau_le_module_reste_valide() {
 }
 
 #[test]
-fn config_check_valide_le_fichier() {
+fn config_check_validates_the_file() {
     let env = setup();
     cryptobar(&env).args(["config", "check"]).assert().success();
 }
 
 #[test]
-fn config_check_rejette_un_fichier_invalide() {
+fn config_check_rejects_an_invalid_file() {
     let env = setup();
     std::fs::write(&env.config, "coins = []\n").unwrap();
     cryptobar(&env).args(["config", "check"]).assert().failure();
 }
 
 #[test]
-fn config_init_refuse_decraser_sans_force() {
+fn config_init_refuses_to_overwrite_without_force() {
     let env = setup();
     cryptobar(&env).args(["config", "init"]).assert().failure();
     cryptobar(&env)

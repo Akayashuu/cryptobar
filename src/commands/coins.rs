@@ -1,7 +1,7 @@
-//! Sous-commande `coins` : recherche d'identifiants CoinGecko.
+//! `coins` subcommand: searching CoinGecko ids.
 //!
-//! Le fichier de configuration attend des identifiants, pas des symboles.
-//! Cette commande fait le pont pour l'utilisateur.
+//! The configuration file expects ids, not symbols. This command bridges the
+//! gap for the user.
 
 use std::fmt::Write as _;
 use std::io::Write as _;
@@ -11,26 +11,26 @@ use anyhow::{Context as _, Result};
 use crate::app::App;
 use crate::source::SearchHit;
 
-/// Nombre de résultats affichés : au-delà, la liste cesse d'être utile.
+/// Number of results displayed: beyond it, the list stops being useful.
 const MAX_RESULTS: usize = 15;
 
-/// Recherche `term` et affiche les identifiants correspondants.
+/// Searches `term` and prints the matching ids.
 ///
 /// # Errors
-/// Échoue si la recherche réseau échoue — elle n'est pas cachée.
+/// Fails when the network search fails — it is not cached.
 pub fn run(app: &App, term: &str) -> Result<()> {
-    let hits = app.source.search(term).context("recherche impossible")?;
+    let hits = app.source.search(term).context("search failed")?;
     let mut stdout = std::io::stdout().lock();
     write!(stdout, "{}", render(&hits, term))?;
     stdout.flush()?;
     Ok(())
 }
 
-/// Met en forme les résultats. Fonction pure : testable sans réseau.
+/// Formats the results. Pure function: testable without network.
 #[must_use]
 pub fn render(hits: &[SearchHit], term: &str) -> String {
     if hits.is_empty() {
-        return format!("aucun résultat pour « {term} »\n");
+        return format!("no result for \"{term}\"\n");
     }
     let shown: Vec<&SearchHit> = hits.iter().take(MAX_RESULTS).collect();
     let id_width = shown
@@ -46,7 +46,7 @@ pub fn render(hits: &[SearchHit], term: &str) -> String {
 
     let mut out = String::new();
     for hit in &shown {
-        // L'écriture dans une `String` est infaillible.
+        // Writing into a `String` is infallible.
         let _ = writeln!(
             out,
             "{:<id_width$}  {:<symbol_width$}  {}",
@@ -58,13 +58,11 @@ pub fn render(hits: &[SearchHit], term: &str) -> String {
     if hits.len() > shown.len() {
         let _ = writeln!(
             out,
-            "… {} autres résultats",
+            "… {} more results",
             hits.len().saturating_sub(shown.len())
         );
     }
-    out.push_str(
-        "\nAjoutez l'identifiant de la première colonne à `coins` dans la configuration.\n",
-    );
+    out.push_str("\nAdd the id from the first column to `coins` in the configuration.\n");
     out
 }
 
@@ -85,14 +83,14 @@ mod tests {
     }
 
     #[test]
-    fn une_recherche_vide_le_dit_explicitement() {
+    fn an_empty_search_says_so_explicitly() {
         let out = render(&[], "zzz");
-        assert!(out.contains("aucun résultat"));
+        assert!(out.contains("no result"));
         assert!(out.contains("zzz"));
     }
 
     #[test]
-    fn chaque_resultat_montre_identifiant_symbole_et_nom() {
+    fn every_result_shows_id_symbol_and_name() {
         let out = render(&[hit("bitcoin", "btc", "Bitcoin")], "btc");
         let first = out.lines().next().unwrap();
         assert!(first.contains("bitcoin"));
@@ -101,7 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn les_colonnes_sont_alignees() {
+    fn the_columns_are_aligned() {
         let hits = vec![
             hit("btc", "btc", "Bitcoin"),
             hit("ethereum", "eth", "Ethereum"),
@@ -116,11 +114,11 @@ mod tests {
     }
 
     #[test]
-    fn la_liste_est_tronquee_et_le_reste_est_annonce() {
+    fn the_list_is_truncated_and_the_rest_announced() {
         let hits: Vec<SearchHit> = (0..MAX_RESULTS + 5)
             .map(|_| hit("bitcoin", "btc", "B"))
             .collect();
         let out = render(&hits, "b");
-        assert!(out.contains("5 autres résultats"));
+        assert!(out.contains("5 more results"));
     }
 }

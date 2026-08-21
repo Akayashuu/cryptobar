@@ -1,16 +1,16 @@
-//! Définition de l'interface en ligne de commande.
+//! Command line interface definition.
 
 use clap::{Parser, Subcommand};
 
 use crate::model::Range;
 use crate::render::waybar::Markup;
 
-/// Cours de cryptomonnaies pour Waybar, le terminal et le bureau.
+/// Cryptocurrency prices for your bar, terminal and desktop.
 #[derive(Debug, Parser)]
 #[command(name = "cryptobar", version, about, long_about = None)]
 pub struct Cli {
-    /// Chemin d'un fichier de configuration alternatif.
-    #[arg(long, global = true, value_name = "FICHIER")]
+    /// Path to an alternative configuration file.
+    #[arg(long, global = true, value_name = "FILE")]
     pub config: Option<std::path::PathBuf>,
 
     #[command(subcommand)]
@@ -19,48 +19,48 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Émet une ligne JSON pour un module Waybar (comportement par défaut).
+    /// Emit a JSON line for a Waybar module (default behaviour).
     Bar {
-        /// Reste en avant-plan et réémet à chaque intervalle.
+        /// Stay in the foreground and emit again on every interval.
         #[arg(long)]
         watch: bool,
-        /// Balisage du texte : `pango` pour Waybar, `none` pour Quickshell,
-        /// Ags, Eww et toute barre affichant du texte brut.
+        /// Text markup: `pango` for Waybar, `none` for Quickshell, Ags, Eww
+        /// and any bar that displays plain text.
         #[arg(long, default_value = "pango", value_name = "STYLE")]
         markup: Markup,
     },
-    /// Passe à la cryptomonnaie suivante.
+    /// Move to the next cryptocurrency.
     Next,
-    /// Revient à la cryptomonnaie précédente.
+    /// Move back to the previous cryptocurrency.
     Prev,
-    /// Affiche la cryptomonnaie d'indice donné dans la liste configurée.
+    /// Show the cryptocurrency at the given index in the configured list.
     Select {
-        /// Indice, à partir de zéro.
+        /// Zero-based index.
         index: usize,
     },
-    /// Force un rafraîchissement immédiat des données.
+    /// Force an immediate refresh of the data.
     Refresh,
-    /// Affiche un graphique dans le terminal.
+    /// Draw a chart in the terminal.
     Chart {
-        /// Identifiant CoinGecko ; par défaut, la cryptomonnaie affichée.
+        /// CoinGecko id; defaults to the cryptocurrency currently displayed.
         coin: Option<String>,
-        /// Plage temporelle : 1h, 24h, 7d, 30d, 1y.
+        /// Time range: 1h, 24h, 7d, 30d, 1y.
         #[arg(long, default_value = "7d")]
         range: Range,
-        /// Ouvre le graphique dans une nouvelle fenêtre de terminal.
+        /// Open the chart in a new terminal window.
         #[arg(long)]
         window: bool,
     },
-    /// Ouvre la fenêtre graphique.
+    /// Open the graphical window.
     Popup,
-    /// Valorise les soldes des adresses publiques suivies.
+    /// Value the balances of the watched public addresses.
     Portfolio,
-    /// Recherche une cryptomonnaie par nom ou symbole.
+    /// Search a cryptocurrency by name or symbol.
     Coins {
-        /// Terme recherché.
+        /// Search term.
         term: String,
     },
-    /// Gère le fichier de configuration.
+    /// Manage the configuration file.
     Config {
         #[command(subcommand)]
         action: ConfigAction,
@@ -69,15 +69,15 @@ pub enum Command {
 
 #[derive(Debug, Subcommand)]
 pub enum ConfigAction {
-    /// Écrit un fichier de configuration commenté s'il n'existe pas.
+    /// Write a commented configuration file if none exists.
     Init {
-        /// Écrase un fichier existant.
+        /// Overwrite an existing file.
         #[arg(long)]
         force: bool,
     },
-    /// Affiche le chemin du fichier de configuration.
+    /// Print the path of the configuration file.
     Path,
-    /// Vérifie que la configuration est valide.
+    /// Check that the configuration is valid.
     Check,
 }
 
@@ -88,13 +88,13 @@ mod tests {
     use clap::CommandFactory as _;
 
     #[test]
-    fn la_definition_clap_est_coherente() {
+    fn the_clap_definition_is_consistent() {
         Cli::command().debug_assert();
     }
 
     #[test]
-    fn le_balisage_de_la_barre_est_valide_par_clap() {
-        assert!(Cli::try_parse_from(["cryptobar", "bar", "--markup", "gras"]).is_err());
+    fn clap_validates_the_bar_markup() {
+        assert!(Cli::try_parse_from(["cryptobar", "bar", "--markup", "bold"]).is_err());
         let cli = Cli::try_parse_from(["cryptobar", "bar", "--markup", "none"]).unwrap();
         assert!(matches!(
             cli.command,
@@ -106,13 +106,13 @@ mod tests {
     }
 
     #[test]
-    fn sans_sous_commande_le_champ_est_vide() {
+    fn without_a_subcommand_the_field_is_empty() {
         let cli = Cli::try_parse_from(["cryptobar"]).unwrap();
         assert!(cli.command.is_none());
     }
 
     #[test]
-    fn la_plage_du_graphique_est_validee() {
+    fn the_chart_range_is_validated() {
         assert!(Cli::try_parse_from(["cryptobar", "chart", "--range", "42x"]).is_err());
         let cli = Cli::try_parse_from(["cryptobar", "chart", "--range", "24h"]).unwrap();
         assert!(matches!(

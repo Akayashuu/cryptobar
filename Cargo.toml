@@ -23,9 +23,9 @@ toml = "0.9"
 toml_edit = "0.25"
 ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "json"] }
 gtk4 = { version = "0.9", optional = true }
-# L'encodage PNG de Cairo n'est pas activé par gtk4 : la fenêtre en a besoin
-# pour exporter la courbe. Même version que celle tirée par gtk4, donc une
-# seule copie de la bibliothèque.
+# The PNG encoding of Cairo is not enabled by gtk4: the window needs it to
+# export the curve. Same version as the one gtk4 pulls in, so a single copy of
+# the library.
 cairo-rs = { version = "0.20", features = ["png"], optional = true }
 rustix-libc-wrappers = { version = "0.1.1", features = ["process"] }
 

@@ -1,12 +1,12 @@
-//! Fenêtre GTK4 : cours détaillés, courbe vectorielle, recherche et réglages.
+//! GTK4 window: detailed prices, vector curve, search and settings.
 //!
-//! C'est la surface de configuration du projet. Tout ce que le fichier
-//! `config.toml` accepte se règle ici, et chaque modification est écrite dans
-//! ce même fichier — commentaires préservés — par [`crate::config_edit`].
+//! This is the configuration surface of the project. Everything `config.toml`
+//! accepts is set here, and every change is written back to that same file —
+//! comments preserved — by [`crate::config_edit`].
 //!
-//! Le réseau ne tourne jamais sur le fil graphique : les requêtes partent dans
-//! un fil dédié et reviennent par un canal que la boucle GTK draine. La
-//! fenêtre reste donc fluide même quand l'API met une seconde à répondre.
+//! The network never runs on the graphical thread: requests leave on a
+//! dedicated thread and come back through a channel the GTK loop drains. The
+//! window therefore stays smooth even when the API takes a second to answer.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -30,28 +30,28 @@ use crate::render::braille::as_f64;
 use crate::render::{badge, format};
 use crate::source::SearchHit;
 
-/// Identifiant d'application, requis par GTK.
+/// Application id, required by GTK.
 const APP_ID: &str = "dev.akayashuu.cryptobar";
 
-/// Délai laissé à la frappe avant d'interroger l'API : au-dessous, chaque
-/// lettre déclencherait une requête.
+/// Delay left to typing before querying the API: below it, every letter would
+/// fire a request.
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(350);
 
-/// Longueur minimale d'un terme de recherche exploitable.
+/// Minimum length of a usable search term.
 const SEARCH_MIN_LEN: usize = 2;
 
-/// Nombre de résultats affichés sous la barre de recherche.
+/// Number of results displayed under the search bar.
 const SEARCH_LIMIT: usize = 8;
 
-/// Cadence de drainage du canal réseau. Assez fin pour être imperceptible,
-/// assez lâche pour ne rien coûter.
+/// Drain rate of the network channel. Fine enough to be imperceptible, loose
+/// enough to cost nothing.
 const DRAIN: Duration = Duration::from_millis(120);
 
-/// Feuille de style de base.
+/// Base stylesheet.
 ///
-/// Toutes les teintes sont dérivées de `@theme_bg_color` et `@theme_fg_color`
-/// par les fonctions de couleur de GTK : la fenêtre s'accorde au thème du
-/// bureau, clair comme sombre, sans le figer ni le lire.
+/// Every shade is derived from `@theme_bg_color` and `@theme_fg_color` through
+/// the GTK colour functions: the window matches the desktop theme, light or
+/// dark, without freezing or reading it.
 const CSS: &str = "
 window { background-color: @theme_bg_color; }
 
@@ -62,10 +62,9 @@ window { background-color: @theme_bg_color; }
 }
 .hero { padding: 20px 22px; }
 
-/* Onglets : des pastilles à plat, dans la même famille que les boutons de
-   plage du graphique, plutôt que la barre d'onglets par défaut. GTK peint ses
-   boutons avec un `background-image` : le neutraliser est nécessaire, la seule
-   `background-color` ne suffirait pas. */
+/* Tabs: flat pills, in the same family as the chart range buttons, rather
+   than the default tab bar. GTK paints its buttons with a `background-image`:
+   neutralising it is necessary, `background-color` alone would not do. */
 .tabs { background: none; padding: 0; }
 .tabs button {
   background-image: none;
@@ -93,8 +92,8 @@ window { background-color: @theme_bg_color; }
   font-size: 26px;
   min-width: 56px;
   min-height: 56px;
-  /* Repli neutre : une pièce sans couleur de marque connue — un résultat de
-     recherche, par exemple — reste lisible au lieu de disparaître. */
+  /* Neutral fallback: a coin with no known brand colour — a search result,
+     say — stays readable instead of vanishing. */
   background-color: alpha(@theme_fg_color, 0.10);
   color: @theme_fg_color;
 }
@@ -124,7 +123,7 @@ window { background-color: @theme_bg_color; }
 .dot    { font-size: 11px; }
 .mono   { font-family: monospace; font-size: 12px; opacity: 0.45; }
 
-/* Bloc en creux : sépare les listes du fond de la carte. */
+/* Recessed block: separates the lists from the card background. */
 .inset {
   background-color: alpha(@theme_fg_color, 0.04);
   border-radius: 14px;
@@ -140,7 +139,7 @@ expander title { font-size: 13px; opacity: 0.6; }
 .muted { opacity: 0.5; font-size: 13px; }
 .error { color: #e5484d; font-size: 13px; }
 
-/* Pilules de plage temporelle. */
+/* Time range pills. */
 .range {
   background: none;
   border: none;
@@ -179,47 +178,46 @@ row.active { background-color: alpha(@theme_fg_color, 0.08); }
 row:hover { background-color: alpha(@theme_fg_color, 0.05); }
 ";
 
-/// Géométrie du tracé dans la zone de dessin.
+/// Geometry of the plot inside the drawing area.
 const CHART_WIDTH: i32 = 540;
 const CHART_HEIGHT: i32 = 230;
 
-/// Miniature tracée sur chaque ligne de la liste.
+/// Thumbnail drawn on every row of the list.
 const SPARK_WIDTH: i32 = 72;
 const SPARK_HEIGHT: i32 = 26;
 
-/// Nombre de lignes de repère horizontales sous la courbe.
+/// Number of horizontal guide lines under the curve.
 const GRID_LINES: i32 = 4;
 
-/// Message remonté d'un fil de travail vers la boucle graphique.
+/// Message sent from a worker thread up to the graphical loop.
 enum Msg {
-    /// Résultats d'une recherche, étiquetés par la génération qui les a demandés.
+    /// Results of a search, tagged by the generation that asked for them.
     Search(u64, Result<Vec<SearchHit>, String>),
-    /// Cotations fraîchement chargées, avec le drapeau « servi depuis le cache ».
+    /// Freshly loaded quotes, with the "served from cache" flag.
     Quotes(Vec<Quote>, bool),
-    /// Série d'une plage autre que 7 jours, indexée par sa clé de cache.
+    /// Series of a range other than 7 days, keyed by its cache key.
     Series(String, Vec<f64>),
-    /// Soldes fraîchement lus sur les chaînes suivies.
+    /// Freshly read balances from the watched chains.
     Balances(Vec<crate::onchain::Balance>),
 }
 
-/// Ouvre la fenêtre et rend la main à sa fermeture.
+/// Opens the window and returns when it closes.
 ///
 /// # Errors
-/// Échoue si GTK ne peut pas s'initialiser — typiquement hors session
-/// graphique.
+/// Fails when GTK cannot initialise — typically outside a graphical session.
 pub fn show(app: App, quotes: Vec<Quote>, stale: bool) -> anyhow::Result<()> {
     let gtk_app = Application::builder().application_id(APP_ID).build();
     let seed = Rc::new(RefCell::new(Some((Arc::new(app), quotes, stale))));
 
     gtk_app.connect_startup(|_| {
         let provider = gtk4::CssProvider::new();
-        // `load_from_data` fonctionne sur toutes les versions de GTK 4, contrairement
-        // à `load_from_string` qui exigerait GTK 4.12.
+        // `load_from_data` works on every GTK 4 version, unlike
+        // `load_from_string` which would require GTK 4.12.
         provider.load_from_data(CSS);
         if let Some(display) = gtk4::gdk::Display::default() {
-            // Au-dessus de `~/.config/gtk-4.0/gtk.css`, chargé par GTK en
-            // priorité « user » : un thème de bureau qui repeint tous les
-            // boutons ne doit pas décider de l'allure de cette fenêtre.
+            // Above `~/.config/gtk-4.0/gtk.css`, loaded by GTK at the "user"
+            // priority: a desktop theme repainting every button must not decide
+            // how this window looks.
             gtk4::style_context_add_provider_for_display(
                 &display,
                 &provider,
@@ -229,8 +227,8 @@ pub fn show(app: App, quotes: Vec<Quote>, stale: bool) -> anyhow::Result<()> {
     });
 
     gtk_app.connect_activate(move |gtk_app| {
-        // GTK n'active qu'une fois par processus ; une seconde activation
-        // (instance unique) se contente de présenter la fenêtre existante.
+        // GTK activates only once per process; a second activation (single
+        // instance) simply presents the existing window.
         if let Some((app, quotes, stale)) = seed.borrow_mut().take() {
             build_window(gtk_app, app, quotes, stale);
         } else if let Some(window) = gtk_app.windows().first() {
@@ -238,37 +236,37 @@ pub fn show(app: App, quotes: Vec<Quote>, stale: bool) -> anyhow::Result<()> {
         }
     });
 
-    // GTK analyserait sinon nos propres arguments de ligne de commande.
+    // GTK would otherwise parse our own command line arguments.
     let empty: [&str; 0] = [];
     let status = gtk_app.run_with_args(&empty);
     if status == glib::ExitCode::SUCCESS {
         Ok(())
     } else {
-        anyhow::bail!("la fenêtre s'est terminée en erreur")
+        anyhow::bail!("the window exited with an error")
     }
 }
 
-/// Données vivantes de la fenêtre.
+/// Live data of the window.
 struct Model {
     app: Arc<App>,
     quotes: Vec<Quote>,
     stale: bool,
     hits: Vec<SearchHit>,
-    /// Plage affichée sous la courbe.
+    /// Range displayed under the curve.
     range: Range,
-    /// Séries déjà chargées, par couple (pièce, plage). La plage 7 jours vient
-    /// des cotations et n'atterrit jamais ici.
+    /// Series already loaded, per (coin, range) pair. The 7 day range comes
+    /// from the quotes and never lands here.
     series: HashMap<String, Vec<f64>>,
-    /// Soldes lus sur les adresses suivies, cumulés par cryptomonnaie.
+    /// Balances read from the watched addresses, summed per cryptocurrency.
     onchain: std::collections::BTreeMap<CoinId, f64>,
-    /// Détail par adresse, pour la liste des portefeuilles suivis.
+    /// Per-address detail, for the list of watched wallets.
     balances: Vec<crate::onchain::Balance>,
-    /// Numéro de la dernière recherche lancée : les réponses en retard, dont
-    /// l'utilisateur a déjà changé le terme, sont ignorées.
+    /// Number of the last search fired: late answers, whose term the user has
+    /// already changed, are dropped.
     generation: u64,
 }
 
-/// Conteneurs reconstruits à chaque rendu.
+/// Containers rebuilt on every render.
 #[derive(Clone)]
 struct Widgets {
     search: gtk4::SearchEntry,
@@ -282,13 +280,13 @@ struct Widgets {
 
 struct Ctx {
     model: RefCell<Model>,
-    /// Fournisseur rechargé à chaque rendu : il porte une classe par pièce,
-    /// avec sa couleur de marque. Générer la feuille évite l'API dépréciée
-    /// `StyleContext::add_provider`.
+    /// Provider reloaded on every render: it carries one class per coin, with
+    /// its brand colour. Generating the sheet avoids the deprecated
+    /// `StyleContext::add_provider` API.
     palette: gtk4::CssProvider,
     widgets: Widgets,
     tx: Sender<Msg>,
-    /// Minuterie anti-rebond de la recherche, annulée à chaque frappe.
+    /// Debounce timer of the search, cancelled on every keystroke.
     debounce: RefCell<Option<glib::SourceId>>,
 }
 
@@ -297,7 +295,7 @@ impl Ctx {
         Arc::clone(&self.model.borrow().app)
     }
 
-    /// Affiche un message transitoire sous les réglages.
+    /// Shows a transient message under the settings.
     fn note(&self, message: &str, error: bool) {
         self.widgets.status.set_text(message);
         self.widgets.status.remove_css_class("error");
@@ -307,12 +305,12 @@ impl Ctx {
             .add_css_class(if error { "error" } else { "muted" });
     }
 
-    /// Recharge les cotations sans bloquer l'interface.
+    /// Reloads the quotes without blocking the interface.
     fn reload_quotes(&self) {
         let app = self.app();
         let tx = self.tx.clone();
-        // `markets_cached` sert le cache tant qu'il est frais : ce fil ne
-        // touche le réseau que lorsque c'est réellement nécessaire.
+        // `markets_cached` serves the cache as long as it is fresh: this
+        // thread touches the network only when it is truly needed.
         std::thread::spawn(move || {
             let (mut quotes, stale) = match app
                 .source
@@ -325,8 +323,8 @@ impl Ctx {
             let _ = tx.send(Msg::Quotes(quotes, stale));
         });
 
-        // Les chaînes sont interrogées à part : une adresse lente ne doit pas
-        // retarder l'affichage des cours.
+        // The chains are queried separately: a slow address must not delay the
+        // display of the prices.
         let app = self.app();
         let tx = self.tx.clone();
         std::thread::spawn(move || {
@@ -335,8 +333,8 @@ impl Ctx {
         });
     }
 
-    /// Prend en compte une configuration réécrite : nouveau contexte, données
-    /// rechargées, barre réveillée.
+    /// Takes a rewritten configuration into account: new context, reloaded
+    /// data, bar woken up.
     fn adopt(self: &Rc<Self>, written: anyhow::Result<Config>, message: &str) {
         match written {
             Ok(_) => {
@@ -389,13 +387,13 @@ impl Ctx {
             }
             self.request_series(&quote, range);
         } else {
-            let empty = Label::new(Some("Aucune donnée — vérifiez la connexion réseau"));
+            let empty = Label::new(Some("No data — check the network connection"));
             empty.add_css_class("muted");
             empty.set_halign(Align::Start);
             self.widgets.detail.append(&empty);
         }
         if stale {
-            let warning = Label::new(Some("Données du cache — réseau indisponible"));
+            let warning = Label::new(Some("Cached data — network unavailable"));
             warning.add_css_class("muted");
             warning.set_halign(Align::Start);
             self.widgets.detail.append(&warning);
@@ -407,7 +405,7 @@ impl Ctx {
         self.draw_results();
     }
 
-    /// Change la plage affichée sous la courbe.
+    /// Changes the range displayed under the curve.
     fn set_range(self: &Rc<Self>, range: Range) {
         if self.model.borrow().range == range {
             return;
@@ -416,8 +414,8 @@ impl Ctx {
         self.redraw();
     }
 
-    /// Charge en tâche de fond la série d'une plage encore inconnue. La plage
-    /// 7 jours est déjà dans les cotations : elle ne coûte jamais de requête.
+    /// Loads in the background the series of a still unknown range. The 7 day
+    /// range is already in the quotes: it never costs a request.
     fn request_series(self: &Rc<Self>, quote: &Quote, range: Range) {
         if range == Range::D7 {
             return;
@@ -436,7 +434,7 @@ impl Ctx {
         });
     }
 
-    /// Carte du graphique : la courbe, son sélecteur de plage et ses bornes.
+    /// Chart card: the curve, its range selector and its bounds.
     fn chart_card(
         self: &Rc<Self>,
         quote: &Quote,
@@ -462,8 +460,8 @@ impl Ctx {
         }
         card.append(&ranges);
 
-        // La couleur suit la variation observée sur la plage affichée, pas la
-        // seule variation 24 h : sinon une courbe en baisse peut être verte.
+        // The colour follows the change observed over the displayed range, not
+        // the 24 h change alone: otherwise a falling curve could be green.
         let positive = match (series.first(), series.last()) {
             (Some(first), Some(last)) => last >= first,
             _ => quote.change_7d.unwrap_or(0.0) >= 0.0,
@@ -479,8 +477,8 @@ impl Ctx {
             Some(Rc::clone(&hover)),
         );
 
-        // Lecture au survol : le prix de l'échantillon pointé et son âge. La
-        // ligne garde sa place même vide, sinon la carte sauterait au survol.
+        // Hover readout: the price of the pointed sample and its age. The line
+        // keeps its place even when empty, otherwise the card would jump.
         let readout = Label::new(Some(" "));
         readout.add_css_class("muted");
         readout.set_xalign(0.0);
@@ -506,7 +504,7 @@ impl Ctx {
             span.add_css_class("muted");
             footer.append(&span);
         } else {
-            let pending = Label::new(Some("chargement…"));
+            let pending = Label::new(Some("loading…"));
             pending.add_css_class("muted");
             footer.append(&pending);
         }
@@ -517,7 +515,7 @@ impl Ctx {
         card
     }
 
-    /// Boutons d'export de la courbe affichée.
+    /// Export buttons of the displayed curve.
     fn export_buttons(
         self: &Rc<Self>,
         footer: &GtkBox,
@@ -527,8 +525,8 @@ impl Ctx {
         range: Range,
     ) {
         for (label, tooltip, png) in [
-            ("PNG", "Exporter la courbe en image", true),
-            ("CSV", "Exporter les points en tableur", false),
+            ("PNG", "Export the curve as an image", true),
+            ("CSV", "Export the points as a spreadsheet", false),
         ] {
             let button = Button::with_label(label);
             button.add_css_class("range");
@@ -543,7 +541,7 @@ impl Ctx {
                     export_csv(&points, &symbol, range)
                 };
                 match outcome {
-                    Ok(path) => ctx.note(&format!("exporté dans {}", path.display()), false),
+                    Ok(path) => ctx.note(&format!("exported to {}", path.display()), false),
                     Err(e) => ctx.note(&root_cause(&e), true),
                 }
             });
@@ -583,8 +581,8 @@ impl Ctx {
                 names.set_size_request(96, -1);
                 row.append(&names);
 
-                // Miniature : la forme des sept derniers jours se lit d'un
-                // coup d'œil, sans ouvrir le détail de chaque pièce.
+                // Thumbnail: the shape of the last seven days reads at a
+                // glance, without opening the detail of every coin.
                 let spark = chart(
                     &quote.sparkline,
                     quote.change_7d.unwrap_or(0.0) >= 0.0,
@@ -607,13 +605,13 @@ impl Ctx {
                 change.set_width_chars(8);
                 row.append(&change);
             } else {
-                // Pièce tout juste ajoutée : la ligne existe avant sa cotation.
+                // Coin just added: the row exists before its quote.
                 let pending = Label::new(Some(id.as_str()));
                 pending.add_css_class("muted");
                 pending.set_hexpand(true);
                 pending.set_xalign(0.0);
                 row.append(&pending);
-                let spinner = Label::new(Some("chargement…"));
+                let spinner = Label::new(Some("loading…"));
                 spinner.add_css_class("muted");
                 row.append(&spinner);
             }
@@ -621,12 +619,12 @@ impl Ctx {
             let remove = Button::with_label("✕");
             remove.add_css_class("ghost");
             remove.set_valign(Align::Center);
-            remove.set_tooltip_text(Some("Ne plus suivre"));
+            remove.set_tooltip_text(Some("Stop watching"));
             let ctx = Rc::clone(self);
             let target = id.as_str().to_owned();
             remove.connect_clicked(move |_| {
                 let written = ctx.app().editor().remove_coin(&target);
-                ctx.adopt(written, &format!("{target} retirée"));
+                ctx.adopt(written, &format!("{target} removed"));
             });
             row.append(&remove);
 
@@ -654,8 +652,7 @@ impl Ctx {
         self.widgets.list.append(&list);
     }
 
-    /// Carte du portefeuille : total, répartition, positions et adresses
-    /// suivies.
+    /// Portfolio card: total, split, positions and watched addresses.
     fn draw_wallet(self: &Rc<Self>, currency: &Currency, decimals: format::Decimals) {
         clear(&self.widgets.wallet);
         let model = self.model.borrow();
@@ -669,7 +666,7 @@ impl Ctx {
         card.add_css_class("card");
 
         let head = GtkBox::new(Orientation::Horizontal, 8);
-        let title = Label::new(Some("PORTEFEUILLE"));
+        let title = Label::new(Some("PORTFOLIO"));
         title.add_css_class("title");
         title.set_xalign(0.0);
         title.set_hexpand(true);
@@ -702,8 +699,8 @@ impl Ctx {
         self.widgets.wallet.append(&card);
     }
 
-    /// Section des adresses suivies : une ligne par adresse, et le formulaire
-    /// pour en ajouter une.
+    /// Watched addresses section: one row per address, and the form to add
+    /// another one.
     fn wallets_section(
         self: &Rc<Self>,
         wallets: &[crate::onchain::Wallet],
@@ -714,18 +711,18 @@ impl Ctx {
     ) -> GtkBox {
         let section = GtkBox::new(Orientation::Vertical, 8);
 
-        let title = Label::new(Some("ADRESSES SUIVIES"));
+        let title = Label::new(Some("WATCHED ADDRESSES"));
         title.add_css_class("subtitle");
         title.set_xalign(0.0);
         section.append(&title);
 
-        // Sans cette phrase, « adresse publique » se confond avec « clé ». On
-        // dit donc où la trouver, et ce que cryptobar refuse d'accepter.
+        // Without this sentence, "public address" gets confused with "key". So
+        // we say where to find it, and what cryptobar refuses to accept.
         let help = Label::new(Some(
-            "Collez l'adresse publique de votre portefeuille — celle que vous donnez pour \
-             recevoir des fonds (Ledger Live : « Recevoir »). cryptobar lit le solde sur la \
-             chaîne, sans jamais pouvoir dépenser. Une clé privée ou une phrase de \
-             récupération est refusée et n'est jamais écrite sur le disque.",
+            "Paste the public address of your wallet — the one you hand out to receive \
+             funds (Ledger Live: \"Receive\"). cryptobar reads the balance from the chain, \
+             and can never spend. A private key or a recovery phrase is rejected and never \
+             written to disk.",
         ));
         help.add_css_class("muted");
         help.set_wrap(true);
@@ -762,7 +759,7 @@ impl Ctx {
                     format::quantity(balance.amount),
                     wallet.chain.symbol()
                 ),
-                None => "lecture…".to_owned(),
+                None => "reading…".to_owned(),
             }));
             quantity.set_xalign(1.0);
             amounts.append(&quantity);
@@ -783,11 +780,11 @@ impl Ctx {
             let remove = Button::with_label("✕");
             remove.add_css_class("ghost");
             remove.set_valign(Align::Center);
-            remove.set_tooltip_text(Some("Ne plus suivre cette adresse"));
+            remove.set_tooltip_text(Some("Stop watching this address"));
             let ctx = Rc::clone(self);
             remove.connect_clicked(move |_| {
                 let written = ctx.app().editor().remove_wallet(index);
-                ctx.adopt(written, "adresse retirée");
+                ctx.adopt(written, "address removed");
             });
             row.append(&remove);
             section.append(&row);
@@ -797,16 +794,16 @@ impl Ctx {
         section
     }
 
-    /// Exemple d'adresse pour une chaîne, montré en filigrane dans le champ.
+    /// Sample address for a chain, shown as a placeholder in the field.
     fn address_placeholder(chain: crate::onchain::Chain) -> &'static str {
         match chain {
-            crate::onchain::Chain::Bitcoin => "bc1… ou 1… ou 3…",
+            crate::onchain::Chain::Bitcoin => "bc1… or 1… or 3…",
             crate::onchain::Chain::Ethereum => "0x…",
-            crate::onchain::Chain::Solana => "adresse Solana, ex. 9xQe…",
+            crate::onchain::Chain::Solana => "Solana address, e.g. 9xQe…",
         }
     }
 
-    /// Formulaire d'ajout d'une adresse suivie.
+    /// Form to add a watched address.
     fn wallet_form(self: &Rc<Self>) -> GtkBox {
         let form = GtkBox::new(Orientation::Horizontal, 8);
 
@@ -825,8 +822,8 @@ impl Ctx {
         address.set_hexpand(true);
         form.append(&address);
 
-        // Le filigrane suit la chaîne choisie : une adresse Ethereum ne
-        // ressemble à aucune adresse Bitcoin.
+        // The placeholder follows the chosen chain: an Ethereum address looks
+        // nothing like a Bitcoin one.
         let hinted = address.clone();
         picker.connect_selected_notify(move |picker| {
             let index = usize::try_from(picker.selected()).unwrap_or(0);
@@ -836,11 +833,11 @@ impl Ctx {
         });
 
         let label = gtk4::Entry::new();
-        label.set_placeholder_text(Some("nom, ex. Ledger"));
+        label.set_placeholder_text(Some("name, e.g. Ledger"));
         label.set_width_chars(10);
         form.append(&label);
 
-        let add = Button::with_label("Suivre");
+        let add = Button::with_label("Watch");
         add.add_css_class("add");
         add.set_valign(Align::Center);
         let ctx = Rc::clone(self);
@@ -862,13 +859,13 @@ impl Ctx {
                 address.set_text("");
                 label.set_text("");
             }
-            ctx.adopt(written, "adresse suivie — lecture du solde…");
+            ctx.adopt(written, "address watched — reading the balance…");
         });
         form.append(&add);
         form
     }
 
-    /// Carte des alertes : celles déjà posées, et de quoi en ajouter une.
+    /// Alerts card: those already set, and what it takes to add one.
     fn draw_alerts(self: &Rc<Self>, currency: &Currency, decimals: format::Decimals) {
         clear(&self.widgets.alerts);
         let model = self.model.borrow();
@@ -879,14 +876,14 @@ impl Ctx {
 
         let card = GtkBox::new(Orientation::Vertical, 10);
         card.add_css_class("card");
-        let title = Label::new(Some("ALERTES"));
+        let title = Label::new(Some("ALERTS"));
         title.add_css_class("title");
         title.set_xalign(0.0);
         card.append(&title);
 
         if alerts.is_empty() {
             let empty = Label::new(Some(
-                "Aucune alerte. Le suivi (`bar --watch`) notifie dès qu'un seuil est franchi.",
+                "No alert. Watch mode (`bar --watch`) notifies as soon as a threshold is crossed.",
             ));
             empty.add_css_class("muted");
             empty.set_xalign(0.0);
@@ -919,11 +916,11 @@ impl Ctx {
             let remove = Button::with_label("✕");
             remove.add_css_class("ghost");
             remove.set_valign(Align::Center);
-            remove.set_tooltip_text(Some("Supprimer l'alerte"));
+            remove.set_tooltip_text(Some("Delete the alert"));
             let ctx = Rc::clone(self);
             remove.connect_clicked(move |_| {
                 let written = ctx.app().editor().remove_alert(index);
-                ctx.adopt(written, "alerte supprimée");
+                ctx.adopt(written, "alert deleted");
             });
             row.append(&remove);
             card.append(&row);
@@ -936,7 +933,7 @@ impl Ctx {
         self.widgets.alerts.append(&card);
     }
 
-    /// Formulaire d'ajout d'une alerte.
+    /// Form to add an alert.
     fn alert_form(self: &Rc<Self>, ids: &[CoinId], quotes: &[Quote]) -> GtkBox {
         let ids = ids.to_vec();
         let form = GtkBox::new(Orientation::Horizontal, 8);
@@ -955,11 +952,11 @@ impl Ctx {
         form.append(&picker);
 
         let above = gtk4::Entry::new();
-        above.set_placeholder_text(Some("au-dessus"));
+        above.set_placeholder_text(Some("above"));
         above.set_width_chars(10);
         form.append(&above);
         let below = gtk4::Entry::new();
-        below.set_placeholder_text(Some("en dessous"));
+        below.set_placeholder_text(Some("below"));
         below.set_width_chars(10);
         form.append(&below);
         let change = gtk4::Entry::new();
@@ -987,7 +984,7 @@ impl Ctx {
                 below.set_text("");
                 change.set_text("");
             }
-            ctx.adopt(written, "alerte ajoutée");
+            ctx.adopt(written, "alert added");
         });
         form.append(&add);
         form
@@ -1031,7 +1028,7 @@ impl Ctx {
             row.append(&name);
 
             if known.iter().any(|id| id == hit.id.as_str()) {
-                let already = Label::new(Some("suivie"));
+                let already = Label::new(Some("watched"));
                 already.add_css_class("muted");
                 row.append(&already);
             } else {
@@ -1055,7 +1052,7 @@ impl Ctx {
     fn add_coin(self: &Rc<Self>, id: &CoinId) {
         let written = self.app().editor().add_coin(id);
         let ok = written.is_ok();
-        self.adopt(written, &format!("{id} ajoutée"));
+        self.adopt(written, &format!("{id} added"));
         if ok {
             self.widgets.search.set_text("");
             self.model.borrow_mut().hits.clear();
@@ -1063,7 +1060,7 @@ impl Ctx {
         }
     }
 
-    /// Lance une recherche réseau dans un fil dédié.
+    /// Fires a network search on a dedicated thread.
     fn search(&self, term: String) {
         let generation = {
             let mut model = self.model.borrow_mut();
@@ -1075,9 +1072,9 @@ impl Ctx {
         std::thread::spawn(move || {
             let outcome = app.source.search(&term).map_err(|e| e.to_string()).map(
                 |mut hits: Vec<SearchHit>| {
-                    // Les logos sont récupérés ici, dans le fil de recherche :
-                    // seuls ceux réellement affichés sont téléchargés, et
-                    // l'interface ne bloque jamais dessus.
+                    // The logos are fetched here, on the search thread: only
+                    // those actually displayed are downloaded, and the
+                    // interface never blocks on them.
                     let mut agent = None;
                     for hit in hits.iter_mut().take(SEARCH_LIMIT) {
                         hit.icon = app.icon_for(hit.id.as_str(), hit.image.as_deref(), &mut agent);
@@ -1090,13 +1087,13 @@ impl Ctx {
     }
 }
 
-/// Clé de cache d'une série dans le modèle.
+/// Cache key of a series inside the model.
 fn series_key(id: &str, range: Range) -> String {
     format!("{id}-{}", range.slug())
 }
 
-/// Points à tracer pour une plage : les cotations couvrent déjà 7 jours, les
-/// autres plages viennent du cache de séries.
+/// Points to plot for a range: the quotes already cover 7 days, the other
+/// ranges come from the series cache.
 fn series_of(model: &Model, quote: &Quote, range: Range) -> Vec<f64> {
     if range == Range::D7 {
         return quote.sparkline.clone();
@@ -1110,11 +1107,11 @@ fn series_of(model: &Model, quote: &Quote, range: Range) -> Vec<f64> {
 
 fn range_caption(range: Range) -> String {
     match range {
-        Range::H1 => "Dernière heure".to_owned(),
-        Range::H24 => "Dernières 24 heures".to_owned(),
-        Range::D7 => "7 derniers jours".to_owned(),
-        Range::D30 => "30 derniers jours".to_owned(),
-        Range::Y1 => "12 derniers mois".to_owned(),
+        Range::H1 => "Last hour".to_owned(),
+        Range::H24 => "Last 24 hours".to_owned(),
+        Range::D7 => "Last 7 days".to_owned(),
+        Range::D30 => "Last 30 days".to_owned(),
+        Range::Y1 => "Last 12 months".to_owned(),
     }
 }
 
@@ -1124,7 +1121,7 @@ fn clear(container: &GtkBox) {
     }
 }
 
-/// Message le plus concret de la chaîne d'erreurs : c'est celui qui aide.
+/// Most concrete message of the error chain: that is the helpful one.
 fn root_cause(error: &anyhow::Error) -> String {
     error
         .chain()
@@ -1146,7 +1143,7 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
     };
     widgets
         .search
-        .set_placeholder_text(Some("Chercher une cryptomonnaie à suivre…"));
+        .set_placeholder_text(Some("Search a cryptocurrency to watch…"));
     widgets.results.set_visible(false);
     widgets.status.set_halign(Align::Start);
     widgets.status.add_css_class("muted");
@@ -1184,24 +1181,20 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
     wire_settings(&ctx, &settings);
     drain(&ctx, rx);
 
-    // Quatre pages plutôt qu'une colonne interminable : le portefeuille et
-    // les réglages se trouvaient auparavant sous la ligne de flottaison, et
-    // rien n'indiquait qu'il fallait faire défiler pour les atteindre.
+    // Four pages rather than one endless column: the portfolio and the
+    // settings used to sit below the fold, and nothing hinted that one had to
+    // scroll to reach them.
     let stack = gtk4::Stack::new();
     stack.set_transition_type(gtk4::StackTransitionType::Crossfade);
     stack.set_vexpand(true);
     stack.add_titled(
         &page(&[&widgets.detail, &widgets.list]),
-        Some("cours"),
-        "Cours",
+        Some("prices"),
+        "Prices",
     );
-    stack.add_titled(
-        &page(&[&widgets.wallet]),
-        Some("portefeuille"),
-        "Portefeuille",
-    );
-    stack.add_titled(&page(&[&widgets.alerts]), Some("alertes"), "Alertes");
-    stack.add_titled(&page(&[&settings.panel]), Some("reglages"), "Réglages");
+    stack.add_titled(&page(&[&widgets.wallet]), Some("portfolio"), "Portfolio");
+    stack.add_titled(&page(&[&widgets.alerts]), Some("alerts"), "Alerts");
+    stack.add_titled(&page(&[&settings.panel]), Some("settings"), "Settings");
 
     let tabs = gtk4::StackSwitcher::new();
     tabs.set_stack(Some(&stack));
@@ -1229,8 +1222,8 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
         .child(&content)
         .build();
 
-    // Échap ferme la fenêtre : c'est le réflexe attendu d'un popup. La barre
-    // de recherche consomme la touche d'abord pour vider son champ.
+    // Escape closes the window: that is the expected reflex for a popup. The
+    // search bar consumes the key first to clear its field.
     let controller = gtk4::EventControllerKey::new();
     let to_close = window.clone();
     controller.connect_key_pressed(move |_, key, _, _| {
@@ -1245,12 +1238,12 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
     ctx.redraw();
     ctx.reload_quotes();
     window.present();
-    // La fenêtre s'ouvre prête à recevoir un terme : c'est le geste le plus
-    // fréquent après « je veux suivre autre chose ».
+    // The window opens ready to take a term: that is the most frequent gesture
+    // after "I want to watch something else".
     widgets.search.grab_focus();
 }
 
-/// Draine le canal des fils de travail à cadence fixe.
+/// Drains the worker channel at a fixed rate.
 fn drain(ctx: &Rc<Ctx>, rx: Receiver<Msg>) {
     let ctx = Rc::clone(ctx);
     glib::timeout_add_local(DRAIN, move || {
@@ -1278,12 +1271,12 @@ fn drain(ctx: &Rc<Ctx>, rx: Receiver<Msg>) {
                 }
                 Ok(Msg::Search(generation, outcome)) => {
                     if ctx.model.borrow().generation != generation {
-                        continue; // Réponse périmée : l'utilisateur a déjà retapé.
+                        continue; // Stale answer: the user has already retyped.
                     }
                     match outcome {
                         Ok(hits) => {
                             if hits.is_empty() {
-                                ctx.note("Aucun résultat", false);
+                                ctx.note("No result", false);
                             } else {
                                 ctx.note("", false);
                             }
@@ -1303,9 +1296,8 @@ fn drain(ctx: &Rc<Ctx>, rx: Receiver<Msg>) {
     });
 }
 
-/// Ligne de titre : identité de la fenêtre et rafraîchissement manuel.
-/// Une page d'onglet : ses sections empilées dans une zone défilante, pour
-/// qu'un contenu long ne pousse jamais les onglets hors de la fenêtre.
+/// One tab page: its sections stacked inside a scrollable area, so that long
+/// content never pushes the tabs out of the window.
 fn page(sections: &[&GtkBox]) -> gtk4::ScrolledWindow {
     let column = GtkBox::new(Orientation::Vertical, 14);
     for section in sections {
@@ -1326,7 +1318,7 @@ fn title_bar(ctx: &Rc<Ctx>) -> GtkBox {
     title.set_xalign(0.0);
     bar.append(&title);
 
-    let refresh = Button::with_label("Rafraîchir");
+    let refresh = Button::with_label("Refresh");
     refresh.add_css_class("range");
     let owner = Rc::clone(ctx);
     refresh.connect_clicked(move |_| {
@@ -1336,7 +1328,7 @@ fn title_bar(ctx: &Rc<Ctx>) -> GtkBox {
             return;
         }
         owner.model.borrow_mut().series.clear();
-        owner.note("Rafraîchissement en cours…", false);
+        owner.note("Refreshing…", false);
         owner.reload_quotes();
     });
     bar.append(&refresh);
@@ -1365,8 +1357,8 @@ fn wire_search(ctx: &Rc<Ctx>) {
     });
 }
 
-/// Contrôles de réglage, construits une fois puis jamais reconstruits : leurs
-/// valeurs sont celles du fichier au moment de l'ouverture.
+/// Settings controls, built once then never rebuilt: their values are those of
+/// the file at opening time.
 struct Settings {
     panel: GtkBox,
     currency: gtk4::DropDown,
@@ -1396,7 +1388,7 @@ fn settings_panel(config: &Config, config_path: &str) -> Settings {
         .unwrap_or(0);
     currency.set_selected(u32::try_from(selected).unwrap_or(0));
 
-    // Indice 0 = « auto », puis 0 à 8 décimales.
+    // Index 0 = "auto", then 0 to 8 decimals.
     let decimal_labels: Vec<String> = std::iter::once("auto".to_owned())
         .chain((0..=8).map(|n: u8| n.to_string()))
         .collect();
@@ -1458,7 +1450,7 @@ fn settings_panel(config: &Config, config_path: &str) -> Settings {
     }
 }
 
-/// Remplit le panneau des réglages, groupe par groupe.
+/// Fills the settings panel in, group by group.
 #[allow(clippy::too_many_arguments)]
 fn settings_groups(
     grid: &GtkBox,
@@ -1471,60 +1463,60 @@ fn settings_groups(
     signal: &gtk4::SpinButton,
     terminal: &gtk4::Entry,
 ) {
-    // Trois groupes plutôt qu'une liste de huit lignes : on cherche un
-    // réglage par ce qu'il touche, pas par son rang dans la configuration.
+    // Three groups rather than a list of eight rows: a setting is looked up by
+    // what it affects, not by its rank in the configuration.
     for (heading, rows) in [
         (
-            "COTATIONS",
+            "QUOTES",
             vec![
                 (
-                    "Devise",
-                    "Monnaie dans laquelle les prix sont affichés",
+                    "Currency",
+                    "Currency the prices are displayed in",
                     currency.clone().upcast::<gtk4::Widget>(),
                 ),
                 (
-                    "Rafraîchissement",
-                    "Intervalle entre deux relevés, en secondes",
+                    "Refresh",
+                    "Interval between two readings, in seconds",
                     refresh.clone().upcast(),
                 ),
                 (
-                    "Rotation automatique",
-                    "Secondes entre deux pièces ; 0 pour la molette seule",
+                    "Automatic rotation",
+                    "Seconds between two coins; 0 for the scroll wheel alone",
                     cycle.clone().upcast(),
                 ),
             ],
         ),
         (
-            "AFFICHAGE",
+            "DISPLAY",
             vec![
                 (
-                    "Décimales",
-                    "« auto » s'adapte à l'ordre de grandeur du prix",
+                    "Decimals",
+                    "\"auto\" adapts to the order of magnitude of the price",
                     decimals.clone().upcast(),
                 ),
                 (
-                    "Courbe dans la barre",
-                    "Sparkline à côté du prix",
+                    "Curve in the bar",
+                    "Sparkline next to the price",
                     sparkline.clone().upcast(),
                 ),
                 (
-                    "Largeur de la courbe",
-                    "Nombre de caractères de la sparkline",
+                    "Curve width",
+                    "Number of characters of the sparkline",
                     sparkline_width.clone().upcast(),
                 ),
             ],
         ),
         (
-            "SYSTÈME",
+            "SYSTEM",
             vec![
                 (
-                    "Signal Waybar",
-                    "SIGRTMIN+n utilisé pour réveiller la barre",
+                    "Waybar signal",
+                    "SIGRTMIN+n used to wake the bar up",
                     signal.clone().upcast(),
                 ),
                 (
                     "Terminal",
-                    "Ouvert par le clic droit ; validez par Entrée",
+                    "Opened by the right click; confirm with Enter",
                     terminal.clone().upcast(),
                 ),
             ],
@@ -1545,9 +1537,8 @@ fn settings_groups(
     }
 }
 
-/// Une ligne de réglage : intitulé, explication d'une ligne, et le contrôle
-/// aligné à droite. L'explication évite d'avoir à deviner ce que fait un
-/// nombre nu comme « 8 ».
+/// One settings row: label, one-line explanation, and the control aligned to
+/// the right. The explanation saves guessing what a bare number like "8" does.
 fn setting_row(label: &str, hint: &str, control: &gtk4::Widget) -> GtkBox {
     let row = GtkBox::new(Orientation::Horizontal, 10);
     row.set_margin_top(4);
@@ -1580,7 +1571,7 @@ fn spin(min: f64, max: f64, step: f64, value: f64) -> gtk4::SpinButton {
     spin
 }
 
-/// Conversion sans perte pour les plages manipulées ici (secondes, largeurs).
+/// Lossless conversion for the ranges handled here (seconds, widths).
 fn as_f64_u64(value: u64) -> f64 {
     as_f64(usize::try_from(value).unwrap_or(usize::MAX))
 }
@@ -1599,7 +1590,7 @@ fn wire_settings(ctx: &Rc<Ctx>, settings: &Settings) {
         let written = owner.app().editor().set_currency(currency);
         owner.adopt(
             written,
-            &format!("Devise : {}", currency.as_str().to_uppercase()),
+            &format!("Currency: {}", currency.as_str().to_uppercase()),
         );
     });
 
@@ -1612,33 +1603,23 @@ fn wire_settings(ctx: &Rc<Ctx>, settings: &Settings) {
             u8::try_from(selected.saturating_sub(1)).ok()
         };
         let written = owner.app().editor().set_decimals(decimals);
-        owner.adopt(written, "Décimales enregistrées");
+        owner.adopt(written, "Decimals saved");
     });
 
-    wire_spin(
-        ctx,
-        &settings.refresh,
-        "refresh_interval",
-        "Intervalle enregistré",
-    );
-    wire_spin(
-        ctx,
-        &settings.cycle,
-        "cycle_interval",
-        "Rotation enregistrée",
-    );
+    wire_spin(ctx, &settings.refresh, "refresh_interval", "Interval saved");
+    wire_spin(ctx, &settings.cycle, "cycle_interval", "Rotation saved");
     wire_spin(
         ctx,
         &settings.sparkline_width,
         "sparkline_width",
-        "Largeur enregistrée",
+        "Width saved",
     );
-    wire_spin(ctx, &settings.signal, "waybar_signal", "Signal enregistré");
+    wire_spin(ctx, &settings.signal, "waybar_signal", "Signal saved");
 
     let owner = Rc::clone(ctx);
     settings.sparkline.connect_state_set(move |_, active| {
         let written = owner.app().editor().set_bool("sparkline", active);
-        owner.adopt(written, "Sparkline enregistrée");
+        owner.adopt(written, "Sparkline saved");
         glib::Propagation::Proceed
     });
 
@@ -1646,11 +1627,11 @@ fn wire_settings(ctx: &Rc<Ctx>, settings: &Settings) {
     settings.terminal.connect_activate(move |entry| {
         let value = entry.text().trim().to_owned();
         if value.is_empty() {
-            owner.note("Le terminal ne peut pas être vide", true);
+            owner.note("The terminal cannot be empty", true);
             return;
         }
         let written = owner.app().editor().set_string("terminal", &value);
-        owner.adopt(written, "Terminal enregistré");
+        owner.adopt(written, "Terminal saved");
     });
 }
 
@@ -1663,14 +1644,14 @@ fn wire_spin(ctx: &Rc<Ctx>, spin: &gtk4::SpinButton, key: &'static str, message:
     });
 }
 
-/// Identité visuelle d'une cryptomonnaie : son logo officiel si le cache le
-/// contient, sinon une pastille colorée portant son glyphe.
+/// Visual identity of a cryptocurrency: its official logo when the cache holds
+/// it, otherwise a coloured badge carrying its glyph.
 fn identity_widget(quote: &Quote, size: i32) -> gtk4::Widget {
     identity_of(quote.icon.as_deref(), &quote.symbol, size)
 }
 
-/// Même chose à partir des champs bruts, pour ce qui n'est pas une cotation —
-/// un résultat de recherche, par exemple.
+/// Same thing from the raw fields, for what is not a quote — a search result,
+/// for instance.
 fn identity_of(icon: Option<&str>, symbol: &str, size: i32) -> gtk4::Widget {
     if let Some(path) = icon {
         let image = gtk4::Image::from_file(path);
@@ -1689,7 +1670,7 @@ fn identity_of(icon: Option<&str>, symbol: &str, size: i32) -> gtk4::Widget {
     label.upcast()
 }
 
-/// Une classe CSS par cryptomonnaie affichée, portant sa couleur de marque.
+/// One CSS class per displayed cryptocurrency, carrying its brand colour.
 fn badge_css(quotes: &[Quote]) -> String {
     let mut sheet = String::new();
     for quote in quotes {
@@ -1706,7 +1687,7 @@ fn badge_css(quotes: &[Quote]) -> String {
     sheet
 }
 
-/// Réduit un symbole à un suffixe de classe CSS sûr.
+/// Reduces a symbol to a safe CSS class suffix.
 fn css_key(symbol: &str) -> String {
     symbol
         .chars()
@@ -1740,9 +1721,9 @@ fn header(quote: &Quote, currency: &Currency, decimals: format::Decimals) -> Gtk
     let changes = GtkBox::new(Orientation::Horizontal, 6);
     changes.set_margin_top(4);
     for (key, value) in [
-        ("1 h", quote.change_1h),
-        ("24 h", quote.change_24h),
-        ("7 j", quote.change_7d),
+        ("1h", quote.change_1h),
+        ("24h", quote.change_24h),
+        ("7d", quote.change_7d),
     ] {
         let cell = GtkBox::new(Orientation::Horizontal, 4);
         let name = Label::new(Some(key));
@@ -1769,9 +1750,8 @@ fn trend_class(value: Option<f64>) -> &'static str {
     }
 }
 
-/// Zone de dessin vectorielle : la courbe reste nette à toute résolution.
-/// Abscisse survolée, dans `0.0..=1.0`, partagée entre le contrôleur de souris
-/// et la fonction de dessin. `None` quand le pointeur est ailleurs.
+/// Hovered abscissa, within `0.0..=1.0`, shared between the mouse controller
+/// and the drawing function. `None` when the pointer is elsewhere.
 type Hover = Rc<Cell<Option<f64>>>;
 
 fn chart(
@@ -1801,11 +1781,11 @@ fn chart(
     area
 }
 
-/// Trace la courbe dans un contexte Cairo quelconque.
+/// Draws the curve into any Cairo context.
 ///
-/// La fonction ne dépend pas du widget : c'est elle qui dessine à l'écran et
-/// qui remplit la surface image de l'export PNG, ce qui garantit que le
-/// fichier exporté est exactement ce que l'on voit.
+/// The function does not depend on the widget: it is the one drawing on screen
+/// and filling the image surface of the PNG export, which guarantees the
+/// exported file is exactly what one sees.
 #[allow(clippy::too_many_arguments)]
 fn draw_series(
     ctx: &gtk4::cairo::Context,
@@ -1822,7 +1802,7 @@ fn draw_series(
     }
     let (min, max) = crate::render::braille::bounds(&usable);
     let span = max - min;
-    // Le trait ne doit pas être rogné par les bords de la zone.
+    // The stroke must not be clipped by the edges of the area.
     let inset = 3.0;
     let plot_height = (area_height - inset * 2.0).max(1.0);
     let last = usable.len().saturating_sub(1);
@@ -1832,8 +1812,8 @@ fn draw_series(
         area_width / as_f64(last)
     };
 
-    // Lignes de repère : un gris neutre à faible opacité se voit sur un
-    // fond clair comme sur un fond sombre, sans concurrencer la courbe.
+    // Guide lines: a neutral grey at low opacity shows on a light background
+    // as well as on a dark one, without competing with the curve.
     if detailed {
         ctx.set_source_rgba(0.5, 0.5, 0.5, 0.18);
         ctx.set_line_width(1.0);
@@ -1846,8 +1826,8 @@ fn draw_series(
         let _ = ctx.stroke();
     }
 
-    // La polyligne est calculée une fois puis réutilisée pour l'aire, le
-    // trait et le point terminal.
+    // The polyline is computed once then reused for the area, the stroke and
+    // the end point.
     let polyline: Vec<(f64, f64)> = usable
         .iter()
         .enumerate()
@@ -1864,8 +1844,8 @@ fn draw_series(
         (0.90, 0.28, 0.30)
     };
 
-    // Aire sous la courbe : un dégradé qui s'éteint vers le bas, pour
-    // donner du volume sans masquer les lignes de repère.
+    // Area under the curve: a gradient fading downwards, to give volume
+    // without hiding the guide lines.
     ctx.move_to(0.0, area_height);
     for (x, y) in &polyline {
         ctx.line_to(*x, *y);
@@ -1892,8 +1872,8 @@ fn draw_series(
     ctx.set_line_cap(gtk4::cairo::LineCap::Round);
     let _ = ctx.stroke();
 
-    // Repère de survol : un trait vertical et un point sur la courbe, à
-    // l'échantillon le plus proche du pointeur.
+    // Hover marker: a vertical stroke and a dot on the curve, at the sample
+    // closest to the pointer.
     if let Some((x, y)) = hover
         .map(|ratio| sample_at(usable.len(), ratio))
         .and_then(|index| polyline.get(index))
@@ -1909,7 +1889,7 @@ fn draw_series(
         let _ = ctx.fill();
     }
 
-    // Point terminal : l'œil trouve immédiatement le cours actuel.
+    // End point: the eye finds the current price immediately.
     if let Some((x, y)) = polyline.last().filter(|_| detailed) {
         let x = x.min(area_width - 4.0);
         ctx.set_source_rgba(red, green, blue, 0.25);
@@ -1921,48 +1901,48 @@ fn draw_series(
     }
 }
 
-/// Indice de l'échantillon situé à l'abscisse relative donnée.
+/// Index of the sample sitting at the given relative abscissa.
 fn sample_at(len: usize, ratio: f64) -> usize {
     let last = len.saturating_sub(1);
     let index = (ratio.clamp(0.0, 1.0) * as_f64(last)).round();
-    // `as` sur un flottant borné et positif : la conversion est exacte.
+    // `as` on a bounded, positive float: the conversion is exact.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let index = index as usize;
     index.min(last)
 }
 
-/// Âge de l'échantillon d'indice donné, exprimé en clair.
+/// Age of the sample at the given index, spelled out.
 ///
-/// Les séries ne portent pas d'horodatage : la position dans la courbe suffit,
-/// puisque les points d'une plage sont régulièrement espacés.
+/// The series carry no timestamp: the position in the curve is enough, since
+/// the points of a range are evenly spaced.
 fn age_at(range: Range, len: usize, index: usize) -> String {
     let last = len.saturating_sub(1);
     if last == 0 {
-        return "maintenant".to_owned();
+        return "now".to_owned();
     }
     let behind = as_f64(last.saturating_sub(index)) / as_f64(last);
     let minutes = behind * range.span_minutes();
     if minutes < 1.0 {
-        "maintenant".to_owned()
+        "now".to_owned()
     } else if minutes < 60.0 {
-        format!("il y a {} min", minutes.round())
+        format!("{} min ago", minutes.round())
     } else if minutes < 1_440.0 {
-        format!("il y a {} h", (minutes / 60.0).round())
+        format!("{} h ago", (minutes / 60.0).round())
     } else {
-        format!("il y a {} j", (minutes / 1_440.0).round())
+        format!("{} d ago", (minutes / 1_440.0).round())
     }
 }
 
-/// Chemin d'un export, dans le répertoire personnel.
+/// Path of an export, in the home directory.
 fn export_path(symbol: &str, range: Range, extension: &str) -> anyhow::Result<std::path::PathBuf> {
     let name = format!("cryptobar-{}-{}.{extension}", symbol, range.slug());
     Ok(crate::paths::export_dir()?.join(name))
 }
 
-/// Écrit la courbe telle qu'elle est affichée dans un fichier PNG.
+/// Writes the curve as displayed into a PNG file.
 ///
 /// # Errors
-/// Échoue si la surface Cairo ne peut être créée ou si l'écriture échoue.
+/// Fails when the Cairo surface cannot be created or when the write fails.
 fn export_png(
     points: &[f64],
     positive: bool,
@@ -1972,14 +1952,14 @@ fn export_png(
     use anyhow::Context as _;
 
     let path = export_path(symbol, range, "png")?;
-    // Deux fois la taille écran : l'image reste nette une fois agrandie.
+    // Twice the screen size: the image stays sharp once enlarged.
     let width = CHART_WIDTH.saturating_mul(2);
     let height = CHART_HEIGHT.saturating_mul(2);
     let surface = gtk4::cairo::ImageSurface::create(gtk4::cairo::Format::ARgb32, width, height)
-        .context("surface d'export indisponible")?;
-    let ctx = gtk4::cairo::Context::new(&surface).context("contexte d'export indisponible")?;
-    // Fond opaque : un PNG transparent serait illisible dans la plupart des
-    // visionneuses, qui l'affichent sur blanc.
+        .context("export surface unavailable")?;
+    let ctx = gtk4::cairo::Context::new(&surface).context("export context unavailable")?;
+    // Opaque background: a transparent PNG would be unreadable in most
+    // viewers, which show it on white.
     ctx.set_source_rgb(0.07, 0.08, 0.10);
     let _ = ctx.paint();
     draw_series(
@@ -1993,22 +1973,22 @@ fn export_png(
     );
     drop(ctx);
     let mut file = std::fs::File::create(&path)
-        .with_context(|| format!("écriture impossible dans {}", path.display()))?;
+        .with_context(|| format!("cannot write to {}", path.display()))?;
     surface
         .write_to_png(&mut file)
-        .context("encodage PNG impossible")?;
+        .context("PNG encoding failed")?;
     Ok(path)
 }
 
-/// Écrit les points de la courbe dans un fichier CSV.
+/// Writes the points of the curve into a CSV file.
 ///
 /// # Errors
-/// Échoue si l'écriture échoue.
+/// Fails when the write fails.
 fn export_csv(points: &[f64], symbol: &str, range: Range) -> anyhow::Result<std::path::PathBuf> {
     use anyhow::Context as _;
 
     let path = export_path(symbol, range, "csv")?;
-    let mut out = String::from("index,age_minutes,prix\n");
+    let mut out = String::from("index,age_minutes,price\n");
     let last = points.len().saturating_sub(1);
     for (index, value) in points.iter().enumerate() {
         let behind = if last == 0 {
@@ -2016,38 +1996,35 @@ fn export_csv(points: &[f64], symbol: &str, range: Range) -> anyhow::Result<std:
         } else {
             as_f64(last.saturating_sub(index)) / as_f64(last) * range.span_minutes()
         };
-        // Point décimal et séparateur virgule : c'est ce qu'attendent les
-        // tableurs, contrairement à l'affichage francisé de la fenêtre.
         let _ = writeln!(out, "{index},{behind:.0},{value}");
     }
-    std::fs::write(&path, out)
-        .with_context(|| format!("écriture impossible dans {}", path.display()))?;
+    std::fs::write(&path, out).with_context(|| format!("cannot write to {}", path.display()))?;
     Ok(path)
 }
 
-/// Carte des données de marché, ou `None` si l'API n'en a publié aucune.
+/// Market data card, or `None` when the API published none.
 fn stats_card(quote: &Quote, currency: &Currency, decimals: format::Decimals) -> Option<GtkBox> {
     let mut rows: Vec<(String, String, &'static str)> = Vec::new();
     if let Some(rank) = quote.rank {
-        rows.push(("Rang".to_owned(), format!("n° {rank}"), "flat"));
+        rows.push(("Rank".to_owned(), format!("#{rank}"), "flat"));
     }
     if let Some(cap) = quote.market_cap {
         rows.push((
-            "Capitalisation".to_owned(),
+            "Market cap".to_owned(),
             format::compact(cap, currency),
             "flat",
         ));
     }
     if let Some(volume) = quote.volume_24h {
         rows.push((
-            "Volume 24 h".to_owned(),
+            "24 h volume".to_owned(),
             format::compact(volume, currency),
             "flat",
         ));
     }
     if let Some(ath) = quote.ath.filter(|ath| *ath > 0.0) {
-        // L'écart au sommet historique se lit mieux que le sommet seul : il
-        // situe le cours actuel dans l'histoire de la pièce.
+        // The gap to the all-time high reads better than the high alone: it
+        // places the current price in the history of the coin.
         let gap = (quote.price - ath) / ath * 100.0;
         let date = quote
             .ath_date
@@ -2056,7 +2033,7 @@ fn stats_card(quote: &Quote, currency: &Currency, decimals: format::Decimals) ->
             .map(|date| format!(" · {date}"))
             .unwrap_or_default();
         rows.push((
-            "Sommet historique".to_owned(),
+            "All-time high".to_owned(),
             format!(
                 "{}  ({}){date}",
                 format::price(ath, currency, decimals),
@@ -2071,7 +2048,7 @@ fn stats_card(quote: &Quote, currency: &Currency, decimals: format::Decimals) ->
 
     let card = GtkBox::new(Orientation::Vertical, 8);
     card.add_css_class("card");
-    let title = Label::new(Some("MARCHÉ"));
+    let title = Label::new(Some("MARKET"));
     title.add_css_class("title");
     title.set_xalign(0.0);
     card.append(&title);
@@ -2091,7 +2068,7 @@ fn stats_card(quote: &Quote, currency: &Currency, decimals: format::Decimals) ->
     Some(card)
 }
 
-/// Bandeau du portefeuille : anneau de répartition, total et sous-titre.
+/// Portfolio banner: split ring, total and subtitle.
 fn wallet_hero(
     wallet: Option<&Portfolio>,
     watched: usize,
@@ -2126,7 +2103,7 @@ fn wallet_hero(
     if let Some(gain) = wallet.and_then(|wallet| wallet.change_24h) {
         let sign = if gain >= 0.0 { "+" } else { "−" };
         let line = Label::new(Some(&format!(
-            "{sign}{} sur 24 h",
+            "{sign}{} over 24 h",
             format::price(gain.abs(), currency, decimals)
         )));
         line.add_css_class(trend_class(wallet.and_then(|wallet| wallet.change_24h_pct)));
@@ -2135,10 +2112,10 @@ fn wallet_hero(
     }
 
     let counts = match (wallet.map_or(0, |wallet| wallet.positions.len()), watched) {
-        (0, 0) => "Ajoutez une adresse publique pour voir son solde".to_owned(),
-        (0, watched) => format!("{watched} adresse(s) suivie(s), aucun solde"),
+        (0, 0) => "Add a public address to see its balance".to_owned(),
+        (0, watched) => format!("{watched} watched address(es), no balance"),
         (positions, 0) => format!("{positions} position(s)"),
-        (positions, watched) => format!("{positions} position(s) · {watched} adresse(s) suivie(s)"),
+        (positions, watched) => format!("{positions} position(s) · {watched} watched address(es)"),
     };
     let subtitle = Label::new(Some(&counts));
     subtitle.add_css_class("muted");
@@ -2149,7 +2126,7 @@ fn wallet_hero(
     hero
 }
 
-/// Ligne d'une position : pastille de marque, symbole, quantité, valeur, part.
+/// One position row: brand badge, symbol, quantity, value, share.
 fn position_row(
     position: &portfolio::Position,
     currency: &Currency,
@@ -2179,9 +2156,7 @@ fn position_row(
     value.set_xalign(1.0);
     row.append(&value);
 
-    let share = Label::new(Some(
-        &format!("{:.1} %", position.share * 100.0).replace('.', ","),
-    ));
+    let share = Label::new(Some(&format!("{:.1} %", position.share * 100.0)));
     share.add_css_class("chip");
     share.add_css_class("flat");
     share.set_width_chars(7);
@@ -2189,7 +2164,7 @@ fn position_row(
     row
 }
 
-/// Anneau de répartition du portefeuille, une part par position.
+/// Split ring of the portfolio, one slice per position.
 fn donut(wallet: Option<&Portfolio>) -> gtk4::DrawingArea {
     const SIZE: i32 = 86;
     let slices: Vec<(f64, String)> = wallet
@@ -2212,16 +2187,16 @@ fn donut(wallet: Option<&Portfolio>) -> gtk4::DrawingArea {
         let radius = center - 8.0;
         ctx.set_line_width(11.0);
 
-        // Piste de fond : l'anneau existe même sans position, ce qui évite un
-        // trou visuel dans la carte quand le portefeuille est vide.
+        // Background track: the ring exists even without a position, which
+        // avoids a visual hole in the card when the portfolio is empty.
         ctx.set_source_rgba(0.5, 0.5, 0.5, 0.14);
         ctx.arc(center, center, radius, 0.0, std::f64::consts::TAU);
         let _ = ctx.stroke();
 
         let mut start = -std::f64::consts::FRAC_PI_2;
         for (share, color) in &slices {
-            // Un fin interstice sépare les parts : deux couleurs proches
-            // restent distinguables.
+            // A thin gap separates the slices: two close colours stay
+            // distinguishable.
             let sweep = (share.clamp(0.0, 1.0) * std::f64::consts::TAU - 0.04).max(0.01);
             let (red, green, blue) = rgb(color);
             ctx.set_source_rgb(red, green, blue);
@@ -2234,9 +2209,9 @@ fn donut(wallet: Option<&Portfolio>) -> gtk4::DrawingArea {
     area
 }
 
-/// Décompose une couleur `#rrggbb` en composantes `0.0..=1.0`.
+/// Splits a `#rrggbb` colour into `0.0..=1.0` components.
 ///
-/// Une chaîne inattendue donne un gris neutre : l'anneau reste lisible.
+/// An unexpected string yields a neutral grey: the ring stays readable.
 fn rgb(color: &str) -> (f64, f64, f64) {
     let parse = |range: std::ops::Range<usize>| {
         color
@@ -2250,17 +2225,25 @@ fn rgb(color: &str) -> (f64, f64, f64) {
     }
 }
 
-/// Lit un nombre saisi à la française comme à l'anglaise.
+/// Reads a number typed the English way as well as the French way.
+///
+/// A lone comma is a decimal point; a comma next to a point is a thousands
+/// separator and is dropped.
 fn parse_number(text: &str) -> Option<f64> {
-    text.trim()
-        .replace(',', ".")
-        .replace(['\u{202f}', '\u{a0}', ' '], "")
+    let compact = text.replace(['\u{202f}', '\u{a0}', ' '], "");
+    let normalised = if compact.contains('.') {
+        compact.replace(',', "")
+    } else {
+        compact.replace(',', ".")
+    };
+    normalised
+        .trim()
         .parse::<f64>()
         .ok()
         .filter(|value| value.is_finite())
 }
 
-/// Contenu numérique d'un champ, ou `None` s'il est vide ou illisible.
+/// Numeric content of a field, or `None` when it is empty or unreadable.
 fn field(entry: &gtk4::Entry) -> Option<f64> {
     let text = entry.text().to_string();
     if text.trim().is_empty() {
@@ -2269,7 +2252,7 @@ fn field(entry: &gtk4::Entry) -> Option<f64> {
     parse_number(&text)
 }
 
-/// Description lisible d'une alerte.
+/// Readable description of an alert.
 fn alert_caption(
     alert: &crate::config::Alert,
     currency: &Currency,
@@ -2278,24 +2261,27 @@ fn alert_caption(
     let mut parts = Vec::new();
     if let Some(above) = alert.above {
         parts.push(format!(
-            "au-dessus de {}",
+            "above {}",
             format::price(above, currency, decimals)
         ));
     }
     if let Some(below) = alert.below {
-        parts.push(format!("sous {}", format::price(below, currency, decimals)));
+        parts.push(format!(
+            "below {}",
+            format::price(below, currency, decimals)
+        ));
     }
     if let Some(change) = alert.change_pct {
-        parts.push(format!("variation 24 h ≥ {change} %").replace('.', ","));
+        parts.push(format!("24 h change ≥ {change} %"));
     }
     let mut caption = parts.join(" · ");
     if !alert.enabled {
-        caption.push_str("  (désactivée)");
+        caption.push_str("  (disabled)");
     }
     caption
 }
 
-/// Branche la lecture au survol sur la zone de dessin.
+/// Wires the hover readout onto the drawing area.
 #[allow(clippy::too_many_arguments)]
 fn attach_hover(
     area: &gtk4::DrawingArea,
@@ -2347,7 +2333,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn lechantillon_survole_reste_dans_les_bornes() {
+    fn the_hovered_sample_stays_within_the_bounds() {
         assert_eq!(sample_at(10, 0.0), 0);
         assert_eq!(sample_at(10, 1.0), 9);
         assert_eq!(sample_at(10, 2.0), 9);
@@ -2355,38 +2341,39 @@ mod tests {
     }
 
     #[test]
-    fn lage_se_lit_dans_lunite_qui_convient() {
-        assert_eq!(age_at(Range::D7, 8, 7), "maintenant");
-        assert_eq!(age_at(Range::H1, 61, 0), "il y a 1 h");
-        assert_eq!(age_at(Range::H1, 3, 1), "il y a 30 min");
-        assert_eq!(age_at(Range::H24, 5, 3), "il y a 6 h");
-        assert_eq!(age_at(Range::D7, 8, 0), "il y a 7 j");
+    fn the_age_reads_in_the_fitting_unit() {
+        assert_eq!(age_at(Range::D7, 8, 7), "now");
+        assert_eq!(age_at(Range::H1, 61, 0), "1 h ago");
+        assert_eq!(age_at(Range::H1, 3, 1), "30 min ago");
+        assert_eq!(age_at(Range::H24, 5, 3), "6 h ago");
+        assert_eq!(age_at(Range::D7, 8, 0), "7 d ago");
     }
 
     #[test]
-    fn une_quantite_se_saisit_a_la_francaise_comme_a_langlaise() {
+    fn a_quantity_is_typed_the_english_way_as_well_as_the_french_way() {
         assert_eq!(parse_number("0,25"), Some(0.25));
         assert_eq!(parse_number(" 1 234.5 "), Some(1234.5));
+        assert_eq!(parse_number("1,234.5"), Some(1234.5));
         assert_eq!(parse_number("abc"), None);
         assert_eq!(parse_number(""), None);
     }
 
     #[test]
-    fn une_couleur_illisible_donne_un_gris() {
+    fn an_unreadable_colour_yields_a_grey() {
         assert_eq!(rgb("#ffffff"), (1.0, 1.0, 1.0));
         assert_eq!(rgb("#000000"), (0.0, 0.0, 0.0));
-        assert_eq!(rgb("bleu"), (0.5, 0.5, 0.5));
+        assert_eq!(rgb("blue"), (0.5, 0.5, 0.5));
     }
 
     #[test]
-    fn le_libelle_dalerte_decrit_toutes_les_conditions() {
+    fn the_alert_caption_describes_every_condition() {
         let config = crate::config::Config::parse(
             "coins = [\"bitcoin\"]\n[[alerts]]\ncoin = \"bitcoin\"\nabove = 100000\nchange_pct = 5\n",
         )
-        .expect("configuration valide");
-        let alert = config.alerts.first().expect("une alerte");
+        .expect("valid configuration");
+        let alert = config.alerts.first().expect("one alert");
         let caption = alert_caption(alert, &Currency::default(), format::Decimals::Auto);
-        assert!(caption.contains("au-dessus"), "{caption}");
+        assert!(caption.contains("above"), "{caption}");
         assert!(caption.contains('%'), "{caption}");
     }
 }

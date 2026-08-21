@@ -1,5 +1,5 @@
-//! Accès aux données de marché. Le réseau est toujours derrière le trait
-//! [`PriceSource`], ce qui permet de tester tout le reste sans sortir de la machine.
+//! Market data access. The network always sits behind the [`PriceSource`]
+//! trait, which lets everything else be tested without leaving the machine.
 
 pub mod cache;
 pub mod coingecko;
@@ -9,13 +9,13 @@ use crate::model::{CoinId, Currency, Quote, Range, Series};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SourceError {
-    #[error("erreur réseau : {0}")]
+    #[error("network error: {0}")]
     Http(String),
-    #[error("quota de l'API dépassé")]
+    #[error("API quota exceeded")]
     RateLimited { retry_after: Option<u64> },
-    #[error("réponse illisible : {0}")]
+    #[error("unreadable response: {0}")]
     Decode(String),
-    #[error("réponse inattendue : {0}")]
+    #[error("unexpected response: {0}")]
     Payload(String),
 }
 
@@ -24,28 +24,28 @@ pub struct SearchHit {
     pub id: CoinId,
     pub symbol: String,
     pub name: String,
-    /// URL de la vignette officielle, telle que publiée par la source.
+    /// Official thumbnail URL, as published by the source.
     pub image: Option<String>,
-    /// Chemin local du logo, renseigné après passage par le cache d'icônes.
+    /// Local path of the logo, filled in after going through the icon cache.
     pub icon: Option<String>,
 }
 
 pub trait PriceSource {
-    /// Cotations de toutes les cryptomonnaies demandées, en une seule requête.
+    /// Quotes for every requested cryptocurrency, in a single request.
     ///
     /// # Errors
-    /// Voir [`SourceError`].
+    /// See [`SourceError`].
     fn markets(&self, ids: &[CoinId], vs: &Currency) -> Result<Vec<Quote>, SourceError>;
 
-    /// Série de prix d'une cryptomonnaie sur une plage donnée.
+    /// Price series of a cryptocurrency over a given range.
     ///
     /// # Errors
-    /// Voir [`SourceError`].
+    /// See [`SourceError`].
     fn series(&self, id: &CoinId, range: Range, vs: &Currency) -> Result<Series, SourceError>;
 
-    /// Recherche d'identifiants par terme libre.
+    /// Free-text search for ids.
     ///
     /// # Errors
-    /// Voir [`SourceError`].
+    /// See [`SourceError`].
     fn search(&self, term: &str) -> Result<Vec<SearchHit>, SourceError>;
 }
