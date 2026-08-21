@@ -22,3 +22,5 @@ pub mod model;
 pub mod paths;
 pub mod render;
 pub mod source;
+pub mod state;
+pub mod waybar_signal;

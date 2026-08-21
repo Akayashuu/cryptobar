@@ -22,6 +22,7 @@ thiserror = "2"
 toml = "0.9"
 ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "json"] }
 gtk4 = { version = "0.9", optional = true }
+rustix-libc-wrappers = { version = "0.1.1", features = ["process"] }
 
 [dev-dependencies]
 assert_cmd = "2"
