@@ -62,6 +62,31 @@ window { background-color: @theme_bg_color; }
 }
 .hero { padding: 20px 22px; }
 
+/* Onglets : des pastilles à plat, dans la même famille que les boutons de
+   plage du graphique, plutôt que la barre d'onglets par défaut. GTK peint ses
+   boutons avec un `background-image` : le neutraliser est nécessaire, la seule
+   `background-color` ne suffirait pas. */
+.tabs { background: none; padding: 0; }
+.tabs button {
+  background-image: none;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  min-height: 0;
+  font-weight: 600;
+  opacity: 0.5;
+}
+.tabs button:hover {
+  background-color: alpha(@theme_fg_color, 0.06);
+  opacity: 0.8;
+}
+.tabs button:checked {
+  background-color: alpha(@theme_fg_color, 0.12);
+  opacity: 1;
+}
+
 .badge {
   border-radius: 999px;
   font-weight: 800;
@@ -192,10 +217,13 @@ pub fn show(app: App, quotes: Vec<Quote>, stale: bool) -> anyhow::Result<()> {
         // à `load_from_string` qui exigerait GTK 4.12.
         provider.load_from_data(CSS);
         if let Some(display) = gtk4::gdk::Display::default() {
+            // Au-dessus de `~/.config/gtk-4.0/gtk.css`, chargé par GTK en
+            // priorité « user » : un thème de bureau qui repeint tous les
+            // boutons ne doit pas décider de l'allure de cette fenêtre.
             gtk4::style_context_add_provider_for_display(
                 &display,
                 &provider,
-                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
+                gtk4::STYLE_PROVIDER_PRIORITY_USER,
             );
         }
     });
@@ -1131,7 +1159,7 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
         gtk4::style_context_add_provider_for_display(
             &display,
             &palette,
-            gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION.saturating_add(1),
+            gtk4::STYLE_PROVIDER_PRIORITY_USER.saturating_add(1),
         );
     }
 
@@ -1156,6 +1184,30 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
     wire_settings(&ctx, &settings);
     drain(&ctx, rx);
 
+    // Quatre pages plutôt qu'une colonne interminable : le portefeuille et
+    // les réglages se trouvaient auparavant sous la ligne de flottaison, et
+    // rien n'indiquait qu'il fallait faire défiler pour les atteindre.
+    let stack = gtk4::Stack::new();
+    stack.set_transition_type(gtk4::StackTransitionType::Crossfade);
+    stack.set_vexpand(true);
+    stack.add_titled(
+        &page(&[&widgets.detail, &widgets.list]),
+        Some("cours"),
+        "Cours",
+    );
+    stack.add_titled(
+        &page(&[&widgets.wallet]),
+        Some("portefeuille"),
+        "Portefeuille",
+    );
+    stack.add_titled(&page(&[&widgets.alerts]), Some("alertes"), "Alertes");
+    stack.add_titled(&page(&[&settings.panel]), Some("reglages"), "Réglages");
+
+    let tabs = gtk4::StackSwitcher::new();
+    tabs.set_stack(Some(&stack));
+    tabs.set_halign(Align::Fill);
+    tabs.add_css_class("tabs");
+
     let content = GtkBox::new(Orientation::Vertical, 14);
     content.set_margin_top(18);
     content.set_margin_bottom(18);
@@ -1164,17 +1216,9 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
     content.append(&title_bar(&ctx));
     content.append(&widgets.search);
     content.append(&widgets.results);
-    content.append(&widgets.detail);
-    content.append(&widgets.list);
-    content.append(&widgets.wallet);
-    content.append(&widgets.alerts);
-    content.append(&settings.expander);
+    content.append(&tabs);
+    content.append(&stack);
     content.append(&widgets.status);
-
-    let scroller = gtk4::ScrolledWindow::new();
-    scroller.set_hscrollbar_policy(gtk4::PolicyType::Never);
-    scroller.set_child(Some(&content));
-    scroller.set_vexpand(true);
 
     let window = ApplicationWindow::builder()
         .application(gtk_app)
@@ -1182,7 +1226,7 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
         .default_width(620)
         .default_height(920)
         .resizable(true)
-        .child(&scroller)
+        .child(&content)
         .build();
 
     // Échap ferme la fenêtre : c'est le réflexe attendu d'un popup. La barre
@@ -1260,6 +1304,20 @@ fn drain(ctx: &Rc<Ctx>, rx: Receiver<Msg>) {
 }
 
 /// Ligne de titre : identité de la fenêtre et rafraîchissement manuel.
+/// Une page d'onglet : ses sections empilées dans une zone défilante, pour
+/// qu'un contenu long ne pousse jamais les onglets hors de la fenêtre.
+fn page(sections: &[&GtkBox]) -> gtk4::ScrolledWindow {
+    let column = GtkBox::new(Orientation::Vertical, 14);
+    for section in sections {
+        column.append(*section);
+    }
+    let scroller = gtk4::ScrolledWindow::new();
+    scroller.set_hscrollbar_policy(gtk4::PolicyType::Never);
+    scroller.set_child(Some(&column));
+    scroller.set_vexpand(true);
+    scroller
+}
+
 fn title_bar(ctx: &Rc<Ctx>) -> GtkBox {
     let bar = GtkBox::new(Orientation::Horizontal, 8);
     let title = Label::new(Some("CRYPTOBAR"));
@@ -1310,7 +1368,7 @@ fn wire_search(ctx: &Rc<Ctx>) {
 /// Contrôles de réglage, construits une fois puis jamais reconstruits : leurs
 /// valeurs sont celles du fichier au moment de l'ouverture.
 struct Settings {
-    expander: gtk4::Expander,
+    panel: GtkBox,
     currency: gtk4::DropDown,
     decimals: gtk4::DropDown,
     refresh: gtk4::SpinButton,
@@ -1387,11 +1445,8 @@ fn settings_panel(config: &Config, config_path: &str) -> Settings {
     path.set_ellipsize(gtk4::pango::EllipsizeMode::Middle);
     grid.append(&path);
 
-    let expander = gtk4::Expander::new(Some("Réglages"));
-    expander.set_child(Some(&grid));
-
     Settings {
-        expander,
+        panel: grid,
         currency,
         decimals,
         refresh,

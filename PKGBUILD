@@ -1,6 +1,6 @@
 # Maintainer: Akayashuu <https://github.com/Akayashuu>
 pkgname=cryptobar
-pkgver=0.2.0
+pkgver=0.2.1
 pkgrel=1
 pkgdesc="Cours de cryptomonnaies pour Quickshell/Waybar, le terminal et le bureau"
 arch=('x86_64' 'aarch64')

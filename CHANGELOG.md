@@ -3,6 +3,21 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le
 versionnage sémantique.
 
+## [0.2.1] — 2026-08-22
+
+### Modifié
+
+- La fenêtre se navigue par onglets — Cours, Portefeuille, Alertes, Réglages —
+  au lieu d'une colonne unique où le portefeuille et les réglages tombaient
+  sous la ligne de flottaison, sans rien qui signale qu'il fallait faire
+  défiler pour les atteindre.
+
+### Corrigé
+
+- La feuille de style de la fenêtre est chargée au-dessus de
+  `~/.config/gtk-4.0/gtk.css` : un thème de bureau qui repeint tous les boutons
+  ne décide plus de l'allure des onglets.
+
 ## [0.2.0] — 2026-08-22
 
 ### Ajouté
