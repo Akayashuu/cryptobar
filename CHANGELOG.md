@@ -3,23 +3,41 @@
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) et le
 versionnage sémantique.
 
-## [Non publié]
+## [0.2.0] — 2026-08-22
 
 ### Ajouté
 
+- Portefeuille en lecture seule suivi par **adresse publique** : soldes lus sur
+  mempool.space (Bitcoin), `ethereum-rpc.publicnode.com` (Ethereum) et
+  `api.mainnet-beta.solana.com` (Solana), sans clé d'API. Une clé privée ou une
+  phrase de récupération est refusée avant toute écriture sur le disque.
+- Commande `cryptobar portfolio` : valorisation, parts et gain sur 24 h dans le
+  terminal.
+- Alertes de prix (`[[alerts]]`) sur seuil haut, seuil bas et amplitude de
+  variation sur 24 h, avec réarmement au retour sous le seuil et notification
+  de bureau depuis `cryptobar bar --watch`.
+- Commande `cryptobar select <N>` pour afficher une cryptomonnaie donnée.
+- Fenêtre GTK4 complète : recherche de cryptomonnaies avec leur logo, courbe
+  sur cinq plages, export PNG et CSV, liste des cryptomonnaies suivies,
+  portefeuille, alertes et réglages groupés — toute la configuration se modifie
+  depuis la fenêtre, en préservant commentaires et ordre du fichier TOML.
+- Logos officiels des cryptomonnaies, mis en cache sur disque, dans la fenêtre
+  comme dans les widgets Quickshell.
 - Intégration Quickshell pour dots-hyprland (`quickshell/`) : service singleton
   partagé par tous les écrans, widget horizontal, widget vertical, infobulle,
   installateur idempotent.
 - `cryptobar bar --markup none` : sortie sans balisage Pango pour les barres
   qui affichent du texte brut.
-- Champs `symbol`, `price`, `percent` et `sparkline` dans la ligne JSON, pour
-  les mises en page trop étroites pour le champ `text`.
-- Champs `trend`, `stale` et `coins` dans la ligne JSON : toutes les
-  cryptomonnaies suivies, avec leur série sous-échantillonnée et normalisée
-  dans `[0, 1]`, prête à tracer sans calcul côté barre.
-- Widgets Quickshell redessinés : courbe dessinée au canevas, icône de
-  tendance, indicateur de rafraîchissement, et panneau natif listant toutes
-  les cryptomonnaies au lieu d'un bloc de texte monospace.
+- Ligne JSON étendue : `symbol`, `price`, `percent`, `sparkline`, `trend`,
+  `stale`, `icon`, `glyph`, `color`, `foreground`, `coins` (toutes les
+  cryptomonnaies suivies avec leur série normalisée dans `[0, 1]`), `alerts` et
+  `portfolio`.
+
+### Modifié
+
+- Les widgets Quickshell dessinent la courbe au canevas et affichent un panneau
+  natif au lieu d'un bloc de texte monospace. La barre verticale est réduite au
+  logo, au prix et à la variation.
 
 ## [0.1.0] — 2026-08-21
 

@@ -24,11 +24,11 @@ recâble pas deux fois. Il sauvegarde chaque fichier amont modifié en
 
 | Fichier | Rôle |
 | --- | --- |
-| `services/Crypto.qml` | Singleton : un seul `cryptobar bar --watch` pour toute la session, quel que soit le nombre d'écrans. Expose `text`, `symbol`, `price`, `percent`, `sparkline`, `tooltip`, `trend`, `stale`. |
+| `services/Crypto.qml` | Singleton : un seul `cryptobar bar --watch` pour toute la session, quel que soit le nombre d'écrans. Expose `text`, `symbol`, `price`, `percent`, `sparkline`, `tooltip`, `trend`, `stale`, `alerts` et `portfolio`. |
 | `modules/ii/bar/CryptoSparkline.qml` | Canevas de la courbe sur sept jours, trait plein sous un aplat dégradé. |
-| `modules/ii/bar/CryptoWidget.qml` | Barre horizontale : icône, symbole, prix, courbe et variation. |
-| `modules/ii/bar/CryptoWidgetPopup.qml` | Panneau commun aux deux orientations : une ligne par cryptomonnaie. |
-| `modules/ii/verticalBar/VerticalCryptoWidget.qml` | Barre verticale : symbole, prix, courbe et variation empilés. |
+| `modules/ii/bar/CryptoWidget.qml` | Barre horizontale : logo, symbole, prix, courbe et variation, fond teinté par la tendance, pastille d'alerte et transition au changement de pièce. |
+| `modules/ii/bar/CryptoWidgetPopup.qml` | Panneau commun aux deux orientations : une ligne par cryptomonnaie, plus les alertes franchies et le portefeuille valorisé. |
+| `modules/ii/verticalBar/VerticalCryptoWidget.qml` | Barre verticale : logo, prix et variation, volontairement dépouillés — la largeur disponible ne pardonne pas l'encombrement. |
 
 ## Interactions
 

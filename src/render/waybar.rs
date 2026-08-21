@@ -116,7 +116,7 @@ pub struct Module {
     /// Alertes franchies à cet instant. Vide la plupart du temps : c'est ce
     /// qui permet à la barre d'allumer un indicateur sans rien recalculer.
     pub alerts: Vec<AlertRow>,
-    /// Portefeuille valorisé, `null` si aucune quantité n'est déclarée.
+    /// Portefeuille valorisé, `null` si aucune adresse suivie n'a de solde.
     pub portfolio: Option<PortfolioSummary>,
 }
 

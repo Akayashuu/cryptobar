@@ -28,7 +28,10 @@ install -Dm644 hypr/cryptobar.conf "$CONFIG_HOME/hypr/cryptobar.conf"
 
 cat <<'MSG'
 
-Installation terminée. Il reste deux ajouts manuels :
+Installation terminée. Il reste à brancher, selon votre environnement :
+
+  0. Quickshell (dots-hyprland « ii ») — si c'est votre barre :
+       ./quickshell/install.sh && qs -c ii kill && qs -c ii -d
 
   1. Waybar — dans ~/.config/waybar/config.jsonc, copiez le bloc
      "custom/crypto" de ~/.config/waybar/cryptobar.jsonc et ajoutez
@@ -41,4 +44,8 @@ Installation terminée. Il reste deux ajouts manuels :
 
 Assurez-vous que ~/.local/bin est dans votre PATH, puis :
   cryptobar bar
+
+Pour suivre un portefeuille, ajoutez une ADRESSE PUBLIQUE depuis la fenêtre
+(cryptobar popup, section « Adresses suivies »). cryptobar n'accepte jamais
+une clé privée ni une phrase de récupération.
 MSG
