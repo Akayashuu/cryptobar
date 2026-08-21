@@ -5,38 +5,81 @@ import QtQuick
 import QtQuick.Layouts
 
 /**
- * Cours de la pièce active pour la barre horizontale.
- *
- * Molette : pièce suivante / précédente. Clic : fenêtre détaillée.
- * Clic droit : graphique dans un terminal. Clic milieu : rafraîchissement.
+ * Cotation active dans la barre horizontale : pastille de tendance, symbole,
+ * prix, courbe sur sept jours et variation sur 24 h.
  */
 Item {
     id: root
 
-    readonly property color accent: Crypto.trend === "up" ? Appearance.m3colors.m3primary : Crypto.trend === "down" ? Appearance.colors.colError : Appearance.colors.colOnLayer1
+    property color accent: Crypto.stale ? Appearance.colors.colOnSurfaceVariant : Crypto.color(Crypto.trend)
 
-    implicitWidth: rowLayout.implicitWidth
+    implicitWidth: row.implicitWidth
     implicitHeight: Appearance.sizes.barHeight
 
+    Behavior on accent {
+        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+    }
+
     RowLayout {
-        id: rowLayout
+        id: row
         anchors.centerIn: parent
-        spacing: 4
+        spacing: 5
 
         MaterialSymbol {
-            text: Crypto.stale ? "cloud_off" : "currency_bitcoin"
+            Layout.alignment: Qt.AlignVCenter
             iconSize: Appearance.font.pixelSize.larger
             color: root.accent
+            text: Crypto.stale ? "cloud_off" : Crypto.loading ? "sync" : "currency_bitcoin"
+
+            RotationAnimator on rotation {
+                running: Crypto.loading && !Crypto.stale
+                from: 0
+                to: 360
+                duration: 1200
+                loops: Animation.Infinite
+                onRunningChanged: if (!running) target.rotation = 0
+            }
         }
 
         StyledText {
-            // `--markup none` produit du texte brut : Qt ne doit pas y
-            // chercher du HTML.
+            Layout.alignment: Qt.AlignVCenter
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            font.weight: Font.DemiBold
+            color: root.accent
+            text: Crypto.symbol
+        }
+
+        StyledText {
+            Layout.alignment: Qt.AlignVCenter
             textFormat: Text.PlainText
             font.pixelSize: Appearance.font.pixelSize.small
-            color: root.accent
+            color: Appearance.colors.colOnLayer1
             opacity: Crypto.stale ? 0.6 : 1
-            text: Crypto.text
+            text: Crypto.price
+        }
+
+        CryptoSparkline {
+            Layout.alignment: Qt.AlignVCenter
+            visible: Crypto.series.length > 1
+            implicitWidth: 34
+            implicitHeight: Appearance.font.pixelSize.large
+            series: Crypto.series
+            stroke: root.accent
+        }
+
+        MaterialSymbol {
+            Layout.alignment: Qt.AlignVCenter
+            iconSize: Appearance.font.pixelSize.normal
+            color: root.accent
+            text: Crypto.icon(Crypto.trend)
+        }
+
+        StyledText {
+            Layout.alignment: Qt.AlignVCenter
+            textFormat: Text.PlainText
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            color: root.accent
+            text: Crypto.percent
         }
     }
 

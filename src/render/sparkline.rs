@@ -7,7 +7,7 @@ const FLAT_LEVEL: char = '▄';
 
 /// Réduit la série à au plus `width` points en moyennant des tranches contiguës.
 /// Moyenner plutôt qu'échantillonner évite qu'un pic isolé disparaisse ou domine.
-fn downsample(points: &[f64], width: usize) -> Vec<f64> {
+pub(crate) fn downsample(points: &[f64], width: usize) -> Vec<f64> {
     if points.len() <= width {
         return points.to_vec();
     }

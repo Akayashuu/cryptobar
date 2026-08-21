@@ -25,9 +25,10 @@ recâble pas deux fois. Il sauvegarde chaque fichier amont modifié en
 | Fichier | Rôle |
 | --- | --- |
 | `services/Crypto.qml` | Singleton : un seul `cryptobar bar --watch` pour toute la session, quel que soit le nombre d'écrans. Expose `text`, `symbol`, `price`, `percent`, `sparkline`, `tooltip`, `trend`, `stale`. |
-| `modules/ii/bar/CryptoWidget.qml` | Barre horizontale : ligne complète avec sparkline. |
-| `modules/ii/bar/CryptoWidgetPopup.qml` | Infobulle commune aux deux orientations. |
-| `modules/ii/verticalBar/VerticalCryptoWidget.qml` | Barre verticale : symbole, prix et variation empilés. |
+| `modules/ii/bar/CryptoSparkline.qml` | Canevas de la courbe sur sept jours, trait plein sous un aplat dégradé. |
+| `modules/ii/bar/CryptoWidget.qml` | Barre horizontale : icône, symbole, prix, courbe et variation. |
+| `modules/ii/bar/CryptoWidgetPopup.qml` | Panneau commun aux deux orientations : une ligne par cryptomonnaie. |
+| `modules/ii/verticalBar/VerticalCryptoWidget.qml` | Barre verticale : symbole, prix, courbe et variation empilés. |
 
 ## Interactions
 

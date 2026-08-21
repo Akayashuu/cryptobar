@@ -15,8 +15,35 @@ use crate::model::Quote;
 
 use super::{format, sparkline};
 
+/// Nombre de points conservés dans les séries transmises aux barres riches :
+/// assez pour dessiner une courbe lisible, assez peu pour que la ligne JSON
+/// reste courte à chaque intervalle.
+const SERIES_POINTS: usize = 48;
+
+/// Une cotation, découpée en champs prêts à afficher.
+///
+/// Les barres capables de composer leur propre mise en page — Quickshell,
+/// Ags, Eww — s'en servent pour dessiner une liste alignée et une courbe,
+/// là où `tooltip` ne leur offrirait qu'un bloc de texte à parser.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct CoinRow {
+    pub symbol: String,
+    pub name: String,
+    pub price: String,
+    pub change_1h: String,
+    pub change_24h: String,
+    pub change_7d: String,
+    /// "up", "down" ou "flat", suivant la variation sur 24 h.
+    pub trend: &'static str,
+    /// Cours des sept derniers jours, normalisé dans [0, 1] : le
+    /// consommateur multiplie par la hauteur dont il dispose.
+    pub series: Vec<f64>,
+    /// Cotation actuellement mise en avant dans la barre.
+    pub active: bool,
+}
+
 /// Charge utile d'un module Waybar.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct Module {
     pub text: String,
     pub tooltip: String,
@@ -28,6 +55,33 @@ pub struct Module {
     pub price: String,
     pub percent: String,
     pub sparkline: String,
+    /// Tendance de la cotation active : "up", "down", "flat" ou "error".
+    pub trend: &'static str,
+    /// Données servies depuis le cache, réseau indisponible.
+    pub stale: bool,
+    /// Toutes les cotations suivies, dans l'ordre de la configuration.
+    pub coins: Vec<CoinRow>,
+}
+
+/// Ramène une série dans [0, 1]. Une série plate se place au milieu plutôt
+/// que de diviser par une amplitude nulle.
+fn normalize(points: &[f64]) -> Vec<f64> {
+    let finite: Vec<f64> = points.iter().copied().filter(|v| v.is_finite()).collect();
+    let reduced = sparkline::downsample(&finite, SERIES_POINTS);
+    let Some(min) = reduced.iter().copied().reduce(f64::min) else {
+        return Vec::new();
+    };
+    let max = reduced.iter().copied().fold(min, f64::max);
+    let span = max - min;
+    if span <= 0.0 {
+        return vec![0.5; reduced.len()];
+    }
+    // Trois décimales suffisent à un tracé au pixel près et divisent par
+    // cinq la longueur de la ligne JSON émise à chaque intervalle.
+    reduced
+        .iter()
+        .map(|value| ((value - min) / span * 1000.0).round() / 1000.0)
+        .collect()
 }
 
 impl Module {
@@ -131,6 +185,9 @@ pub fn render(
             price: String::new(),
             percent: String::new(),
             sparkline: String::new(),
+            trend: "error",
+            stale,
+            coins: Vec::new(),
         };
     };
 
@@ -160,7 +217,29 @@ pub fn render(
         price,
         percent,
         sparkline: spark,
+        trend: quote.trend().class(),
+        stale,
+        coins: rows(quotes, active, config, markup),
     }
+}
+
+fn rows(quotes: &[Quote], active: usize, config: &Config, markup: Markup) -> Vec<CoinRow> {
+    let decimals = config.decimals();
+    quotes
+        .iter()
+        .enumerate()
+        .map(|(index, quote)| CoinRow {
+            symbol: markup.escape(&quote.symbol.to_uppercase()),
+            name: markup.escape(&quote.name),
+            price: markup.escape(&format::price(quote.price, &config.currency, decimals)),
+            change_1h: markup.escape(&format::percent(quote.change_1h)),
+            change_24h: markup.escape(&format::percent(quote.change_24h)),
+            change_7d: markup.escape(&format::percent(quote.change_7d)),
+            trend: quote.trend().class(),
+            series: normalize(&quote.sparkline),
+            active: index == active,
+        })
+        .collect()
 }
 
 fn class(quote: &Quote, stale: bool) -> String {
@@ -200,7 +279,9 @@ fn tooltip(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+// Un test qui échoue doit s'arrêter net ; la normalisation pose exactement
+// 0.0 et 1.0 sur les extrêmes, la comparaison stricte y est donc exacte.
+#[allow(clippy::unwrap_used, clippy::panic, clippy::float_cmp)]
 mod tests {
     use super::*;
     use crate::model::CoinId;
@@ -387,6 +468,59 @@ mod tests {
                 module.symbol, module.price, module.sparkline, module.percent
             )
         );
+    }
+
+    #[test]
+    fn chaque_cotation_donne_une_ligne_structuree() {
+        let quotes = vec![
+            quote("btc", 42_000.0, Some(1.5)),
+            quote("eth", 2_000.0, Some(-1.0)),
+        ];
+        let module = render(&quotes, 1, &config(), false, Markup::None);
+        let [first, second] = module.coins.as_slice() else {
+            panic!(
+                "deux cotations attendues, {} obtenue(s)",
+                module.coins.len()
+            );
+        };
+        assert_eq!(first.symbol, "BTC");
+        assert!(!first.active);
+        assert!(second.active);
+        assert_eq!(second.trend, "down");
+        assert_eq!(module.trend, "down");
+    }
+
+    #[test]
+    fn les_series_transmises_tiennent_dans_zero_un() {
+        let module = render(
+            &[quote("btc", 1.0, Some(1.0))],
+            0,
+            &config(),
+            false,
+            Markup::None,
+        );
+        let Some(row) = module.coins.first() else {
+            panic!("une cotation attendue");
+        };
+        let series = &row.series;
+        assert!(!series.is_empty());
+        assert!(series.iter().all(|value| (0.0..=1.0).contains(value)));
+        // Les extrêmes touchent les bornes : la courbe occupe toute la hauteur.
+        assert!(series.iter().copied().any(|value| value == 0.0));
+        assert!(series.iter().copied().any(|value| value == 1.0));
+    }
+
+    #[test]
+    fn une_serie_plate_se_place_au_milieu() {
+        assert_eq!(normalize(&[3.0, 3.0, 3.0]), vec![0.5, 0.5, 0.5]);
+        assert!(normalize(&[]).is_empty());
+        assert!(normalize(&[f64::NAN]).is_empty());
+    }
+
+    #[test]
+    fn une_serie_longue_est_reduite() {
+        let long: Vec<f64> = (0..500).map(f64::from).collect();
+        assert_eq!(normalize(&long).len(), SERIES_POINTS);
     }
 
     #[test]

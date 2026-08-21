@@ -38,6 +38,11 @@ Singleton {
     property string trend: ""
     /// Données servies depuis le cache : le réseau est indisponible.
     property bool stale: false
+    /// Série de la pièce active, normalisée dans [0, 1].
+    property var series: []
+    /// Toutes les cotations suivies : { symbol, name, price, change_1h,
+    /// change_24h, change_7d, trend, series, active }.
+    property var coins: []
 
     /// Vrai tant qu'aucune ligne n'a été reçue.
     readonly property bool loading: root.trend.length === 0
@@ -62,9 +67,11 @@ Singleton {
         root.price = payload.price ?? "";
         root.percent = payload.percent ?? "";
         root.sparkline = payload.sparkline ?? "";
-        const cssClass = payload.class ?? "";
-        root.stale = cssClass.includes("stale");
-        root.trend = cssClass.includes("up") ? "up" : cssClass.includes("down") ? "down" : cssClass.includes("error") ? "error" : "flat";
+        root.coins = payload.coins ?? [];
+        root.stale = payload.stale ?? false;
+        root.trend = payload.trend ?? "flat";
+        const active = root.coins.find(coin => coin.active);
+        root.series = active?.series ?? [];
     }
 
     /// Exécute une sous-commande (`next`, `refresh`, `popup`…) puis relit la
@@ -79,6 +86,16 @@ Singleton {
     function refresh() { root.run(["refresh"]); }
     function openPopup() { root.run(["popup"]); }
     function openChart() { root.run(["chart", "--window"]); }
+
+    /// Flèche Material correspondant à une tendance.
+    function icon(trend) {
+        return trend === "up" ? "trending_up" : trend === "down" ? "trending_down" : "trending_flat";
+    }
+
+    /// Couleur correspondant à une tendance, dans la palette du thème.
+    function color(trend) {
+        return trend === "up" ? Appearance.m3colors.m3primary : trend === "down" ? Appearance.colors.colError : Appearance.colors.colOnSurfaceVariant;
+    }
 
     Process {
         id: watchProc

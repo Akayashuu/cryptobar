@@ -2,29 +2,34 @@ import qs.modules.common
 import qs.modules.common.widgets
 import qs.services
 import QtQuick
-import QtQuick.Layouts
 import qs.modules.ii.bar as Bar
 
 /**
  * Variante pour la barre verticale : la largeur disponible ne permet pas
- * d'afficher la ligne complète, on empile donc symbole, prix et variation.
+ * d'afficher la ligne complète, on empile donc symbole, prix, courbe et
+ * variation.
  */
 Item {
     id: root
 
-    readonly property color accent: Crypto.trend === "up" ? Appearance.m3colors.m3primary : Crypto.trend === "down" ? Appearance.colors.colError : Appearance.colors.colOnLayer1
+    property color accent: Crypto.stale ? Appearance.colors.colOnSurfaceVariant : Crypto.color(Crypto.trend)
 
     implicitWidth: Appearance.sizes.verticalBarWidth
     implicitHeight: column.implicitHeight
 
+    Behavior on accent {
+        animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+    }
+
     Column {
         id: column
         anchors.centerIn: parent
-        spacing: 0
+        spacing: 1
 
         StyledText {
             anchors.horizontalCenter: parent.horizontalCenter
             font.pixelSize: Appearance.font.pixelSize.smaller
+            font.weight: Font.DemiBold
             color: root.accent
             text: Crypto.symbol
         }
@@ -41,11 +46,33 @@ Item {
             text: Crypto.price
         }
 
-        StyledText {
+        Bar.CryptoSparkline {
             anchors.horizontalCenter: parent.horizontalCenter
-            font.pixelSize: Appearance.font.pixelSize.smallest
-            color: root.accent
-            text: Crypto.percent
+            visible: Crypto.series.length > 1
+            implicitWidth: root.width - 8
+            implicitHeight: 12
+            series: Crypto.series
+            stroke: root.accent
+        }
+
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 1
+
+            MaterialSymbol {
+                anchors.verticalCenter: parent.verticalCenter
+                iconSize: Appearance.font.pixelSize.smaller
+                color: root.accent
+                text: Crypto.stale ? "cloud_off" : Crypto.icon(Crypto.trend)
+            }
+
+            StyledText {
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                font.pixelSize: Appearance.font.pixelSize.smallest
+                color: root.accent
+                text: Crypto.percent
+            }
         }
     }
 

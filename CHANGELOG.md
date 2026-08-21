@@ -14,6 +14,12 @@ versionnage sémantique.
   qui affichent du texte brut.
 - Champs `symbol`, `price`, `percent` et `sparkline` dans la ligne JSON, pour
   les mises en page trop étroites pour le champ `text`.
+- Champs `trend`, `stale` et `coins` dans la ligne JSON : toutes les
+  cryptomonnaies suivies, avec leur série sous-échantillonnée et normalisée
+  dans `[0, 1]`, prête à tracer sans calcul côté barre.
+- Widgets Quickshell redessinés : courbe dessinée au canevas, icône de
+  tendance, indicateur de rafraîchissement, et panneau natif listant toutes
+  les cryptomonnaies au lieu d'un bloc de texte monospace.
 
 ## [0.1.0] — 2026-08-21
 
