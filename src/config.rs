@@ -14,7 +14,7 @@ use crate::render::format::Decimals;
 const MIN_REFRESH_INTERVAL: u64 = 15;
 
 const DEFAULT_CONFIG: &str = r#"# Configuration de cryptobar — https://github.com/Akayashuu/cryptobar
-# Identifiants CoinGecko ; cherchez-les avec `cryptobar coins --search <terme>`.
+# Identifiants CoinGecko ; cherchez-les avec `cryptobar coins <terme>`.
 coins = ["bitcoin", "ethereum", "solana"]
 
 # Devise de cotation : eur, usd, gbp, chf, cad, jpy, btc, eth
@@ -37,7 +37,7 @@ decimals = "auto"
 terminal = "kitty"
 
 # Signal temps réel utilisé pour rafraîchir Waybar : SIGRTMIN+<n>, 1..=30.
-waybar_signal = 20
+waybar_signal = 8
 "#;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -88,7 +88,7 @@ fn default_terminal() -> String {
     "kitty".to_owned()
 }
 fn default_signal() -> u8 {
-    20
+    8
 }
 
 impl Config {
@@ -205,7 +205,7 @@ mod tests {
         assert_eq!(cfg.cycle_interval, 0);
         assert!(cfg.sparkline);
         assert_eq!(cfg.sparkline_width, 8);
-        assert_eq!(cfg.waybar_signal, 20);
+        assert_eq!(cfg.waybar_signal, 8);
     }
 
     #[test]

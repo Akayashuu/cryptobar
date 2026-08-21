@@ -1,0 +1,42 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # Le binaire publié est compilé sans GTK : il fonctionne partout et ne
+      # traîne aucune dépendance système. La fenêtre reste disponible pour qui
+      # compile depuis les sources.
+      - run: cargo build --release --locked --no-default-features
+
+      - name: Préparer l'archive
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          dir="cryptobar-${version}-x86_64-linux"
+          mkdir -p "$dir"
+          cp target/release/cryptobar README.md CHANGELOG.md LICENSE install.sh "$dir/"
+          cp -r waybar hypr "$dir/"
+          tar czf "${dir}.tar.gz" "$dir"
+          sha256sum "${dir}.tar.gz" > "${dir}.tar.gz.sha256"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            cryptobar-*.tar.gz
+            cryptobar-*.tar.gz.sha256
+          body_path: CHANGELOG.md
+          draft: false
