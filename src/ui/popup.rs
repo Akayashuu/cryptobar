@@ -68,6 +68,10 @@ window { background-color: @theme_bg_color; }
   font-size: 26px;
   min-width: 56px;
   min-height: 56px;
+  /* Repli neutre : une pièce sans couleur de marque connue — un résultat de
+     recherche, par exemple — reste lisible au lieu de disparaître. */
+  background-color: alpha(@theme_fg_color, 0.10);
+  color: @theme_fg_color;
 }
 .badge.small { font-size: 15px; min-width: 32px; min-height: 32px; }
 
@@ -687,6 +691,19 @@ impl Ctx {
         title.set_xalign(0.0);
         section.append(&title);
 
+        // Sans cette phrase, « adresse publique » se confond avec « clé ». On
+        // dit donc où la trouver, et ce que cryptobar refuse d'accepter.
+        let help = Label::new(Some(
+            "Collez l'adresse publique de votre portefeuille — celle que vous donnez pour \
+             recevoir des fonds (Ledger Live : « Recevoir »). cryptobar lit le solde sur la \
+             chaîne, sans jamais pouvoir dépenser. Une clé privée ou une phrase de \
+             récupération est refusée et n'est jamais écrite sur le disque.",
+        ));
+        help.add_css_class("muted");
+        help.set_wrap(true);
+        help.set_xalign(0.0);
+        section.append(&help);
+
         for (index, wallet) in wallets.iter().enumerate() {
             let row = GtkBox::new(Orientation::Horizontal, 10);
             row.add_css_class("wrow");
@@ -752,6 +769,15 @@ impl Ctx {
         section
     }
 
+    /// Exemple d'adresse pour une chaîne, montré en filigrane dans le champ.
+    fn address_placeholder(chain: crate::onchain::Chain) -> &'static str {
+        match chain {
+            crate::onchain::Chain::Bitcoin => "bc1… ou 1… ou 3…",
+            crate::onchain::Chain::Ethereum => "0x…",
+            crate::onchain::Chain::Solana => "adresse Solana, ex. 9xQe…",
+        }
+    }
+
     /// Formulaire d'ajout d'une adresse suivie.
     fn wallet_form(self: &Rc<Self>) -> GtkBox {
         let form = GtkBox::new(Orientation::Horizontal, 8);
@@ -765,12 +791,24 @@ impl Ctx {
         form.append(&picker);
 
         let address = gtk4::Entry::new();
-        address.set_placeholder_text(Some("adresse publique"));
+        address.set_placeholder_text(Some(Self::address_placeholder(
+            crate::onchain::Chain::Bitcoin,
+        )));
         address.set_hexpand(true);
         form.append(&address);
 
+        // Le filigrane suit la chaîne choisie : une adresse Ethereum ne
+        // ressemble à aucune adresse Bitcoin.
+        let hinted = address.clone();
+        picker.connect_selected_notify(move |picker| {
+            let index = usize::try_from(picker.selected()).unwrap_or(0);
+            if let Some(chain) = crate::onchain::Chain::ALL.get(index).copied() {
+                hinted.set_placeholder_text(Some(Self::address_placeholder(chain)));
+            }
+        });
+
         let label = gtk4::Entry::new();
-        label.set_placeholder_text(Some("nom"));
+        label.set_placeholder_text(Some("nom, ex. Ledger"));
         label.set_width_chars(10);
         form.append(&label);
 
@@ -951,9 +989,10 @@ impl Ctx {
         list.add_css_class("card");
         for hit in hits {
             let row = GtkBox::new(Orientation::Horizontal, 10);
+            row.append(&identity_of(hit.icon.as_deref(), &hit.symbol, 22));
             let symbol = Label::new(Some(&hit.symbol.to_uppercase()));
-            symbol.add_css_class("symbol");
-            symbol.set_width_chars(6);
+            symbol.add_css_class("rowsym");
+            symbol.set_width_chars(8);
             symbol.set_xalign(0.0);
             row.append(&symbol);
 
@@ -1006,7 +1045,18 @@ impl Ctx {
         let app = self.app();
         let tx = self.tx.clone();
         std::thread::spawn(move || {
-            let outcome = app.source.search(&term).map_err(|e| e.to_string());
+            let outcome = app.source.search(&term).map_err(|e| e.to_string()).map(
+                |mut hits: Vec<SearchHit>| {
+                    // Les logos sont récupérés ici, dans le fil de recherche :
+                    // seuls ceux réellement affichés sont téléchargés, et
+                    // l'interface ne bloque jamais dessus.
+                    let mut agent = None;
+                    for hit in hits.iter_mut().take(SEARCH_LIMIT) {
+                        hit.icon = app.icon_for(hit.id.as_str(), hit.image.as_deref(), &mut agent);
+                    }
+                    hits
+                },
+            );
             let _ = tx.send(Msg::Search(generation, outcome));
         });
     }
@@ -1317,20 +1367,18 @@ fn settings_panel(config: &Config, config_path: &str) -> Settings {
     let terminal = gtk4::Entry::new();
     terminal.set_text(&config.terminal);
     terminal.set_width_chars(14);
-    terminal.set_tooltip_text(Some("Validez par Entrée"));
 
-    for (label, widget) in [
-        ("Devise", currency.clone().upcast::<gtk4::Widget>()),
-        ("Rafraîchissement (s)", refresh.clone().upcast()),
-        ("Rotation auto (s, 0 = manuelle)", cycle.clone().upcast()),
-        ("Décimales", decimals.clone().upcast()),
-        ("Sparkline", sparkline.clone().upcast()),
-        ("Largeur de la sparkline", sparkline_width.clone().upcast()),
-        ("Signal Waybar (SIGRTMIN+n)", signal.clone().upcast()),
-        ("Terminal", terminal.clone().upcast()),
-    ] {
-        grid.append(&setting_row(label, &widget));
-    }
+    settings_groups(
+        &grid,
+        &currency,
+        &refresh,
+        &cycle,
+        &decimals,
+        &sparkline,
+        &sparkline_width,
+        &signal,
+        &terminal,
+    );
 
     let path = Label::new(Some(config_path));
     path.add_css_class("muted");
@@ -1355,13 +1403,116 @@ fn settings_panel(config: &Config, config_path: &str) -> Settings {
     }
 }
 
-fn setting_row(label: &str, control: &gtk4::Widget) -> GtkBox {
+/// Remplit le panneau des réglages, groupe par groupe.
+#[allow(clippy::too_many_arguments)]
+fn settings_groups(
+    grid: &GtkBox,
+    currency: &gtk4::DropDown,
+    refresh: &gtk4::SpinButton,
+    cycle: &gtk4::SpinButton,
+    decimals: &gtk4::DropDown,
+    sparkline: &gtk4::Switch,
+    sparkline_width: &gtk4::SpinButton,
+    signal: &gtk4::SpinButton,
+    terminal: &gtk4::Entry,
+) {
+    // Trois groupes plutôt qu'une liste de huit lignes : on cherche un
+    // réglage par ce qu'il touche, pas par son rang dans la configuration.
+    for (heading, rows) in [
+        (
+            "COTATIONS",
+            vec![
+                (
+                    "Devise",
+                    "Monnaie dans laquelle les prix sont affichés",
+                    currency.clone().upcast::<gtk4::Widget>(),
+                ),
+                (
+                    "Rafraîchissement",
+                    "Intervalle entre deux relevés, en secondes",
+                    refresh.clone().upcast(),
+                ),
+                (
+                    "Rotation automatique",
+                    "Secondes entre deux pièces ; 0 pour la molette seule",
+                    cycle.clone().upcast(),
+                ),
+            ],
+        ),
+        (
+            "AFFICHAGE",
+            vec![
+                (
+                    "Décimales",
+                    "« auto » s'adapte à l'ordre de grandeur du prix",
+                    decimals.clone().upcast(),
+                ),
+                (
+                    "Courbe dans la barre",
+                    "Sparkline à côté du prix",
+                    sparkline.clone().upcast(),
+                ),
+                (
+                    "Largeur de la courbe",
+                    "Nombre de caractères de la sparkline",
+                    sparkline_width.clone().upcast(),
+                ),
+            ],
+        ),
+        (
+            "SYSTÈME",
+            vec![
+                (
+                    "Signal Waybar",
+                    "SIGRTMIN+n utilisé pour réveiller la barre",
+                    signal.clone().upcast(),
+                ),
+                (
+                    "Terminal",
+                    "Ouvert par le clic droit ; validez par Entrée",
+                    terminal.clone().upcast(),
+                ),
+            ],
+        ),
+    ] {
+        let heading_label = Label::new(Some(heading));
+        heading_label.add_css_class("title");
+        heading_label.set_xalign(0.0);
+        heading_label.set_margin_top(4);
+        grid.append(&heading_label);
+
+        let group = GtkBox::new(Orientation::Vertical, 2);
+        group.add_css_class("inset");
+        for (label, hint, widget) in rows {
+            group.append(&setting_row(label, hint, &widget));
+        }
+        grid.append(&group);
+    }
+}
+
+/// Une ligne de réglage : intitulé, explication d'une ligne, et le contrôle
+/// aligné à droite. L'explication évite d'avoir à deviner ce que fait un
+/// nombre nu comme « 8 ».
+fn setting_row(label: &str, hint: &str, control: &gtk4::Widget) -> GtkBox {
     let row = GtkBox::new(Orientation::Horizontal, 10);
+    row.set_margin_top(4);
+    row.set_margin_bottom(4);
+
+    let text = GtkBox::new(Orientation::Vertical, 0);
+    text.set_hexpand(true);
+    text.set_valign(Align::Center);
     let name = Label::new(Some(label));
     name.set_xalign(0.0);
-    name.set_hexpand(true);
-    row.append(&name);
+    text.append(&name);
+    let hint_label = Label::new(Some(hint));
+    hint_label.add_css_class("muted");
+    hint_label.set_xalign(0.0);
+    hint_label.set_wrap(true);
+    text.append(&hint_label);
+    row.append(&text);
+
     control.set_halign(Align::End);
+    control.set_valign(Align::Center);
     row.append(control);
     row
 }
@@ -1460,16 +1611,22 @@ fn wire_spin(ctx: &Rc<Ctx>, spin: &gtk4::SpinButton, key: &'static str, message:
 /// Identité visuelle d'une cryptomonnaie : son logo officiel si le cache le
 /// contient, sinon une pastille colorée portant son glyphe.
 fn identity_widget(quote: &Quote, size: i32) -> gtk4::Widget {
-    if let Some(path) = quote.icon.as_deref() {
+    identity_of(quote.icon.as_deref(), &quote.symbol, size)
+}
+
+/// Même chose à partir des champs bruts, pour ce qui n'est pas une cotation —
+/// un résultat de recherche, par exemple.
+fn identity_of(icon: Option<&str>, symbol: &str, size: i32) -> gtk4::Widget {
+    if let Some(path) = icon {
         let image = gtk4::Image::from_file(path);
         image.set_pixel_size(size);
         image.set_valign(Align::Center);
         return image.upcast();
     }
-    let identity = badge::of(&quote.symbol);
+    let identity = badge::of(symbol);
     let label = Label::new(Some(&identity.glyph));
     label.add_css_class("badge");
-    label.add_css_class(&format!("badge-{}", css_key(&quote.symbol)));
+    label.add_css_class(&format!("badge-{}", css_key(symbol)));
     if size <= 28 {
         label.add_css_class("small");
     }
@@ -1923,7 +2080,7 @@ fn wallet_hero(
     }
 
     let counts = match (wallet.map_or(0, |wallet| wallet.positions.len()), watched) {
-        (0, 0) => "Ajoutez une adresse publique ou une quantité".to_owned(),
+        (0, 0) => "Ajoutez une adresse publique pour voir son solde".to_owned(),
         (0, watched) => format!("{watched} adresse(s) suivie(s), aucun solde"),
         (positions, 0) => format!("{positions} position(s)"),
         (positions, watched) => format!("{positions} position(s) · {watched} adresse(s) suivie(s)"),

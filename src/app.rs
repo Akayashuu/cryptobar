@@ -89,6 +89,20 @@ impl App {
         crate::source::icons::attach(&self.cache_dir, quotes);
     }
 
+    /// Chemin local du logo d'une cryptomonnaie, téléchargé si besoin.
+    ///
+    /// L'agent passé est réutilisé d'un appel à l'autre : une liste entière ne
+    /// coûte qu'une connexion.
+    #[must_use]
+    pub fn icon_for(
+        &self,
+        id: &str,
+        url: Option<&str>,
+        agent: &mut Option<ureq::Agent>,
+    ) -> Option<String> {
+        crate::source::icons::ensure(&self.cache_dir, id, url, agent)
+    }
+
     /// Rattache les logos, en téléchargeant ceux qui manquent. À réserver aux
     /// chemins où quelques centaines de millisecondes ne se voient pas.
     pub fn fetch_icons(&self, quotes: &mut [crate::model::Quote]) {

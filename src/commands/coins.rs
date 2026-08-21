@@ -76,6 +76,8 @@ mod tests {
 
     fn hit(id: &str, symbol: &str, name: &str) -> SearchHit {
         SearchHit {
+            image: None,
+            icon: None,
             id: CoinId::parse(id).unwrap(),
             symbol: symbol.to_owned(),
             name: name.to_owned(),

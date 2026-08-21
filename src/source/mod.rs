@@ -24,6 +24,10 @@ pub struct SearchHit {
     pub id: CoinId,
     pub symbol: String,
     pub name: String,
+    /// URL de la vignette officielle, telle que publiée par la source.
+    pub image: Option<String>,
+    /// Chemin local du logo, renseigné après passage par le cache d'icônes.
+    pub icon: Option<String>,
 }
 
 pub trait PriceSource {

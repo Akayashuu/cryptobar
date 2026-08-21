@@ -238,6 +238,12 @@ struct RawSearchCoin {
     symbol: String,
     #[serde(default)]
     name: String,
+    /// Vignette 25×25 : c'est exactement la taille affichée dans la liste des
+    /// résultats, inutile de tirer le logo pleine taille.
+    #[serde(default)]
+    thumb: Option<String>,
+    #[serde(default)]
+    large: Option<String>,
 }
 
 fn parse_search(raw: &str) -> Result<Vec<SearchHit>, SourceError> {
@@ -251,6 +257,8 @@ fn parse_search(raw: &str) -> Result<Vec<SearchHit>, SourceError> {
                 id: CoinId::parse(&coin.id).ok()?,
                 symbol: coin.symbol.to_ascii_uppercase(),
                 name: coin.name,
+                image: coin.large.or(coin.thumb),
+                icon: None,
             })
         })
         .collect())

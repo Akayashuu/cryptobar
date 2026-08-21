@@ -57,22 +57,38 @@ pub fn attach(cache_dir: &Path, quotes: &mut [Quote]) {
 /// la pastille de repli. À n'appeler que là où quelques centaines de
 /// millisecondes ne se voient pas — mode `--watch`, `refresh`, fenêtre.
 pub fn fetch_missing(cache_dir: &Path, quotes: &mut [Quote]) {
-    let target = dir(cache_dir);
     let mut agent = None;
     for quote in quotes.iter_mut() {
-        let file = target.join(format!("{}.png", quote.id.as_str()));
-        if file.is_file() {
-            quote.icon = file.to_str().map(ToOwned::to_owned);
-            continue;
-        }
-        let Some(url) = quote.image.as_deref().filter(|u| u.starts_with(IMAGE_HOST)) else {
-            continue;
-        };
-        let agent = agent.get_or_insert_with(build_agent);
-        if download(agent, url, &file).is_ok() {
-            quote.icon = file.to_str().map(ToOwned::to_owned);
-        }
+        quote.icon = ensure(
+            cache_dir,
+            quote.id.as_str(),
+            quote.image.as_deref(),
+            &mut agent,
+        );
     }
+}
+
+/// Chemin du logo d'une cryptomonnaie, téléchargé si besoin, ou `None` si le
+/// cache est vide et que l'URL est absente, hors du domaine autorisé, ou
+/// injoignable.
+///
+/// L'agent est créé à la première requête et réutilisé ensuite : une liste de
+/// résultats de recherche n'ouvre ainsi qu'une seule connexion.
+#[must_use]
+pub fn ensure(
+    cache_dir: &Path,
+    id: &str,
+    url: Option<&str>,
+    agent: &mut Option<ureq::Agent>,
+) -> Option<String> {
+    let file = path(cache_dir, id);
+    if file.is_file() {
+        return file.to_str().map(ToOwned::to_owned);
+    }
+    let url = url.filter(|url| url.starts_with(IMAGE_HOST))?;
+    let agent = agent.get_or_insert_with(build_agent);
+    download(agent, url, &file).ok()?;
+    file.to_str().map(ToOwned::to_owned)
 }
 
 fn build_agent() -> ureq::Agent {
