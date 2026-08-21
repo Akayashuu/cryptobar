@@ -23,6 +23,9 @@ pub struct State {
     /// Indice figé par une action manuelle : la rotation automatique reprend
     /// après `manual_hold` secondes.
     pub manual: bool,
+    /// Conditions d'alerte déjà notifiées. Une clé disparaît dès que sa
+    /// condition redevient fausse, ce qui réarme l'alerte.
+    pub fired: std::collections::BTreeSet<String>,
 }
 
 fn now() -> u64 {
@@ -169,6 +172,7 @@ mod tests {
             index: 1,
             rotated_at: 0,
             manual: false,
+            fired: std::collections::BTreeSet::new(),
         };
         assert_eq!(state.effective_index(3, 0, 60), 1);
     }
@@ -187,6 +191,7 @@ mod tests {
             index: 0,
             rotated_at: 0,
             manual: false,
+            fired: std::collections::BTreeSet::new(),
         };
         let rotated = state.effective_index(3, 5, 60);
         assert!(rotated < 3);
@@ -198,6 +203,7 @@ mod tests {
             index: 42,
             rotated_at: now(),
             manual: true,
+            fired: std::collections::BTreeSet::new(),
         };
         assert_eq!(state.effective_index(3, 0, 60), 0);
     }
@@ -210,6 +216,7 @@ mod tests {
             index: 2,
             rotated_at: 123,
             manual: true,
+            fired: std::collections::BTreeSet::new(),
         };
         state.save(&path).unwrap();
         assert_eq!(State::load(&path), state);

@@ -78,3 +78,17 @@ pub fn ensure_dir(dir: &Path) -> std::io::Result<()> {
     }
     Ok(())
 }
+
+/// Répertoire personnel, destination des exports de la fenêtre.
+///
+/// `$CRYPTOBAR_EXPORT_DIR` prime, ce qui garde les tests hermétiques et permet
+/// de rediriger les fichiers ailleurs que dans `~`.
+///
+/// # Errors
+/// Échoue si le répertoire personnel est introuvable.
+pub fn export_dir() -> Result<PathBuf> {
+    if let Some(dir) = overridden("CRYPTOBAR_EXPORT_DIR") {
+        return Ok(dir);
+    }
+    Ok(strategy()?.home_dir().to_path_buf())
+}

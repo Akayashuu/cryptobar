@@ -11,9 +11,9 @@ use crate::render::format::Decimals;
 
 /// Plancher de l'intervalle de rafraîchissement. En dessous, l'API publique
 /// CoinGecko renvoie des 429 et finit par bannir temporairement l'adresse.
-const MIN_REFRESH_INTERVAL: u64 = 15;
+pub const MIN_REFRESH_INTERVAL: u64 = 15;
 
-const DEFAULT_CONFIG: &str = r#"# Configuration de cryptobar — https://github.com/Akayashuu/cryptobar
+pub(crate) const DEFAULT_CONFIG: &str = r#"# Configuration de cryptobar — https://github.com/Akayashuu/cryptobar
 # Identifiants CoinGecko ; cherchez-les avec `cryptobar coins <terme>`.
 coins = ["bitcoin", "ethereum", "solana"]
 
@@ -38,6 +38,26 @@ terminal = "kitty"
 
 # Signal temps réel utilisé pour rafraîchir Waybar : SIGRTMIN+<n>, 1..=30.
 waybar_signal = 8
+
+# Portefeuilles suivis en lecture seule. On ne renseigne qu'une ADRESSE
+# PUBLIQUE : cryptobar lit le solde sur la chaîne et l'ajoute au portefeuille.
+# Aucune clé privée, aucune phrase de récupération — elles sont refusées.
+# Chaînes acceptées : "bitcoin", "ethereum", "solana".
+# [[wallets]]
+# chain = "bitcoin"
+# address = "bc1q…"
+# label = "Ledger"
+
+# Alertes de prix. Chaque bloc surveille une pièce ; « above » et « below »
+# s'expriment dans la devise ci-dessus, « change_pct » en pourcentage absolu de
+# variation sur 24 h. Une alerte se réarme dès que la condition retombe.
+# [[alerts]]
+# coin = "bitcoin"
+# above = 100000
+#
+# [[alerts]]
+# coin = "ethereum"
+# change_pct = 5
 "#;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -51,6 +71,25 @@ impl Default for DecimalsSetting {
     fn default() -> Self {
         Self::Auto("auto".to_owned())
     }
+}
+
+/// Seuil de notification sur une cryptomonnaie suivie.
+///
+/// Les trois conditions sont indépendantes et cumulables : un même bloc peut
+/// notifier au franchissement d'un plafond, d'un plancher, et d'une amplitude
+/// de variation sur 24 h.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Alert {
+    pub coin: CoinId,
+    #[serde(default)]
+    pub above: Option<f64>,
+    #[serde(default)]
+    pub below: Option<f64>,
+    #[serde(default)]
+    pub change_pct: Option<f64>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,12 +112,19 @@ pub struct Config {
     pub terminal: String,
     #[serde(default = "default_signal")]
     pub waybar_signal: u8,
+    /// Portefeuilles suivis en lecture seule, par adresse publique.
+    #[serde(default)]
+    pub wallets: Vec<crate::onchain::Wallet>,
+    /// Seuils de notification. `[[alerts]]` étant un tableau de tables, il doit
+    /// rester le dernier champ sérialisé ; il l'est déjà par construction.
+    #[serde(default)]
+    pub alerts: Vec<Alert>,
 }
 
 fn default_refresh() -> u64 {
     60
 }
-fn default_true() -> bool {
+pub(crate) fn default_true() -> bool {
     true
 }
 fn default_sparkline_width() -> usize {
@@ -89,6 +135,45 @@ fn default_terminal() -> String {
 }
 fn default_signal() -> u8 {
     8
+}
+
+impl Alert {
+    fn validate(&self, coins: &[CoinId]) -> Result<()> {
+        if !coins.contains(&self.coin) {
+            bail!(
+                "l'alerte porte sur `{}`, qui n'est pas dans `coins` : ajoutez-la d'abord",
+                self.coin
+            );
+        }
+        for (label, value) in [
+            ("above", self.above),
+            ("below", self.below),
+            ("change_pct", self.change_pct),
+        ] {
+            if let Some(value) = value
+                && (!value.is_finite() || value <= 0.0)
+            {
+                bail!("`alerts.{label}` = {value} doit être un nombre strictement positif");
+            }
+        }
+        if self.above.is_none() && self.below.is_none() && self.change_pct.is_none() {
+            bail!(
+                "l'alerte sur `{}` ne définit aucune condition : renseignez `above`, `below` ou \
+                 `change_pct`",
+                self.coin
+            );
+        }
+        if let (Some(above), Some(below)) = (self.above, self.below)
+            && below >= above
+        {
+            bail!(
+                "l'alerte sur `{}` a `below` = {below} au-dessus de `above` = {above} : elle se \
+                 déclencherait en permanence",
+                self.coin
+            );
+        }
+        Ok(())
+    }
 }
 
 impl Config {
@@ -173,6 +258,14 @@ impl Config {
                 "`sparkline_width` = {} est hors plage ; attendu 1..=64",
                 self.sparkline_width
             );
+        }
+        for wallet in &self.wallets {
+            if let Err(reason) = wallet.validate() {
+                bail!("`wallets.address` = {:?} : {reason}", wallet.address);
+            }
+        }
+        for alert in &self.alerts {
+            alert.validate(&self.coins)?;
         }
         if let DecimalsSetting::Auto(value) = &self.decimals
             && value != "auto"

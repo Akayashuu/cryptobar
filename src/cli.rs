@@ -33,6 +33,11 @@ pub enum Command {
     Next,
     /// Revient à la cryptomonnaie précédente.
     Prev,
+    /// Affiche la cryptomonnaie d'indice donné dans la liste configurée.
+    Select {
+        /// Indice, à partir de zéro.
+        index: usize,
+    },
     /// Force un rafraîchissement immédiat des données.
     Refresh,
     /// Affiche un graphique dans le terminal.
@@ -48,6 +53,8 @@ pub enum Command {
     },
     /// Ouvre la fenêtre graphique.
     Popup,
+    /// Valorise les soldes des adresses publiques suivies.
+    Portfolio,
     /// Recherche une cryptomonnaie par nom ou symbole.
     Coins {
         /// Terme recherché.

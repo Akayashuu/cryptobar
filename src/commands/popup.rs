@@ -9,15 +9,18 @@ use crate::app::App;
 /// # Errors
 /// Échoue si GTK ne peut pas s'initialiser.
 #[cfg(feature = "popup")]
-pub fn run(app: &App) -> Result<()> {
-    let (quotes, stale) = match app
+pub fn run(app: App) -> Result<()> {
+    let (mut quotes, stale) = match app
         .source
         .markets_cached(&app.config.coins, &app.config.currency)
     {
         Ok(cached) => (cached.value, cached.stale),
         Err(_) => (Vec::new(), true),
     };
-    crate::ui::popup::show(quotes, app.active_index(), &app.config, stale)
+    app.attach_icons(&mut quotes);
+    // La fenêtre complète les logos manquants elle-même, dans un fil dédié :
+    // elle s'ouvre immédiatement plutôt qu'après le téléchargement.
+    crate::ui::popup::show(app, quotes, stale)
 }
 
 /// Variante compilée sans GTK : la commande existe mais explique son absence.
@@ -25,6 +28,6 @@ pub fn run(app: &App) -> Result<()> {
 /// # Errors
 /// Échoue systématiquement.
 #[cfg(not(feature = "popup"))]
-pub fn run(_app: &App) -> Result<()> {
+pub fn run(_app: App) -> Result<()> {
     anyhow::bail!("binaire compilé sans la fonctionnalité `popup`")
 }

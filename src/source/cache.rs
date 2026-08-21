@@ -334,6 +334,13 @@ mod tests {
                     change_24h: Some(1.0),
                     change_7d: None,
                     sparkline: vec![1.0, 2.0],
+                    image: None,
+                    market_cap: None,
+                    volume_24h: None,
+                    rank: None,
+                    ath: None,
+                    ath_date: None,
+                    icon: None,
                 })
                 .collect())
         }

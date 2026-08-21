@@ -2,7 +2,7 @@
 # Installe l'intégration Quickshell de cryptobar dans une configuration
 # dots-hyprland (« ii »).
 #
-# Les trois fichiers du widget sont copiés tels quels. Les trois fichiers
+# Les fichiers du widget sont copiés tels quels. Les trois fichiers
 # amont — Config.qml, BarContent.qml, VerticalBarContent.qml — reçoivent un
 # ajout idempotent : le script détecte sa propre marque et ne l'applique
 # qu'une fois. Une mise à jour de dots-hyprland les écrase : relancer ce
@@ -22,6 +22,7 @@ backup() { cp -n "$1" "$1.bak-cryptobar" 2>/dev/null || true; }
 
 install -Dm644 "$SRC/services/Crypto.qml" "$QS_DIR/services/Crypto.qml"
 install -Dm644 "$SRC/modules/ii/bar/CryptoWidget.qml" "$QS_DIR/modules/ii/bar/CryptoWidget.qml"
+install -Dm644 "$SRC/modules/ii/bar/CryptoCoinIcon.qml" "$QS_DIR/modules/ii/bar/CryptoCoinIcon.qml"
 install -Dm644 "$SRC/modules/ii/bar/CryptoSparkline.qml" "$QS_DIR/modules/ii/bar/CryptoSparkline.qml"
 install -Dm644 "$SRC/modules/ii/bar/CryptoWidgetPopup.qml" "$QS_DIR/modules/ii/bar/CryptoWidgetPopup.qml"
 install -Dm644 "$SRC/modules/ii/verticalBar/VerticalCryptoWidget.qml" "$QS_DIR/modules/ii/verticalBar/VerticalCryptoWidget.qml"

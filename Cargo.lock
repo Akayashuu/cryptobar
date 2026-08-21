@@ -278,6 +278,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
+ "cairo-rs",
  "clap",
  "etcetera",
  "gtk4",
@@ -291,6 +292,7 @@ dependencies = [
  "terminal_size",
  "thiserror",
  "toml 0.9.12+spec-1.1.0",
+ "toml_edit",
  "ureq",
 ]
 
@@ -1624,6 +1626,7 @@ dependencies = [
  "indexmap",
  "toml_datetime 1.1.1+spec-1.1.0",
  "toml_parser",
+ "toml_writer",
  "winnow 1.0.4",
 ]
 

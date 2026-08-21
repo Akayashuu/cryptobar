@@ -3,6 +3,7 @@
 
 pub mod cache;
 pub mod coingecko;
+pub mod icons;
 
 use crate::model::{CoinId, Currency, Quote, Range, Series};
 

@@ -3,12 +3,16 @@
 //! La logique vit dans cette bibliothèque ; le binaire ne fait qu'analyser les
 //! arguments et appeler les commandes. Cela rend chaque module testable isolément.
 
+pub mod alerts;
 pub mod app;
 pub mod cli;
 pub mod commands;
 pub mod config;
+pub mod config_edit;
 pub mod model;
+pub mod onchain;
 pub mod paths;
+pub mod portfolio;
 pub mod render;
 pub mod source;
 pub mod state;

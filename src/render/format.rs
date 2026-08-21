@@ -99,6 +99,46 @@ pub fn price(value: f64, currency: &Currency, decimals: Decimals) -> String {
     }
 }
 
+/// Formate une quantité détenue, sans devise. Contrairement à un prix, une
+/// quantité de crypto est souvent fractionnaire sur plusieurs décimales : on
+/// en garde jusqu'à huit, sans zéros inutiles.
+#[must_use]
+pub fn quantity(value: f64) -> String {
+    if !value.is_finite() {
+        return MISSING.to_owned();
+    }
+    let rendered = format!("{value:.8}");
+    let trimmed = rendered.trim_end_matches('0').trim_end_matches('.');
+    group_thousands(trimmed)
+}
+
+/// Formate une grande somme de façon compacte — capitalisation, volume — où
+/// le chiffre exact n'apporte rien mais l'ordre de grandeur, si.
+#[must_use]
+pub fn compact(value: f64, currency: &Currency) -> String {
+    if !value.is_finite() {
+        return MISSING.to_owned();
+    }
+    let magnitude = value.abs();
+    let (scaled, suffix) = if magnitude >= 1e12 {
+        (value / 1e12, " T")
+    } else if magnitude >= 1e9 {
+        (value / 1e9, " Md")
+    } else if magnitude >= 1e6 {
+        (value / 1e6, " M")
+    } else if magnitude >= 1e3 {
+        (value / 1e3, " k")
+    } else {
+        (value, "")
+    };
+    let rendered = format!("{scaled:.2}")
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .replace('.', ",");
+    let symbol = currency.symbol();
+    format!("{rendered}{suffix}{THIN_SPACE}{symbol}")
+}
+
 /// Formate une variation en pourcentage, toujours signée. `None` ou non finie donne `—`.
 #[must_use]
 pub fn percent(value: Option<f64>) -> String {
@@ -120,6 +160,23 @@ mod tests {
 
     fn eur() -> Currency {
         Currency::parse("eur").unwrap()
+    }
+
+    #[test]
+    fn quantite_sans_zeros_inutiles() {
+        assert_eq!(quantity(2.0), "2");
+        assert_eq!(quantity(0.5), "0,5");
+        assert_eq!(quantity(0.000_123_45), "0,00012345");
+        assert_eq!(quantity(1234.5), "1\u{202f}234,5");
+        assert_eq!(quantity(f64::NAN), "—");
+    }
+
+    #[test]
+    fn sommes_compactes_par_ordre_de_grandeur() {
+        assert_eq!(compact(1_500_000_000.0, &eur()), "1,5 Md\u{202f}€");
+        assert_eq!(compact(2_000_000.0, &eur()), "2 M\u{202f}€");
+        assert_eq!(compact(999.0, &eur()), "999\u{202f}€");
+        assert_eq!(compact(f64::INFINITY, &eur()), "—");
     }
 
     #[test]

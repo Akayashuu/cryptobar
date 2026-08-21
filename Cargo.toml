@@ -20,8 +20,13 @@ serde_json = "1"
 terminal_size = "0.4"
 thiserror = "2"
 toml = "0.9"
+toml_edit = "0.25"
 ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "json"] }
 gtk4 = { version = "0.9", optional = true }
+# L'encodage PNG de Cairo n'est pas activé par gtk4 : la fenêtre en a besoin
+# pour exporter la courbe. Même version que celle tirée par gtk4, donc une
+# seule copie de la bibliothèque.
+cairo-rs = { version = "0.20", features = ["png"], optional = true }
 rustix-libc-wrappers = { version = "0.1.1", features = ["process"] }
 
 [dev-dependencies]
@@ -33,7 +38,7 @@ tempfile = "3"
 
 [features]
 default = ["popup"]
-popup = ["dep:gtk4"]
+popup = ["dep:gtk4", "dep:cairo-rs"]
 
 [profile.release]
 opt-level = 3

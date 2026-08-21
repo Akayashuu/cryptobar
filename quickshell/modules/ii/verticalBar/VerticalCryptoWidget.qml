@@ -26,6 +26,13 @@ Item {
         anchors.centerIn: parent
         spacing: 1
 
+        Bar.CryptoCoinIcon {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: !Crypto.stale && !Crypto.loading
+            coin: Crypto.active
+            size: Appearance.font.pixelSize.large
+        }
+
         StyledText {
             anchors.horizontalCenter: parent.horizontalCenter
             font.pixelSize: Appearance.font.pixelSize.smaller

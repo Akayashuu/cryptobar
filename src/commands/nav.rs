@@ -19,6 +19,18 @@ pub fn step(app: &App, delta: isize) -> Result<()> {
     Ok(())
 }
 
+/// Fige la sélection sur un indice explicite puis réveille Waybar.
+///
+/// # Errors
+/// Échoue si l'état ne peut pas être écrit.
+pub fn select(app: &App, index: usize) -> Result<()> {
+    let mut state = app.state();
+    state.select(index, app.config.coins.len());
+    app.save_state(&state)?;
+    app.notify();
+    Ok(())
+}
+
 /// Vide le cache pour forcer une requête au prochain affichage.
 ///
 /// # Errors

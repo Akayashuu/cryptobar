@@ -25,19 +25,36 @@ Item {
         anchors.centerIn: parent
         spacing: 5
 
-        MaterialSymbol {
+        // Le logo officiel remplace l'icône générique dès qu'il est en cache ;
+        // l'icône ne reste que pour les deux états qui n'ont pas de pièce à
+        // montrer : hors ligne et premier chargement.
+        Item {
             Layout.alignment: Qt.AlignVCenter
-            iconSize: Appearance.font.pixelSize.larger
-            color: root.accent
-            text: Crypto.stale ? "cloud_off" : Crypto.loading ? "sync" : "currency_bitcoin"
+            implicitWidth: Appearance.font.pixelSize.larger
+            implicitHeight: Appearance.font.pixelSize.larger
 
-            RotationAnimator on rotation {
-                running: Crypto.loading && !Crypto.stale
-                from: 0
-                to: 360
-                duration: 1200
-                loops: Animation.Infinite
-                onRunningChanged: if (!running) target.rotation = 0
+            MaterialSymbol {
+                anchors.centerIn: parent
+                visible: Crypto.stale || Crypto.loading
+                iconSize: Appearance.font.pixelSize.larger
+                color: root.accent
+                text: Crypto.stale ? "cloud_off" : "sync"
+
+                RotationAnimator on rotation {
+                    running: Crypto.loading && !Crypto.stale
+                    from: 0
+                    to: 360
+                    duration: 1200
+                    loops: Animation.Infinite
+                    onRunningChanged: if (!running) target.rotation = 0
+                }
+            }
+
+            CryptoCoinIcon {
+                anchors.centerIn: parent
+                visible: !Crypto.stale && !Crypto.loading
+                coin: Crypto.active
+                size: Appearance.font.pixelSize.larger
             }
         }
 

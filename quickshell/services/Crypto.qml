@@ -40,8 +40,13 @@ Singleton {
     property bool stale: false
     /// Série de la pièce active, normalisée dans [0, 1].
     property var series: []
+    /// Cotation active complète (symbole, logo, glyphe, couleurs, série), ou
+    /// `null` tant qu'aucune ligne n'a été reçue. `icon` est déjà pris par la
+    /// fonction de tendance : les widgets passent cet objet à CryptoCoinIcon.
+    property var active: null
     /// Toutes les cotations suivies : { symbol, name, price, change_1h,
-    /// change_24h, change_7d, trend, series, active }.
+    /// change_24h, change_7d, trend, series, active, icon, glyph, color,
+    /// foreground }.
     property var coins: []
 
     /// Vrai tant qu'aucune ligne n'a été reçue.
@@ -70,7 +75,8 @@ Singleton {
         root.coins = payload.coins ?? [];
         root.stale = payload.stale ?? false;
         root.trend = payload.trend ?? "flat";
-        const active = root.coins.find(coin => coin.active);
+        const active = root.coins.find(coin => coin.active) ?? null;
+        root.active = active;
         root.series = active?.series ?? [];
     }
 
@@ -86,6 +92,8 @@ Singleton {
     function refresh() { root.run(["refresh"]); }
     function openPopup() { root.run(["popup"]); }
     function openChart() { root.run(["chart", "--window"]); }
+    /// Rend active la pièce d'indice donné dans la liste configurée.
+    function select(index) { root.run(["select", String(index)]); }
 
     /// Flèche Material correspondant à une tendance.
     function icon(trend) {

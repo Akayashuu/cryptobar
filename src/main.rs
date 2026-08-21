@@ -5,7 +5,7 @@ use clap::Parser as _;
 
 use cryptobar::app::App;
 use cryptobar::cli::{Cli, Command};
-use cryptobar::commands::{bar, chart, coins, config_cmd, nav, popup};
+use cryptobar::commands::{bar, chart, coins, config_cmd, nav, popup, wallet};
 use cryptobar::render::waybar::Markup;
 
 fn main() -> Result<()> {
@@ -23,9 +23,10 @@ fn main() -> Result<()> {
         watch: false,
         markup: Markup::default(),
     }) {
-        Command::Bar { watch, markup } => bar::run(&app, watch, markup),
+        Command::Bar { watch, markup } => bar::run(app, watch, markup),
         Command::Next => nav::step(&app, 1),
         Command::Prev => nav::step(&app, -1),
+        Command::Select { index } => nav::select(&app, index),
         Command::Refresh => nav::refresh(&app),
         Command::Chart {
             coin,
@@ -39,7 +40,8 @@ fn main() -> Result<()> {
             }
         }
         Command::Coins { term } => coins::run(&app, &term),
-        Command::Popup => popup::run(&app),
+        Command::Popup => popup::run(app),
+        Command::Portfolio => wallet::run(&app),
         Command::Config { .. } => unreachable!("traité avant l'initialisation du contexte"),
     }
 }

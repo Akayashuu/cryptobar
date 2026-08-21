@@ -14,6 +14,7 @@ StyledPopup {
     // Largeurs fixes : les colonnes restent alignées d'une ligne à l'autre sans
     // recourir à un GridLayout, dont le délégué de Repeater serait à plat.
     readonly property int curveWidth: 44
+    readonly property int logoSize: 16
     readonly property int symbolWidth: 42
     readonly property int priceWidth: 88
     readonly property int changeWidth: 62
@@ -58,7 +59,7 @@ StyledPopup {
                 spacing: 8
 
                 Item {
-                    width: root.curveWidth + root.symbolWidth + root.priceWidth + 20
+                    width: root.curveWidth + root.logoSize + root.symbolWidth + root.priceWidth + 28
                     height: 1
                 }
 
@@ -89,6 +90,12 @@ StyledPopup {
                         anchors.left: parent.left
                         anchors.leftMargin: 4
                         spacing: 8
+
+                        CryptoCoinIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            coin: line.modelData
+                            size: root.logoSize
+                        }
 
                         CryptoSparkline {
                             anchors.verticalCenter: parent.verticalCenter

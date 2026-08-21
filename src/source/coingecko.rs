@@ -135,6 +135,18 @@ struct RawMarket {
     price_change_percentage_7d_in_currency: Option<f64>,
     #[serde(default)]
     sparkline_in_7d: Option<RawSparkline>,
+    #[serde(default)]
+    image: Option<String>,
+    #[serde(default)]
+    market_cap: Option<f64>,
+    #[serde(default)]
+    total_volume: Option<f64>,
+    #[serde(default)]
+    market_cap_rank: Option<u32>,
+    #[serde(default)]
+    ath: Option<f64>,
+    #[serde(default)]
+    ath_date: Option<String>,
 }
 
 /// Convertit une réponse `/coins/markets`. Les entrées inexploitables (identifiant
@@ -171,6 +183,13 @@ pub fn parse_markets(raw: &str) -> Result<Vec<Quote>, SourceError> {
                 change_24h: entry.price_change_percentage_24h_in_currency,
                 change_7d: entry.price_change_percentage_7d_in_currency,
                 sparkline,
+                image: entry.image.filter(|url| !url.trim().is_empty()),
+                market_cap: entry.market_cap.filter(|v| v.is_finite() && *v > 0.0),
+                volume_24h: entry.total_volume.filter(|v| v.is_finite() && *v >= 0.0),
+                rank: entry.market_cap_rank,
+                ath: entry.ath.filter(|v| v.is_finite() && *v > 0.0),
+                ath_date: entry.ath_date.filter(|d| !d.trim().is_empty()),
+                icon: None,
             })
         })
         .collect())

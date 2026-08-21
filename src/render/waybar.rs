@@ -12,8 +12,9 @@ use serde::Serialize;
 
 use crate::config::Config;
 use crate::model::Quote;
+use crate::portfolio;
 
-use super::{format, sparkline};
+use super::{badge, format, sparkline};
 
 /// Nombre de points conservés dans les séries transmises aux barres riches :
 /// assez pour dessiner une courbe lisible, assez peu pour que la ligne JSON
@@ -40,6 +41,52 @@ pub struct CoinRow {
     pub series: Vec<f64>,
     /// Cotation actuellement mise en avant dans la barre.
     pub active: bool,
+    /// Chemin local du logo officiel, vide s'il n'est pas encore en cache.
+    /// Les consommateurs qui savent afficher une image le préfèrent à la
+    /// pastille.
+    pub icon: String,
+    /// Glyphe de la pastille de repli, un seul caractère.
+    pub glyph: String,
+    /// Couleur de marque du disque, `#rrggbb`.
+    pub color: String,
+    /// Couleur lisible par-dessus [`CoinRow::color`], `#rrggbb`.
+    pub foreground: String,
+}
+
+/// Une ligne du portefeuille, prête à afficher.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct HoldingRow {
+    pub symbol: String,
+    /// Quantité détenue, telle qu'écrite dans la configuration.
+    pub quantity: String,
+    /// Valeur de la ligne dans la devise de cotation.
+    pub value: String,
+    /// Part du portefeuille, dans [0, 1] : le consommateur en fait un arc,
+    /// une barre ou un pourcentage, selon la place dont il dispose.
+    pub share: f64,
+    pub color: String,
+}
+
+/// Portefeuille valorisé, absent si aucune quantité n'est déclarée.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct PortfolioSummary {
+    pub total: String,
+    /// Gain ou perte sur 24 h, déjà formaté avec son signe.
+    pub change_24h: String,
+    pub change_24h_pct: String,
+    /// Vrai si le portefeuille est en hausse sur 24 h.
+    pub positive: bool,
+    pub positions: Vec<HoldingRow>,
+}
+
+/// Une alerte actuellement franchie.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct AlertRow {
+    pub symbol: String,
+    /// "above", "below" ou "change".
+    pub kind: &'static str,
+    pub title: String,
+    pub body: String,
 }
 
 /// Charge utile d'un module Waybar.
@@ -59,8 +106,18 @@ pub struct Module {
     pub trend: &'static str,
     /// Données servies depuis le cache, réseau indisponible.
     pub stale: bool,
+    /// Logo et pastille de repli de la cotation active.
+    pub icon: String,
+    pub glyph: String,
+    pub color: String,
+    pub foreground: String,
     /// Toutes les cotations suivies, dans l'ordre de la configuration.
     pub coins: Vec<CoinRow>,
+    /// Alertes franchies à cet instant. Vide la plupart du temps : c'est ce
+    /// qui permet à la barre d'allumer un indicateur sans rien recalculer.
+    pub alerts: Vec<AlertRow>,
+    /// Portefeuille valorisé, `null` si aucune quantité n'est déclarée.
+    pub portfolio: Option<PortfolioSummary>,
 }
 
 /// Ramène une série dans [0, 1]. Une série plate se place au milieu plutôt
@@ -175,6 +232,7 @@ pub fn render(
     config: &Config,
     stale: bool,
     markup: Markup,
+    onchain: &std::collections::BTreeMap<crate::model::CoinId, f64>,
 ) -> Module {
     let Some(quote) = quotes.get(active).or_else(|| quotes.first()) else {
         return Module {
@@ -187,11 +245,20 @@ pub fn render(
             sparkline: String::new(),
             trend: "error",
             stale,
+            icon: String::new(),
+            glyph: "●".to_owned(),
+            color: "#8d99ae".to_owned(),
+            foreground: "#ffffff".to_owned(),
             coins: Vec::new(),
+            alerts: Vec::new(),
+            portfolio: None,
         };
     };
 
     let decimals = config.decimals();
+    let triggers = crate::alerts::evaluate(config, quotes);
+    let wallet = portfolio::compute(quotes, onchain);
+    let badge = badge::of(&quote.symbol);
     let symbol = markup.escape(&quote.symbol.to_uppercase());
     let price = markup.escape(&format::price(quote.price, &config.currency, decimals));
     let percent = markup.escape(&format::percent(quote.change_24h));
@@ -211,15 +278,65 @@ pub fn render(
 
     Module {
         text,
-        tooltip: tooltip(quotes, active, config, stale, markup),
-        class: class(quote, stale),
+        tooltip: tooltip(
+            quotes,
+            active,
+            config,
+            stale,
+            markup,
+            wallet.as_ref(),
+            &triggers,
+        ),
+        class: class(quote, stale, !triggers.is_empty()),
         symbol,
         price,
         percent,
         sparkline: spark,
         trend: quote.trend().class(),
         stale,
+        icon: quote.icon.clone().unwrap_or_default(),
+        glyph: badge.glyph,
+        color: badge.color,
+        foreground: badge.foreground,
         coins: rows(quotes, active, config, markup),
+        alerts: triggers
+            .iter()
+            .map(|trigger| AlertRow {
+                symbol: markup.escape(&trigger.symbol),
+                kind: trigger.kind.slug(),
+                title: markup.escape(&trigger.title),
+                body: markup.escape(&trigger.body),
+            })
+            .collect(),
+        portfolio: wallet.map(|wallet| summary(&wallet, config, markup)),
+    }
+}
+
+fn summary(wallet: &portfolio::Portfolio, config: &Config, markup: Markup) -> PortfolioSummary {
+    let decimals = config.decimals();
+    let money = |value: f64| markup.escape(&format::price(value, &config.currency, decimals));
+    PortfolioSummary {
+        total: money(wallet.total),
+        change_24h: match wallet.change_24h {
+            // Le signe est explicite : « +12 € » et « 12 € » ne se lisent pas
+            // pareil au coin d'un écran.
+            Some(gain) if gain >= 0.0 => format!("+{}", money(gain)),
+            Some(gain) => money(gain),
+            None => "—".to_owned(),
+        },
+        change_24h_pct: markup.escape(&format::percent(wallet.change_24h_pct)),
+        positive: wallet.change_24h.is_some_and(|gain| gain >= 0.0),
+        positions: wallet
+            .positions
+            .iter()
+            .map(|position| HoldingRow {
+                symbol: markup.escape(&position.symbol.to_uppercase()),
+                quantity: markup.escape(&format::quantity(position.quantity)),
+                value: money(position.value),
+                share: (position.share * 1000.0).round() / 1000.0,
+                color: position.color.clone(),
+            })
+            .collect(),
     }
 }
 
@@ -228,27 +345,36 @@ fn rows(quotes: &[Quote], active: usize, config: &Config, markup: Markup) -> Vec
     quotes
         .iter()
         .enumerate()
-        .map(|(index, quote)| CoinRow {
-            symbol: markup.escape(&quote.symbol.to_uppercase()),
-            name: markup.escape(&quote.name),
-            price: markup.escape(&format::price(quote.price, &config.currency, decimals)),
-            change_1h: markup.escape(&format::percent(quote.change_1h)),
-            change_24h: markup.escape(&format::percent(quote.change_24h)),
-            change_7d: markup.escape(&format::percent(quote.change_7d)),
-            trend: quote.trend().class(),
-            series: normalize(&quote.sparkline),
-            active: index == active,
+        .map(|(index, quote)| {
+            let badge = badge::of(&quote.symbol);
+            CoinRow {
+                symbol: markup.escape(&quote.symbol.to_uppercase()),
+                name: markup.escape(&quote.name),
+                price: markup.escape(&format::price(quote.price, &config.currency, decimals)),
+                change_1h: markup.escape(&format::percent(quote.change_1h)),
+                change_24h: markup.escape(&format::percent(quote.change_24h)),
+                change_7d: markup.escape(&format::percent(quote.change_7d)),
+                trend: quote.trend().class(),
+                series: normalize(&quote.sparkline),
+                active: index == active,
+                icon: quote.icon.clone().unwrap_or_default(),
+                glyph: badge.glyph,
+                color: badge.color,
+                foreground: badge.foreground,
+            }
         })
         .collect()
 }
 
-fn class(quote: &Quote, stale: bool) -> String {
-    let trend = quote.trend().class();
+fn class(quote: &Quote, stale: bool, alerting: bool) -> String {
+    let mut class = quote.trend().class().to_owned();
     if stale {
-        format!("{trend} stale")
-    } else {
-        trend.to_owned()
+        class.push_str(" stale");
     }
+    if alerting {
+        class.push_str(" alert");
+    }
+    class
 }
 
 fn tooltip(
@@ -257,6 +383,8 @@ fn tooltip(
     config: &Config,
     stale: bool,
     markup: Markup,
+    wallet: Option<&portfolio::Portfolio>,
+    triggers: &[crate::alerts::Trigger],
 ) -> String {
     let decimals = config.decimals();
     let mut lines = Vec::with_capacity(quotes.len().saturating_add(2));
@@ -270,6 +398,19 @@ fn tooltip(
             markup.escape(&format::percent(quote.change_24h)),
             markup.escape(&format::percent(quote.change_7d)),
         ));
+    }
+    if let Some(wallet) = wallet {
+        lines.push(String::new());
+        let total = markup.escape(&format::price(wallet.total, &config.currency, decimals));
+        let gain = markup.escape(&format::percent(wallet.change_24h_pct));
+        lines.push(format!(
+            "{}  {total}   24h {gain}",
+            markup.bold("Portefeuille")
+        ));
+    }
+    for trigger in triggers {
+        lines.push(String::new());
+        lines.push(format!("⚠ {}", markup.escape(&trigger.title)));
     }
     if stale {
         lines.push(String::new());
@@ -300,6 +441,13 @@ mod tests {
             change_24h: change,
             change_7d: Some(-2.0),
             sparkline: vec![1.0, 2.0, 3.0, 2.0],
+            image: None,
+            market_cap: None,
+            volume_24h: None,
+            rank: None,
+            ath: None,
+            ath_date: None,
+            icon: None,
         }
     }
 
@@ -311,6 +459,7 @@ mod tests {
             &config(),
             false,
             Markup::Pango,
+            &std::collections::BTreeMap::new(),
         );
         assert!(module.text.contains("BTC"));
         assert!(module.text.contains("42"));
@@ -326,7 +475,8 @@ mod tests {
                 0,
                 &cfg,
                 false,
-                Markup::Pango
+                Markup::Pango,
+                &std::collections::BTreeMap::new(),
             )
             .class,
             "up"
@@ -337,7 +487,8 @@ mod tests {
                 0,
                 &cfg,
                 false,
-                Markup::Pango
+                Markup::Pango,
+                &std::collections::BTreeMap::new(),
             )
             .class,
             "down"
@@ -352,6 +503,7 @@ mod tests {
             &config(),
             true,
             Markup::Pango,
+            &std::collections::BTreeMap::new(),
         );
         assert!(module.class.contains("stale"));
         assert!(module.tooltip.contains("périmées"));
@@ -359,7 +511,14 @@ mod tests {
 
     #[test]
     fn une_liste_vide_donne_un_module_derreur_et_non_un_panic() {
-        let module = render(&[], 0, &config(), false, Markup::Pango);
+        let module = render(
+            &[],
+            0,
+            &config(),
+            false,
+            Markup::Pango,
+            &std::collections::BTreeMap::new(),
+        );
         assert_eq!(module.class, "error");
     }
 
@@ -371,6 +530,7 @@ mod tests {
             &config(),
             false,
             Markup::Pango,
+            &std::collections::BTreeMap::new(),
         );
         assert!(module.text.contains("BTC"));
     }
@@ -383,6 +543,7 @@ mod tests {
             &config(),
             false,
             Markup::Pango,
+            &std::collections::BTreeMap::new(),
         );
         assert!(!module.text.contains("<b>"));
         assert!(module.text.contains("&lt;"));
@@ -392,7 +553,15 @@ mod tests {
     #[test]
     fn le_tooltip_marque_la_cotation_active() {
         let quotes = vec![quote("btc", 1.0, Some(1.0)), quote("eth", 2.0, Some(1.0))];
-        let tooltip = render(&quotes, 1, &config(), false, Markup::Pango).tooltip;
+        let tooltip = render(
+            &quotes,
+            1,
+            &config(),
+            false,
+            Markup::Pango,
+            &std::collections::BTreeMap::new(),
+        )
+        .tooltip;
         let second = tooltip.lines().nth(1).unwrap();
         assert!(second.starts_with('▸'));
     }
@@ -405,6 +574,7 @@ mod tests {
             &config(),
             false,
             Markup::Pango,
+            &std::collections::BTreeMap::new(),
         )
         .to_line()
         .unwrap();
@@ -415,7 +585,14 @@ mod tests {
     #[test]
     fn le_mode_sans_balisage_ne_produit_ni_balise_ni_entite() {
         let quotes = vec![quote("<b>&x", 1.0, Some(1.0)), quote("eth", 2.0, Some(1.0))];
-        let module = render(&quotes, 0, &config(), true, Markup::None);
+        let module = render(
+            &quotes,
+            0,
+            &config(),
+            true,
+            Markup::None,
+            &std::collections::BTreeMap::new(),
+        );
         for field in [&module.text, &module.tooltip] {
             // Aucune balise n'est ajoutée par le rendu : ni <b> ni <i>.
             assert!(!field.contains("<b>"), "balise résiduelle : {field}");
@@ -435,6 +612,7 @@ mod tests {
             &config(),
             false,
             Markup::None,
+            &std::collections::BTreeMap::new(),
         );
         assert!(!module.text.contains('\n'));
     }
@@ -454,6 +632,7 @@ mod tests {
             &config(),
             false,
             Markup::None,
+            &std::collections::BTreeMap::new(),
         );
         assert_eq!(module.symbol, "BTC");
         assert!(module.price.contains("42"));
@@ -476,7 +655,14 @@ mod tests {
             quote("btc", 42_000.0, Some(1.5)),
             quote("eth", 2_000.0, Some(-1.0)),
         ];
-        let module = render(&quotes, 1, &config(), false, Markup::None);
+        let module = render(
+            &quotes,
+            1,
+            &config(),
+            false,
+            Markup::None,
+            &std::collections::BTreeMap::new(),
+        );
         let [first, second] = module.coins.as_slice() else {
             panic!(
                 "deux cotations attendues, {} obtenue(s)",
@@ -498,6 +684,7 @@ mod tests {
             &config(),
             false,
             Markup::None,
+            &std::collections::BTreeMap::new(),
         );
         let Some(row) = module.coins.first() else {
             panic!("une cotation attendue");

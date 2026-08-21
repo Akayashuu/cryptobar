@@ -61,6 +61,14 @@ impl CoinId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// Identifiant écrit en dur dans le code, donc déjà valide. Réservé aux
+    /// constantes du programme : tout ce qui vient de l'extérieur passe par
+    /// [`CoinId::parse`].
+    #[must_use]
+    pub(crate) fn trusted(raw: &'static str) -> Self {
+        Self(raw.to_owned())
+    }
 }
 
 impl TryFrom<String> for CoinId {
@@ -96,6 +104,15 @@ impl Currency {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Toutes les devises de cotation supportées, dans l'ordre d'affichage.
+    #[must_use]
+    pub fn all() -> Vec<Self> {
+        CURRENCIES
+            .iter()
+            .map(|(code, _)| Self((*code).to_owned()))
+            .collect()
     }
 
     #[must_use]
@@ -149,6 +166,30 @@ pub struct Quote {
     pub change_24h: Option<f64>,
     pub change_7d: Option<f64>,
     pub sparkline: Vec<f64>,
+    /// URL du logo officiel, telle que fournie par la source. Conservée dans
+    /// le cache pour pouvoir télécharger l'image plus tard, hors du chemin
+    /// critique d'un tick de barre.
+    #[serde(default)]
+    pub image: Option<String>,
+    /// Capitalisation boursière dans la devise de cotation.
+    #[serde(default)]
+    pub market_cap: Option<f64>,
+    /// Volume échangé sur 24 h dans la devise de cotation.
+    #[serde(default)]
+    pub volume_24h: Option<f64>,
+    /// Rang par capitalisation, 1 étant le plus élevé.
+    #[serde(default)]
+    pub rank: Option<u32>,
+    /// Plus haut historique dans la devise de cotation.
+    #[serde(default)]
+    pub ath: Option<f64>,
+    /// Date du plus haut historique, en ISO 8601 telle que fournie par la source.
+    #[serde(default)]
+    pub ath_date: Option<String>,
+    /// Chemin local du logo une fois téléchargé. Rempli à l'exécution et
+    /// jamais persisté : un chemin de cache n'a pas à survivre au cache.
+    #[serde(skip)]
+    pub icon: Option<String>,
 }
 
 impl Quote {
@@ -205,6 +246,19 @@ impl Range {
             Self::D7 => "7d",
             Self::D30 => "30d",
             Self::Y1 => "1y",
+        }
+    }
+
+    /// Durée couverte par la plage, en minutes. Sert à dater un point de la
+    /// courbe : les séries ne portent que des valeurs, pas d'horodatage.
+    #[must_use]
+    pub fn span_minutes(self) -> f64 {
+        match self {
+            Self::H1 => 60.0,
+            Self::H24 => 1_440.0,
+            Self::D7 => 10_080.0,
+            Self::D30 => 43_200.0,
+            Self::Y1 => 525_600.0,
         }
     }
 }
@@ -274,6 +328,13 @@ mod tests {
             change_24h: c,
             change_7d: None,
             sparkline: Vec::new(),
+            image: None,
+            market_cap: None,
+            volume_24h: None,
+            rank: None,
+            ath: None,
+            ath_date: None,
+            icon: None,
         };
         assert_eq!(q(Some(2.0)).trend(), Trend::Up);
         assert_eq!(q(Some(-2.0)).trend(), Trend::Down);
