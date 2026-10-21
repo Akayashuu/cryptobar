@@ -245,6 +245,6 @@ mod tests {
     #[test]
     fn an_empty_series_or_a_zero_canvas_do_not_panic() {
         assert_eq!(plot(&[], 10, 3).len(), 3);
-        assert!(plot(&[1.0, 2.0], 0, 0).is_empty());
+        assert_eq!(plot(&[1.0, 2.0], 0, 0).len(), 0);
     }
 }

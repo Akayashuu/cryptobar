@@ -306,7 +306,7 @@ mod tests {
         assert_eq!(quotes.len(), 2);
         let btc = quotes.first().unwrap();
         assert_eq!(btc.change_24h, None);
-        assert!(btc.sparkline.is_empty());
+        assert_eq!(btc.sparkline.len(), 0);
         let doge = quotes.get(1).unwrap();
         // Without `name`, we fall back to the symbol rather than failing.
         assert_eq!(doge.name, "DOGE");
@@ -324,7 +324,7 @@ mod tests {
     #[test]
     fn parse_markets_skips_entries_without_a_valid_id() {
         let raw = r#"[{"id": "bit coin", "symbol": "x", "current_price": 1.0}]"#;
-        assert!(parse_markets(raw).unwrap().is_empty());
+        assert_eq!(parse_markets(raw).unwrap().len(), 0);
     }
 
     #[test]

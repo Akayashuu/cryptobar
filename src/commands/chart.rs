@@ -196,7 +196,7 @@ mod tests {
     #[test]
     fn an_empty_series_does_not_panic() {
         let out = render(&series(Vec::new()), &config(), 80, 20, false);
-        assert!(!out.is_empty());
+        assert_ne!(out.len(), 0);
     }
 
     #[test]
