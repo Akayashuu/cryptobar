@@ -449,7 +449,7 @@ mod tests {
         assert_eq!(config.alerts.len(), 1);
         assert_eq!(config.alerts.first().unwrap().above, Some(100.0));
         let config = editor.remove_alert(0).unwrap();
-        assert!(config.alerts.is_empty());
+        assert_eq!(config.alerts.len(), 0);
     }
 
     #[test]
@@ -466,7 +466,7 @@ mod tests {
         assert_eq!(config.wallets.len(), 1);
         assert_eq!(config.wallets.first().unwrap().title(), "Ledger");
         let config = editor.remove_wallet(0).unwrap();
-        assert!(config.wallets.is_empty());
+        assert_eq!(config.wallets.len(), 0);
     }
 
     #[test]
@@ -540,7 +540,7 @@ mod tests {
             .set_currency(&Currency::parse("usd").unwrap())
             .unwrap();
         assert_eq!(config.currency.as_str(), "usd");
-        assert!(!config.coins.is_empty());
+        assert_ne!(config.coins.len(), 0);
         assert!(editor.path().exists());
     }
 }

@@ -635,7 +635,7 @@ mod tests {
         assert_eq!(module.symbol, "BTC");
         assert!(module.price.contains("42"));
         assert!(module.percent.contains("1.5"));
-        assert!(!module.sparkline.is_empty());
+        assert_ne!(module.sparkline.len(), 0);
         // The text stays the concatenation of the fields: no divergence is
         // possible between the two representations.
         assert_eq!(
@@ -685,7 +685,7 @@ mod tests {
             panic!("expected one quote");
         };
         let series = &row.series;
-        assert!(!series.is_empty());
+        assert_ne!(series.len(), 0);
         assert!(series.iter().all(|value| (0.0..=1.0).contains(value)));
         // The extremes touch the bounds: the curve fills the whole height.
         assert!(series.iter().copied().any(|value| value == 0.0));
@@ -695,8 +695,8 @@ mod tests {
     #[test]
     fn a_flat_series_sits_in_the_middle() {
         assert_eq!(normalize(&[3.0, 3.0, 3.0]), vec![0.5, 0.5, 0.5]);
-        assert!(normalize(&[]).is_empty());
-        assert!(normalize(&[f64::NAN]).is_empty());
+        assert_eq!(normalize(&[]).len(), 0);
+        assert_eq!(normalize(&[f64::NAN]).len(), 0);
     }
 
     #[test]

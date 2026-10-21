@@ -364,7 +364,7 @@ mod tests {
         let path = dir.path().join("config.toml");
         Config::write_default(&path, false).unwrap();
         let cfg = Config::load_from(&path).unwrap();
-        assert!(!cfg.coins.is_empty());
+        assert_ne!(cfg.coins.len(), 0);
     }
 
     #[test]

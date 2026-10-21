@@ -219,7 +219,7 @@ mod tests {
     #[test]
     fn an_unreached_ceiling_does_not_fire() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 100000\n");
-        assert!(evaluate(&config, &[quote("bitcoin", "BTC", 99_000.0, None)]).is_empty());
+        assert_eq!(evaluate(&config, &[quote("bitcoin", "BTC", 99_000.0, None)]).len(), 0);
     }
 
     #[test]
@@ -240,26 +240,26 @@ mod tests {
             evaluate(&config, &[quote("bitcoin", "BTC", 1.0, Some(6.0))]).len(),
             1
         );
-        assert!(evaluate(&config, &[quote("bitcoin", "BTC", 1.0, Some(2.0))]).is_empty());
+        assert_eq!(evaluate(&config, &[quote("bitcoin", "BTC", 1.0, Some(2.0))]).len(), 0);
     }
 
     #[test]
     fn a_missing_change_does_not_fire() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nchange_pct = 5\n");
-        assert!(evaluate(&config, &[quote("bitcoin", "BTC", 1.0, None)]).is_empty());
-        assert!(evaluate(&config, &[quote("bitcoin", "BTC", 1.0, Some(f64::NAN))]).is_empty());
+        assert_eq!(evaluate(&config, &[quote("bitcoin", "BTC", 1.0, None)]).len(), 0);
+        assert_eq!(evaluate(&config, &[quote("bitcoin", "BTC", 1.0, Some(f64::NAN))]).len(), 0);
     }
 
     #[test]
     fn a_disabled_alert_is_ignored() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 1\nenabled = false\n");
-        assert!(evaluate(&config, &[quote("bitcoin", "BTC", 100.0, None)]).is_empty());
+        assert_eq!(evaluate(&config, &[quote("bitcoin", "BTC", 100.0, None)]).len(), 0);
     }
 
     #[test]
     fn without_a_quote_nothing_fires_or_re_arms() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 1\n");
-        assert!(evaluate(&config, &[]).is_empty());
+        assert_eq!(evaluate(&config, &[]).len(), 0);
     }
 
     #[test]
@@ -269,7 +269,7 @@ mod tests {
         let (fresh, fired) = diff(&triggers, &BTreeSet::new());
         assert_eq!(fresh.len(), 1);
         let (again, still) = diff(&triggers, &fired);
-        assert!(again.is_empty());
+        assert_eq!(again.len(), 0);
         assert_eq!(still, fired);
     }
 
@@ -285,7 +285,7 @@ mod tests {
             &evaluate(&config, &[quote("bitcoin", "BTC", 90_000.0, None)]),
             &fired,
         );
-        assert!(cleared.is_empty());
+        assert_eq!(cleared.len(), 0);
         // Then it rises above again: it has to notify once more.
         let (fresh, _) = diff(
             &evaluate(&config, &[quote("bitcoin", "BTC", 101_000.0, None)]),
