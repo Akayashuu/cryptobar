@@ -219,7 +219,10 @@ mod tests {
     #[test]
     fn an_unreached_ceiling_does_not_fire() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 100000\n");
-        assert_eq!(evaluate(&config, &[quote("bitcoin", "BTC", 99_000.0, None)]).len(), 0);
+        assert_eq!(
+            evaluate(&config, &[quote("bitcoin", "BTC", 99_000.0, None)]).len(),
+            0
+        );
     }
 
     #[test]
@@ -240,20 +243,32 @@ mod tests {
             evaluate(&config, &[quote("bitcoin", "BTC", 1.0, Some(6.0))]).len(),
             1
         );
-        assert_eq!(evaluate(&config, &[quote("bitcoin", "BTC", 1.0, Some(2.0))]).len(), 0);
+        assert_eq!(
+            evaluate(&config, &[quote("bitcoin", "BTC", 1.0, Some(2.0))]).len(),
+            0
+        );
     }
 
     #[test]
     fn a_missing_change_does_not_fire() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nchange_pct = 5\n");
-        assert_eq!(evaluate(&config, &[quote("bitcoin", "BTC", 1.0, None)]).len(), 0);
-        assert_eq!(evaluate(&config, &[quote("bitcoin", "BTC", 1.0, Some(f64::NAN))]).len(), 0);
+        assert_eq!(
+            evaluate(&config, &[quote("bitcoin", "BTC", 1.0, None)]).len(),
+            0
+        );
+        assert_eq!(
+            evaluate(&config, &[quote("bitcoin", "BTC", 1.0, Some(f64::NAN))]).len(),
+            0
+        );
     }
 
     #[test]
     fn a_disabled_alert_is_ignored() {
         let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 1\nenabled = false\n");
-        assert_eq!(evaluate(&config, &[quote("bitcoin", "BTC", 100.0, None)]).len(), 0);
+        assert_eq!(
+            evaluate(&config, &[quote("bitcoin", "BTC", 100.0, None)]).len(),
+            0
+        );
     }
 
     #[test]
