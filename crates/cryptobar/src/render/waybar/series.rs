@@ -22,7 +22,6 @@ pub(super) fn normalize(points: &[f64]) -> Vec<f64> {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic, clippy::float_cmp)]
 mod tests {
     use super::*;
     use crate::render::waybar::Markup;

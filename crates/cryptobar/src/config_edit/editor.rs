@@ -90,7 +90,6 @@ fn write_temporary(tmp: &Path, contents: &str) -> Result<(), EditError> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use crate::config_edit::fixtures::editor;
     use crate::model::Currency;

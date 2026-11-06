@@ -56,7 +56,6 @@ fn is_base58(c: char) -> bool {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::onchain::{Chain, OnchainError, Wallet};

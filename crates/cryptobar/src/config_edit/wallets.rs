@@ -83,7 +83,6 @@ fn wallets_array(document: &mut DocumentMut) -> Result<&mut toml_edit::ArrayOfTa
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use crate::config_edit::fixtures::{editor, seed};
 

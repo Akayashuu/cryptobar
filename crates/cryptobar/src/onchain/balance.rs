@@ -30,7 +30,6 @@ pub fn totals(balances: &[Balance]) -> BTreeMap<CoinId, f64> {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 

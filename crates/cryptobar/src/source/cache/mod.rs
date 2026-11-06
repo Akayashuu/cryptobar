@@ -10,7 +10,6 @@ mod key;
 mod refresh;
 mod store;
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests;
 
 pub use store::CachedSource;

@@ -8,7 +8,6 @@
 //! text. [`Markup::None`] then produces output without a single tag or entity.
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod fixtures;
 mod markup;
 mod module;

@@ -72,7 +72,6 @@ fn alerts_array(document: &mut DocumentMut) -> Result<&mut toml_edit::ArrayOfTab
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::config_edit::fixtures::{editor, seed};

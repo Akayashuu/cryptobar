@@ -39,7 +39,6 @@ pub(super) fn rows(
 }
 
 #[cfg(test)]
-#[allow(clippy::panic)]
 mod tests {
     use super::*;
     use crate::render::waybar::fixtures::{config, no_onchain, quote};

@@ -73,7 +73,6 @@ pub fn notify_waybar(offset: u8) -> Result<usize, SignalError> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

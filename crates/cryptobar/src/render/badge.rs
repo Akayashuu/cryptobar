@@ -118,7 +118,6 @@ fn components(hex: &str) -> Option<(u8, u8, u8)> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

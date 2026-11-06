@@ -144,7 +144,6 @@ pub fn spawn_terminal(app: &App, coin: Option<&str>, range: Range) -> Result<(),
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::config::Config;

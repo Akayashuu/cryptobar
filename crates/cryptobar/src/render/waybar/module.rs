@@ -109,7 +109,6 @@ fn class(quote: &Quote, stale: bool, alerting: bool) -> String {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::render::waybar::fixtures::{config, no_onchain, quote};

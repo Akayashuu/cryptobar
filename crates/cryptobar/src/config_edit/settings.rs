@@ -63,7 +63,6 @@ impl Editor {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use crate::config_edit::fixtures::{editor, seed};
 

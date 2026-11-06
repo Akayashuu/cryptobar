@@ -71,23 +71,19 @@ fn units(base: f64, divisor: f64) -> f64 {
     if value.is_finite() { value } else { 0.0 }
 }
 
-#[allow(clippy::cast_precision_loss)]
 fn sats_to_f64(value: i64) -> f64 {
     value as f64
 }
 
-#[allow(clippy::cast_precision_loss)]
 fn wei_to_f64(value: u128) -> f64 {
     value as f64
 }
 
-#[allow(clippy::cast_precision_loss)]
 fn lamports_to_f64(value: u64) -> f64 {
     value as f64
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 

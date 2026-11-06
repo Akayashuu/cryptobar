@@ -121,7 +121,6 @@ fn gain_24h(price: f64, change_pct: Option<f64>) -> Option<f64> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::model::CoinId;

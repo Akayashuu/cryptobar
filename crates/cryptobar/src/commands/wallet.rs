@@ -134,7 +134,6 @@ pub fn render(wallet: Option<&Portfolio>, config: &Config, stale: bool) -> Strin
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::model::{CoinId, Quote};

@@ -60,7 +60,6 @@ pub(super) fn report_frame(
 /// The function does not depend on the widget: it is the one drawing on screen
 /// and filling the image surface of the PNG export, which guarantees the
 /// exported file is exactly what one sees.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn draw_series(
     ctx: &gtk4::cairo::Context,
     points: &[f64],

@@ -67,7 +67,6 @@ pub fn render(hits: &[SearchHit], term: &str) -> String {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::model::CoinId;

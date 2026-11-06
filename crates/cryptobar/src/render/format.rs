@@ -24,7 +24,6 @@ fn auto_decimals(value: f64) -> u8 {
     } else if magnitude >= 0.01 {
         4
     } else if magnitude > 0.0 {
-        #[allow(clippy::cast_possible_truncation)]
         let leading_zeros = (-magnitude.log10().floor()) as i32;
         u8::try_from(leading_zeros.clamp(0, 7).saturating_add(3)).unwrap_or(10)
     } else {
@@ -42,7 +41,6 @@ fn group_thousands(rendered: &str) -> String {
         None => ("", int_part),
     };
 
-    #[allow(clippy::integer_division)]
     let capacity = digits.len().saturating_add(digits.len() / 3);
     let mut grouped = String::with_capacity(capacity);
     for (index, ch) in digits.chars().enumerate() {
@@ -143,7 +141,6 @@ pub fn percent(value: Option<f64>) -> String {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::model::Currency;

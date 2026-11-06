@@ -3,7 +3,6 @@
 //! The cache is seeded by hand: the CoinGecko client is therefore never called,
 //! which makes these tests hermetic and fast.
 
-#![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
 use std::path::Path;
 use std::process::Command;

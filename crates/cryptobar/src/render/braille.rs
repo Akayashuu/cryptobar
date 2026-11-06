@@ -74,13 +74,11 @@ impl Canvas {
 /// `usize` → `f64` conversion for position maths. Terminal dimensions fit very
 /// comfortably in an `f64` mantissa; the degenerate case is clamped rather than
 /// left imprecise.
-#[allow(clippy::cast_precision_loss)]
 #[must_use]
 pub fn as_f64(value: usize) -> f64 {
     value.min(1 << 52) as f64
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn as_usize(value: f64, max: usize) -> usize {
     if !value.is_finite() || value <= 0.0 {
         return 0;
@@ -155,7 +153,6 @@ fn connect(canvas: &mut Canvas, _prev_x: usize, prev_y: usize, x: usize, y: usiz
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

@@ -61,7 +61,6 @@ fn coins_array(document: &mut DocumentMut) -> Result<&mut Array, EditError> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::config_edit::fixtures::{editor, seed};

@@ -103,7 +103,6 @@ pub(super) fn settings_panel(config: &Config, config_path: &str) -> Settings {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn settings_groups(
     grid: &GtkBox,
     currency: &gtk4::DropDown,

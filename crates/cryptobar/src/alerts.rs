@@ -198,7 +198,6 @@ pub fn notify(trigger: &Trigger) -> Result<(), AlertError> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::model::CoinId;
