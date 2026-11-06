@@ -5,9 +5,9 @@ use crate::model::{CoinId, Currency};
 /// the cache directory.
 pub(super) fn sanitize(key: &str) -> String {
     key.chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                c
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+                character
             } else {
                 '_'
             }

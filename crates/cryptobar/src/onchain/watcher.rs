@@ -8,6 +8,9 @@ use super::chain::Chain;
 use super::decode::{decode_bitcoin, decode_ethereum, decode_solana};
 use super::error::OnchainError;
 use super::wallet::Wallet;
+use crate::paths;
+use std::env;
+use std::fs;
 
 const USER_AGENT: &str = concat!(
     "cryptobar/",
@@ -25,7 +28,7 @@ fn endpoint(chain: Chain) -> String {
         Chain::Ethereum => ("CRYPTOBAR_ETH_RPC", "https://ethereum-rpc.publicnode.com"),
         Chain::Solana => ("CRYPTOBAR_SOL_RPC", "https://api.mainnet-beta.solana.com"),
     };
-    match std::env::var(var) {
+    match env::var(var) {
         Ok(base) if !base.trim().is_empty() => base.trim().trim_end_matches('/').to_owned(),
         _ => default.to_owned(),
     }
@@ -44,6 +47,7 @@ pub struct Refresh {
 }
 
 /// Balance reader, with its disk cache.
+#[derive(Debug)]
 pub struct Watcher {
     agent: ureq::Agent,
     path: PathBuf,
@@ -124,7 +128,10 @@ impl Watcher {
             }
         }
 
-        let known: BTreeSet<&str> = wallets.iter().map(|w| w.address.as_str()).collect();
+        let known: BTreeSet<&str> = wallets
+            .iter()
+            .map(|wallet| wallet.address.as_str())
+            .collect();
         let before = stored.len();
         stored.retain(|address, _| known.contains(address.as_str()));
         if (changed || stored.len() != before)
@@ -198,7 +205,7 @@ impl Watcher {
     }
 
     fn read(&self) -> Result<BTreeMap<String, Balance>, OnchainError> {
-        match std::fs::read_to_string(&self.path) {
+        match fs::read_to_string(&self.path) {
             Ok(raw) => Ok(serde_json::from_str(&raw)?),
             Err(absent) if absent.kind() == io::ErrorKind::NotFound => Ok(BTreeMap::new()),
             Err(unreadable) => Err(unreadable.into()),
@@ -207,11 +214,11 @@ impl Watcher {
 
     fn write(&self, balances: &BTreeMap<String, Balance>) -> Result<(), OnchainError> {
         if let Some(dir) = self.path.parent() {
-            crate::paths::ensure_dir(dir)?;
+            paths::ensure_dir(dir)?;
         }
         let tmp = self.path.with_extension("json.tmp");
-        std::fs::write(&tmp, serde_json::to_vec(balances)?)?;
-        std::fs::rename(&tmp, &self.path)?;
+        fs::write(&tmp, serde_json::to_vec(balances)?)?;
+        fs::rename(&tmp, &self.path)?;
         Ok(())
     }
 }
@@ -219,5 +226,5 @@ impl Watcher {
 fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
+        .map_or(0, |elapsed| elapsed.as_secs())
 }

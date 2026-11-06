@@ -6,6 +6,7 @@ use serde::Deserialize;
 
 use super::{PriceSource, SearchHit, SourceError};
 use crate::model::{CoinId, Currency, Quote, Range, Series};
+use std::env;
 
 const DEFAULT_BASE_URL: &str = "https://api.coingecko.com/api/v3";
 const USER_AGENT: &str = concat!(
@@ -18,6 +19,7 @@ const TOTAL_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 
 /// Client of the public CoinGecko API.
+#[derive(Debug)]
 pub struct CoinGecko {
     base_url: String,
     agent: ureq::Agent,
@@ -34,7 +36,7 @@ impl CoinGecko {
     /// Default client. `CRYPTOBAR_API_BASE` allows targeting another instance,
     /// which is what makes the end-to-end tests hermetic.
     pub fn new() -> Self {
-        match std::env::var("CRYPTOBAR_API_BASE") {
+        match env::var("CRYPTOBAR_API_BASE") {
             Ok(base) if !base.trim().is_empty() => Self::with_base_url(base.trim()),
             _ => Self::with_base_url(DEFAULT_BASE_URL),
         }
@@ -83,8 +85,10 @@ impl CoinGecko {
     fn search_url(&self, term: &str) -> String {
         let encoded: String = term
             .chars()
-            .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == ' ')
-            .map(|c| if c == ' ' { '+' } else { c })
+            .filter(|character| {
+                character.is_ascii_alphanumeric() || *character == '-' || *character == ' '
+            })
+            .map(|character| if character == ' ' { '+' } else { character })
             .take(64)
             .collect();
         format!("{}/search?query={encoded}", self.base_url)
@@ -104,7 +108,7 @@ impl CoinGecko {
             Err(ureq::Error::StatusCode(code)) => {
                 Err(SourceError::Http(format!("HTTP code {code}")))
             }
-            Err(e) => Err(SourceError::Transport(e)),
+            Err(error) => Err(SourceError::Transport(error)),
         }
     }
 }
@@ -158,16 +162,16 @@ pub fn parse_markets(raw: &str) -> Result<Vec<Quote>, SourceError> {
         .into_iter()
         .filter_map(|entry| {
             let id = CoinId::parse(&entry.id).ok()?;
-            let price = entry.current_price.filter(|p| p.is_finite())?;
+            let price = entry.current_price.filter(|price| price.is_finite())?;
             let symbol = entry.symbol.to_ascii_uppercase();
             let name = entry.name.unwrap_or_else(|| symbol.clone());
             let sparkline = entry
                 .sparkline_in_7d
-                .map(|s| {
-                    s.price
+                .map(|text| {
+                    text.price
                         .into_iter()
                         .flatten()
-                        .filter(|v| v.is_finite())
+                        .filter(|value| value.is_finite())
                         .collect()
                 })
                 .unwrap_or_default();
@@ -181,11 +185,15 @@ pub fn parse_markets(raw: &str) -> Result<Vec<Quote>, SourceError> {
                 change_7d: entry.price_change_percentage_7d_in_currency,
                 sparkline,
                 image: entry.image.filter(|url| !url.trim().is_empty()),
-                market_cap: entry.market_cap.filter(|v| v.is_finite() && *v > 0.0),
-                volume_24h: entry.total_volume.filter(|v| v.is_finite() && *v >= 0.0),
+                market_cap: entry
+                    .market_cap
+                    .filter(|value| value.is_finite() && *value > 0.0),
+                volume_24h: entry
+                    .total_volume
+                    .filter(|value| value.is_finite() && *value >= 0.0),
                 rank: entry.market_cap_rank,
-                ath: entry.ath.filter(|v| v.is_finite() && *v > 0.0),
-                ath_date: entry.ath_date.filter(|d| !d.trim().is_empty()),
+                ath: entry.ath.filter(|value| value.is_finite() && *value > 0.0),
+                ath_date: entry.ath_date.filter(|date| !date.trim().is_empty()),
                 icon: None,
             })
         })
@@ -209,7 +217,7 @@ pub fn parse_market_chart(id: &CoinId, range: Range, raw: &str) -> Result<Series
         .prices
         .into_iter()
         .map(|(_, price)| price)
-        .filter(|p| p.is_finite())
+        .filter(|price| price.is_finite())
         .collect();
     if points.is_empty() {
         return Err(SourceError::Payload(format!("empty series for {id}")));

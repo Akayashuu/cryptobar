@@ -5,6 +5,7 @@ use std::fmt::Display;
 use std::io::{self, Stderr, StderrLock, Stdout, StdoutLock, Write};
 
 /// Writer pair: stdout for the results, stderr for the warnings.
+#[derive(Debug)]
 pub struct Output<Out, Err> {
     stdout: Out,
     stderr: Err,

@@ -13,6 +13,9 @@ use super::identity::identity_widget;
 use super::model::{Ctx, Model};
 use super::status::root_cause;
 use super::widgets::{clear, trend_class};
+use crate::commands::nav;
+use crate::render::braille;
+use gtk4::pango::EllipsizeMode;
 
 const SPARK_WIDTH: i32 = 72;
 const SPARK_HEIGHT: i32 = 26;
@@ -76,7 +79,11 @@ impl Ctx {
             (Some(first), Some(last)) => last >= first,
             _ => quote.change_7d.unwrap_or(0.0) >= 0.0,
         };
-        let finite: Vec<f64> = series.iter().copied().filter(|v| v.is_finite()).collect();
+        let finite: Vec<f64> = series
+            .iter()
+            .copied()
+            .filter(|value| value.is_finite())
+            .collect();
         let hover: Hover = Rc::new(Cell::new(None));
         let area = chart(
             series,
@@ -103,7 +110,7 @@ impl Ctx {
         footer.append(&label);
 
         if finite.len() >= 2 {
-            let (low, high) = crate::render::braille::bounds(&finite);
+            let (low, high) = braille::bounds(&finite);
             let span = Label::new(Some(&format!(
                 "{} to {}",
                 format::price(low, currency, decimals),
@@ -140,7 +147,9 @@ impl Ctx {
         list.add_css_class("card");
 
         for (index, id) in ids.iter().enumerate() {
-            let quote = quotes.iter().find(|q| q.id.as_str() == id.as_str());
+            let quote = quotes
+                .iter()
+                .find(|candidate| candidate.id.as_str() == id.as_str());
             let row = GtkBox::new(Orientation::Horizontal, 10);
 
             if let Some(quote) = quote {
@@ -154,7 +163,7 @@ impl Ctx {
                 let name = Label::new(Some(&quote.name));
                 name.add_css_class("muted");
                 name.set_xalign(0.0);
-                name.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+                name.set_ellipsize(EllipsizeMode::End);
                 names.append(&name);
                 names.set_valign(Align::Center);
                 names.set_size_request(96, -1);
@@ -217,8 +226,8 @@ impl Ctx {
         list.connect_row_activated(move |_, row| {
             let index = usize::try_from(row.index()).unwrap_or(0);
             let app = ctx.app();
-            if let Err(e) = crate::commands::nav::select(&app, index) {
-                ctx.note(&root_cause(&e), true);
+            if let Err(error) = nav::select(&app, index) {
+                ctx.note(&root_cause(&error), true);
                 return;
             }
             ctx.note("", false);
@@ -259,9 +268,9 @@ pub(super) fn header(quote: &Quote, currency: &Currency, decimals: format::Decim
         ("7d", quote.change_7d),
     ] {
         let cell = GtkBox::new(Orientation::Horizontal, 4);
-        let name = Label::new(Some(key));
-        name.add_css_class("chip-key");
-        cell.append(&name);
+        let key_label = Label::new(Some(key));
+        key_label.add_css_class("chip-key");
+        cell.append(&key_label);
         let chip = Label::new(Some(&format::percent(value)));
         chip.add_css_class("chip");
         chip.add_css_class(trend_class(value));

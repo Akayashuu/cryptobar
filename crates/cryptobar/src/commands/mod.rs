@@ -1,7 +1,7 @@
 //! Subcommand implementations.
 
 use std::error::Error;
-use std::io::Write;
+use std::io::{self, Write};
 
 use crate::app::AppError;
 use crate::config::ConfigError;
@@ -12,7 +12,10 @@ use crate::paths::PathsError;
 use crate::report::Report;
 use crate::source::SourceError;
 use crate::state::StateError;
+#[cfg(feature = "popup")]
+use crate::ui::popup::PopupError;
 use crate::waybar_signal::SignalError;
+use std::fmt::Display;
 
 pub mod bar;
 pub mod chart;
@@ -66,10 +69,10 @@ pub enum CommandError {
     Render(#[from] serde_json::Error),
     /// The output could not be written.
     #[error("could not write the output")]
-    Write(#[source] std::io::Error),
+    Write(#[source] io::Error),
     /// The running executable could not be located.
     #[error("could not locate the running executable")]
-    Executable(#[source] std::io::Error),
+    Executable(#[source] io::Error),
     /// A program could not be started.
     #[error("could not start {program}")]
     Launch {
@@ -77,7 +80,7 @@ pub enum CommandError {
         program: String,
         /// The operating system error.
         #[source]
-        source: std::io::Error,
+        source: io::Error,
     },
     /// No cryptocurrency is configured.
     #[error("no cryptocurrency is configured")]
@@ -88,7 +91,7 @@ pub enum CommandError {
     /// The graphical window failed.
     #[cfg(feature = "popup")]
     #[error("the popup window failed")]
-    Popup(#[from] crate::ui::popup::PopupError),
+    Popup(#[from] PopupError),
     /// The binary was built without the `popup` feature.
     #[cfg(not(feature = "popup"))]
     #[error("this binary was compiled without the `popup` feature")]
@@ -101,7 +104,7 @@ pub enum CommandError {
 /// Fails when stdout cannot be written.
 pub fn print<Out: Write, Err: Write>(
     output: &mut Output<Out, Err>,
-    text: impl std::fmt::Display,
+    text: impl Display,
 ) -> Result<(), CommandError> {
     output.line(text).map_err(CommandError::Write)
 }
@@ -112,7 +115,7 @@ pub fn print<Out: Write, Err: Write>(
 /// Fails when stdout cannot be written.
 pub fn print_text<Out: Write, Err: Write>(
     output: &mut Output<Out, Err>,
-    text: impl std::fmt::Display,
+    text: impl Display,
 ) -> Result<(), CommandError> {
     output.text(text).map_err(CommandError::Write)
 }

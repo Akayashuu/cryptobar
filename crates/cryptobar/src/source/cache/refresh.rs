@@ -6,6 +6,8 @@ use crate::source::{PriceSource, SearchHit, SourceError};
 use super::key::markets_key;
 use super::store::CachedSource;
 use super::{Cached, Entry, now};
+use std::fs;
+use std::io::ErrorKind;
 
 impl<S: PriceSource> CachedSource<S> {
     fn get_or_refresh<T, F>(&self, key: &str, fetch: F) -> Result<Cached<T>, SourceError>
@@ -45,7 +47,12 @@ impl<S: PriceSource> CachedSource<S> {
             Err(err) => {
                 let retry_after = match &err {
                     SourceError::RateLimited { retry_after } => *retry_after,
-                    _ => None,
+                    SourceError::Http(_)
+                    | SourceError::Decode(_)
+                    | SourceError::Transport(_)
+                    | SourceError::Payload(_)
+                    | SourceError::Backoff
+                    | SourceError::Cache(_) => None,
                 };
                 self.record_failure(retry_after)?;
                 match existing {
@@ -129,15 +136,15 @@ impl<S: PriceSource> CachedSource<S> {
     /// Bubbles up I/O errors other than "file not found".
     pub fn invalidate(&self) -> Result<(), SourceError> {
         self.clear_failure()?;
-        let entries = match std::fs::read_dir(&self.dir) {
+        let entries = match fs::read_dir(&self.dir) {
             Ok(entries) => entries,
-            Err(absent) if absent.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(absent) if absent.kind() == ErrorKind::NotFound => return Ok(()),
             Err(failure) => return Err(SourceError::Cache(failure)),
         };
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().is_some_and(|ext| ext == "json") {
-                std::fs::remove_file(path)?;
+                fs::remove_file(path)?;
             }
         }
         Ok(())

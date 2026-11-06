@@ -5,7 +5,11 @@ const SERIES_POINTS: usize = 48;
 /// Brings a series into [0, 1]. A flat series sits in the middle rather than
 /// dividing by a zero amplitude.
 pub(super) fn normalize(points: &[f64]) -> Vec<f64> {
-    let finite: Vec<f64> = points.iter().copied().filter(|v| v.is_finite()).collect();
+    let finite: Vec<f64> = points
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite())
+        .collect();
     let reduced = sparkline::downsample(&finite, SERIES_POINTS);
     let Some(min) = reduced.iter().copied().reduce(f64::min) else {
         return Vec::new();
@@ -44,8 +48,18 @@ mod tests {
         let series = &row.series;
         assert_ne!(series.len(), 0);
         assert!(series.iter().all(|value| (0.0..=1.0).contains(value)));
-        assert!(series.iter().copied().any(|value| value == 0.0));
-        assert!(series.iter().copied().any(|value| value == 1.0));
+        assert!(
+            series
+                .iter()
+                .copied()
+                .any(|value| value.abs() < f64::EPSILON)
+        );
+        assert!(
+            series
+                .iter()
+                .copied()
+                .any(|value| (value - 1.0).abs() < f64::EPSILON)
+        );
     }
 
     #[test]

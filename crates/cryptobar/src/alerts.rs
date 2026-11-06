@@ -16,6 +16,10 @@ use std::collections::BTreeSet;
 use crate::config::{Alert, Config};
 use crate::model::{Currency, Quote};
 use crate::render::format::{self, Decimals};
+use std::io;
+use std::io::ErrorKind;
+use std::process::Command;
+use std::process::Stdio;
 
 /// A crossed condition, in a form comparable from one tick to the next.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -145,7 +149,7 @@ fn threshold_label(value: f64, currency: &Currency, decimals: Decimals) -> Strin
 /// the set to memorise for the next tick.
 #[must_use]
 pub fn diff(triggers: &[Trigger], fired: &BTreeSet<String>) -> (Vec<Trigger>, BTreeSet<String>) {
-    let current: BTreeSet<String> = triggers.iter().map(|t| t.key.clone()).collect();
+    let current: BTreeSet<String> = triggers.iter().map(|trigger| trigger.key.clone()).collect();
     let fresh = triggers
         .iter()
         .filter(|trigger| !fired.contains(&trigger.key))
@@ -159,15 +163,17 @@ pub fn diff(triggers: &[Trigger], fired: &BTreeSet<String>) -> (Vec<Trigger>, BT
 pub enum AlertError {
     /// `notify-send` could not be started.
     #[error("could not run notify-send")]
-    Spawn(#[source] std::io::Error),
+    Spawn(#[source] io::Error),
     /// `notify-send` could not be waited for.
     #[error("could not wait for notify-send")]
-    Wait(#[source] std::io::Error),
+    Wait(#[source] io::Error),
 }
 
-/// Sends a desktop notification. A missing `notify-send` binary or notification
-/// daemon is not a failure: the bar keeps showing the alert, only the bubble is
-/// missing. The exit status of `notify-send` is not read for the same reason.
+/// Sends a desktop notification.
+///
+/// A missing `notify-send` binary or notification daemon is not a failure: the
+/// bar keeps showing the alert, only the bubble is missing. The exit status of
+/// `notify-send` is not read for the same reason.
 ///
 /// # Errors
 /// Fails when `notify-send` exists but cannot be started or waited for.
@@ -177,7 +183,7 @@ pub fn notify(trigger: &Trigger) -> Result<(), AlertError> {
     } else {
         "critical"
     };
-    let spawned = std::process::Command::new("notify-send")
+    let spawned = Command::new("notify-send")
         .arg("--app-name=cryptobar")
         .arg("--icon=network-transmit-receive")
         .arg(format!("--urgency={urgency}"))
@@ -187,12 +193,12 @@ pub fn notify(trigger: &Trigger) -> Result<(), AlertError> {
         ))
         .arg(&trigger.title)
         .arg(&trigger.body)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .spawn();
     match spawned {
         Ok(mut child) => child.wait().map(drop).map_err(AlertError::Wait),
-        Err(absent) if absent.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(absent) if absent.kind() == ErrorKind::NotFound => Ok(()),
         Err(failure) => Err(AlertError::Spawn(failure)),
     }
 }
@@ -332,9 +338,9 @@ mod tests {
             &evaluate(&config, &[quote("bitcoin", "BTC", 101_000.0, None)]),
             &BTreeSet::new(),
         );
-        let config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 100500\n");
+        let raised_config = cfg("[[alerts]]\ncoin = \"bitcoin\"\nabove = 100500\n");
         let (fresh, _) = diff(
-            &evaluate(&config, &[quote("bitcoin", "BTC", 101_000.0, None)]),
+            &evaluate(&raised_config, &[quote("bitcoin", "BTC", 101_000.0, None)]),
             &fired,
         );
         assert_eq!(fresh.len(), 1);

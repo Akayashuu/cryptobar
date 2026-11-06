@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use crate::paths::PathsError;
+use std::io;
 
 /// Failures of the graphical window.
 #[derive(Debug, thiserror::Error)]
@@ -21,7 +22,7 @@ pub enum PopupError {
         path: PathBuf,
         /// The operating system error.
         #[source]
-        source: std::io::Error,
+        source: io::Error,
     },
     /// The chart could not be encoded as PNG.
     #[error("could not encode the PNG {}", path.display())]

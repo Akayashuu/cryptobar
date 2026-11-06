@@ -10,6 +10,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::model::Quote;
+use std::fs;
+use std::fs::File;
+use std::io;
 
 const IMAGE_HOST: &str = "https://coin-images.coingecko.com/";
 
@@ -90,7 +93,7 @@ pub enum IconError {
         /// Cryptocurrency whose logo was requested.
         id: String,
         /// The I/O failure.
-        source: std::io::Error,
+        source: io::Error,
     },
 }
 
@@ -160,19 +163,20 @@ fn store(id: &str, destination: &Path, bytes: &[u8]) -> Result<(), IconError> {
         source,
     };
     if let Some(parent) = destination.parent() {
-        std::fs::create_dir_all(parent).map_err(failure)?;
+        fs::create_dir_all(parent).map_err(failure)?;
     }
     let temporary = destination.with_extension("png.tmp");
-    let mut file = std::fs::File::create(&temporary).map_err(failure)?;
+    let mut file = File::create(&temporary).map_err(failure)?;
     file.write_all(bytes).map_err(failure)?;
     file.sync_all().map_err(failure)?;
-    std::fs::rename(&temporary, destination).map_err(failure)
+    fs::rename(&temporary, destination).map_err(failure)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::model::CoinId;
+    use std::env;
 
     fn quote(id: &str) -> Quote {
         Quote {
@@ -196,12 +200,12 @@ mod tests {
 
     #[test]
     fn an_already_present_logo_is_attached_without_network() {
-        let temporary = std::env::temp_dir().join("cryptobar-icons-attach");
+        let temporary = env::temp_dir().join("cryptobar-icons-attach");
         if temporary.exists() {
-            std::fs::remove_dir_all(&temporary).unwrap();
+            fs::remove_dir_all(&temporary).unwrap();
         }
-        std::fs::create_dir_all(dir(&temporary)).unwrap();
-        std::fs::write(path(&temporary, "bitcoin"), PNG_MAGIC).unwrap();
+        fs::create_dir_all(dir(&temporary)).unwrap();
+        fs::write(path(&temporary, "bitcoin"), PNG_MAGIC).unwrap();
 
         let mut quotes = vec![quote("bitcoin"), quote("ethereum")];
         attach(&temporary, &mut quotes);
@@ -211,14 +215,14 @@ mod tests {
         };
         assert!(bitcoin.icon.is_some());
         assert!(ethereum.icon.is_none());
-        std::fs::remove_dir_all(&temporary).unwrap();
+        fs::remove_dir_all(&temporary).unwrap();
     }
 
     #[test]
     fn a_url_off_the_allowed_domain_is_ignored() {
-        let temporary = std::env::temp_dir().join("cryptobar-icons-host");
+        let temporary = env::temp_dir().join("cryptobar-icons-host");
         if temporary.exists() {
-            std::fs::remove_dir_all(&temporary).unwrap();
+            fs::remove_dir_all(&temporary).unwrap();
         }
         let mut hostile = quote("bitcoin");
         hostile.image = Some("https://example.invalid/logo.png".into());
@@ -226,7 +230,7 @@ mod tests {
 
         assert!(fetch_missing(&temporary, &mut quotes).is_empty());
 
-        assert!(quotes.first().is_some_and(|q| q.icon.is_none()));
+        assert!(quotes.first().is_some_and(|quote| quote.icon.is_none()));
         assert!(!path(&temporary, "bitcoin").exists());
     }
 }

@@ -9,8 +9,8 @@ pub(super) fn clear(container: &GtkBox) {
 
 pub(super) fn trend_class(value: Option<f64>) -> &'static str {
     match value {
-        Some(v) if v > 0.0 => "up",
-        Some(v) if v < 0.0 => "down",
+        Some(change) if change > 0.0 => "up",
+        Some(change) if change < 0.0 => "down",
         _ => "flat",
     }
 }

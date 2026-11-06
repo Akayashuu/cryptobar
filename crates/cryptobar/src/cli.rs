@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 
 use crate::model::Range;
 use crate::render::waybar::Markup;
+use std::path::PathBuf;
 
 /// Cryptocurrency prices for your bar, terminal and desktop.
 #[derive(Debug, Parser)]
@@ -11,7 +12,7 @@ use crate::render::waybar::Markup;
 pub struct Cli {
     /// Path to an alternative configuration file.
     #[arg(long, global = true, value_name = "FILE")]
-    pub config: Option<std::path::PathBuf>,
+    pub config: Option<PathBuf>,
 
     /// Subcommand to run, or the bar when absent.
     #[command(subcommand)]

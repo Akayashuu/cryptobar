@@ -62,7 +62,7 @@ impl Wallet {
             .label
             .as_deref()
             .map(str::trim)
-            .filter(|l| !l.is_empty())
+            .filter(|line| !line.is_empty())
         {
             Some(label) => label.to_owned(),
             None => shorten(&self.address),

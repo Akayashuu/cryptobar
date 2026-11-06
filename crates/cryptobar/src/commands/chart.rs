@@ -4,9 +4,12 @@ use std::io::Write;
 
 use super::{CommandError, print_text};
 use crate::app::App;
+use crate::config::Config;
 use crate::model::{CoinId, Range, Series};
 use crate::output::{Output, push_line};
 use crate::render::{braille, format};
+use std::env;
+use std::process::Command;
 
 const AXIS_WIDTH: usize = 12;
 const MIN_COLS: usize = 20;
@@ -53,20 +56,14 @@ pub fn run<Out: Write, Err: Write>(
 }
 
 fn viewport() -> (usize, usize) {
-    terminal_size::terminal_size().map_or((DEFAULT_COLS, DEFAULT_ROWS), |(w, h)| {
-        (usize::from(w.0), usize::from(h.0))
+    terminal_size::terminal_size().map_or((DEFAULT_COLS, DEFAULT_ROWS), |(columns, rows)| {
+        (usize::from(columns.0), usize::from(rows.0))
     })
 }
 
 /// Composes the header, the plot and the axis. Pure function: fully testable.
 #[must_use]
-pub fn render(
-    series: &Series,
-    config: &crate::config::Config,
-    cols: usize,
-    rows: usize,
-    stale: bool,
-) -> String {
+pub fn render(series: &Series, config: &Config, cols: usize, rows: usize, stale: bool) -> String {
     let plot_cols = cols.saturating_sub(AXIS_WIDTH).max(MIN_COLS);
     let plot_rows = rows.saturating_sub(4).clamp(MIN_ROWS, MAX_ROWS);
 
@@ -121,8 +118,8 @@ pub fn spawn_terminal(app: &App, coin: Option<&str>, range: Range) -> Result<(),
     if terminal.is_empty() {
         return Err(CommandError::NoTerminal);
     }
-    let exe = std::env::current_exe().map_err(CommandError::Executable)?;
-    let mut command = std::process::Command::new(terminal);
+    let exe = env::current_exe().map_err(CommandError::Executable)?;
+    let mut command = Command::new(terminal);
     command
         .arg("-e")
         .arg(exe)
@@ -142,7 +139,6 @@ pub fn spawn_terminal(app: &App, coin: Option<&str>, range: Range) -> Result<(),
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
 
     fn config() -> Config {
         Config::parse("coins = [\"bitcoin\"]").unwrap()
@@ -179,7 +175,7 @@ mod tests {
     #[test]
     fn the_axis_carries_the_max_on_top_and_the_min_at_the_bottom() {
         let out = render(&series(vec![10.0, 50.0]), &config(), 80, 20, false);
-        let plot: Vec<&str> = out.lines().filter(|l| l.contains('│')).collect();
+        let plot: Vec<&str> = out.lines().filter(|line| line.contains('│')).collect();
         assert!(plot.first().unwrap().contains("50"));
         assert!(plot.last().unwrap().contains("10"));
     }

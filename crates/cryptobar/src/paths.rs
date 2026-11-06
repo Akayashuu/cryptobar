@@ -4,6 +4,11 @@
 use std::path::{Path, PathBuf};
 
 use etcetera::BaseStrategy as _;
+use etcetera::base_strategy::Xdg;
+use std::env;
+use std::fs;
+use std::fs::Permissions;
+use std::io;
 
 const APP: &str = "cryptobar";
 
@@ -15,13 +20,13 @@ pub enum PathsError {
     Home(#[from] etcetera::HomeDirError),
 }
 
-fn strategy() -> Result<etcetera::base_strategy::Xdg, PathsError> {
-    Ok(etcetera::base_strategy::Xdg::new()?)
+fn strategy() -> Result<Xdg, PathsError> {
+    Ok(Xdg::new()?)
 }
 
 fn overridden(var: &str) -> Option<PathBuf> {
-    std::env::var_os(var)
-        .filter(|v| !v.is_empty())
+    env::var_os(var)
+        .filter(|value| !value.is_empty())
         .map(PathBuf::from)
 }
 
@@ -77,8 +82,8 @@ pub fn runtime_dir() -> Result<PathBuf, PathsError> {
 ///
 /// # Errors
 /// Propagates the I/O errors of the creation.
-pub fn ensure_dir(dir: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(dir)?;
+pub fn ensure_dir(dir: &Path) -> io::Result<()> {
+    fs::create_dir_all(dir)?;
     restrict_to_owner(dir);
     Ok(())
 }
@@ -86,7 +91,7 @@ pub fn ensure_dir(dir: &Path) -> std::io::Result<()> {
 #[cfg(unix)]
 fn restrict_to_owner(dir: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt as _;
-    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).is_ok()
+    fs::set_permissions(dir, Permissions::from_mode(0o700)).is_ok()
 }
 
 #[cfg(not(unix))]

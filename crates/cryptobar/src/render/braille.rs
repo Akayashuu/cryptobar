@@ -40,16 +40,25 @@ impl Canvas {
     }
 
     /// Lights the dot `(x, y)`, origin at the top left. Off-canvas: ignored.
-    pub fn set(&mut self, x: usize, y: usize) {
-        if x >= self.width() || y >= self.height() {
+    pub fn set(&mut self, dot_x: usize, dot_y: usize) {
+        if dot_x >= self.width() || dot_y >= self.height() {
             return;
         }
-        let (col, sub_x) = (x.checked_div(2).unwrap_or(0), x.checked_rem(2).unwrap_or(0));
-        let (row, sub_y) = (y.checked_div(4).unwrap_or(0), y.checked_rem(4).unwrap_or(0));
-        let Some(bit) = DOTS.get(sub_x).and_then(|c| c.get(sub_y)) else {
+        let (col, sub_x) = (
+            dot_x.checked_div(2).unwrap_or(0),
+            dot_x.checked_rem(2).unwrap_or(0),
+        );
+        let (row, sub_y) = (
+            dot_y.checked_div(4).unwrap_or(0),
+            dot_y.checked_rem(4).unwrap_or(0),
+        );
+        let Some(bit) = DOTS.get(sub_x).and_then(|column| column.get(sub_y)) else {
             return;
         };
-        let Some(index) = row.checked_mul(self.cols).and_then(|i| i.checked_add(col)) else {
+        let Some(index) = row
+            .checked_mul(self.cols)
+            .and_then(|base| base.checked_add(col))
+        else {
             return;
         };
         if let Some(cell) = self.cells.get_mut(index) {
@@ -77,7 +86,7 @@ impl Canvas {
 /// Vertical bounds of a series, widened when the series is flat.
 #[must_use]
 pub fn bounds(points: &[f64]) -> (f64, f64) {
-    let finite = points.iter().copied().filter(|v| v.is_finite());
+    let finite = points.iter().copied().filter(|value| value.is_finite());
     let min = finite.clone().fold(f64::INFINITY, f64::min);
     let max = finite.fold(f64::NEG_INFINITY, f64::max);
     if !min.is_finite() || !max.is_finite() {
@@ -104,11 +113,11 @@ pub fn plot(points: &[f64], cols: usize, rows: usize) -> Vec<String> {
     let last_y = height.saturating_sub(1);
 
     let mut previous: Option<(usize, usize)> = None;
-    for x in 0..width {
+    for dot_x in 0..width {
         let ratio = if last_x == 0 {
             0.0
         } else {
-            to_f64(x) / to_f64(last_x)
+            to_f64(dot_x) / to_f64(last_x)
         };
         let position = ratio * to_f64(points.len().saturating_sub(1));
         let index = saturating_index(position.round(), points.len().saturating_sub(1));
@@ -119,24 +128,24 @@ pub fn plot(points: &[f64], cols: usize, rows: usize) -> Vec<String> {
             continue;
         }
         let normalized = ((value - min) / span).clamp(0.0, 1.0);
-        let y = saturating_index(((1.0 - normalized) * to_f64(last_y)).round(), last_y);
+        let dot_y = saturating_index(((1.0 - normalized) * to_f64(last_y)).round(), last_y);
         if let Some((prev_x, prev_y)) = previous {
-            connect(&mut canvas, prev_x, prev_y, x, y);
+            connect(&mut canvas, prev_x, prev_y, dot_x, dot_y);
         }
-        canvas.set(x, y);
-        previous = Some((x, y));
+        canvas.set(dot_x, dot_y);
+        previous = Some((dot_x, dot_y));
     }
     canvas.to_lines()
 }
 
-fn connect(canvas: &mut Canvas, _prev_x: usize, prev_y: usize, x: usize, y: usize) {
-    let (low, high) = if prev_y <= y {
-        (prev_y, y)
+fn connect(canvas: &mut Canvas, _prev_x: usize, prev_y: usize, dot_x: usize, dot_y: usize) {
+    let (low, high) = if prev_y <= dot_y {
+        (prev_y, dot_y)
     } else {
-        (y, prev_y)
+        (dot_y, prev_y)
     };
     for step in low..=high {
-        canvas.set(x, step);
+        canvas.set(dot_x, step);
     }
 }
 
@@ -148,7 +157,11 @@ mod tests {
     fn an_empty_canvas_holds_only_blank_braille() {
         let lines = Canvas::new(3, 2).to_lines();
         assert_eq!(lines.len(), 2);
-        assert!(lines.iter().all(|l| l.chars().all(|c| c == '\u{2800}')));
+        assert!(
+            lines
+                .iter()
+                .all(|line| line.chars().all(|character| character == '\u{2800}'))
+        );
     }
 
     #[test]
@@ -161,9 +174,9 @@ mod tests {
     #[test]
     fn the_eight_dots_of_a_cell_yield_the_full_glyph() {
         let mut canvas = Canvas::new(1, 1);
-        for x in 0..2 {
-            for y in 0..4 {
-                canvas.set(x, y);
+        for dot_x in 0..2 {
+            for dot_y in 0..4 {
+                canvas.set(dot_x, dot_y);
             }
         }
         assert_eq!(canvas.to_lines().first().unwrap(), "\u{28ff}");
@@ -180,7 +193,7 @@ mod tests {
     fn the_plot_dimensions_match_the_request() {
         let lines = plot(&[1.0, 2.0, 3.0], 10, 4);
         assert_eq!(lines.len(), 4);
-        assert!(lines.iter().all(|l| l.chars().count() == 10));
+        assert!(lines.iter().all(|line| line.chars().count() == 10));
     }
 
     #[test]

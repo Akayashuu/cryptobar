@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 /// How markup is handled in the output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Markup {
@@ -15,7 +17,13 @@ impl Markup {
             Self::Pango => escape_pango(raw),
             Self::None => raw
                 .chars()
-                .map(|c| if c.is_control() { ' ' } else { c })
+                .map(|character| {
+                    if character.is_control() {
+                        ' '
+                    } else {
+                        character
+                    }
+                })
                 .collect(),
         }
     }
@@ -37,7 +45,7 @@ impl Markup {
     }
 }
 
-impl std::str::FromStr for Markup {
+impl FromStr for Markup {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_ascii_lowercase().as_str() {
@@ -61,8 +69,8 @@ pub fn escape_pango(raw: &str) -> String {
             '>' => out.push_str("&gt;"),
             '\'' => out.push_str("&apos;"),
             '"' => out.push_str("&quot;"),
-            c if c.is_control() => out.push(' '),
-            c => out.push(c),
+            character if character.is_control() => out.push(' '),
+            character => out.push(character),
         }
     }
     out

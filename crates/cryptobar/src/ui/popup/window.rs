@@ -18,6 +18,10 @@ use super::settings::{settings_panel, wire_settings};
 use super::status::root_cause;
 use super::style::CSS;
 use super::worker::drain;
+use crate::commands::nav;
+use gtk4::gdk::Display;
+use gtk4::gdk::Key;
+use std::collections::BTreeMap;
 
 const APP_ID: &str = "dev.akayashuu.cryptobar";
 
@@ -32,7 +36,7 @@ pub fn show(app: App, quotes: Vec<Quote>, stale: bool) -> Result<(), PopupError>
     gtk_app.connect_startup(|_| {
         let provider = gtk4::CssProvider::new();
         provider.load_from_data(CSS);
-        if let Some(display) = gtk4::gdk::Display::default() {
+        if let Some(display) = Display::default() {
             gtk4::style_context_add_provider_for_display(
                 &display,
                 &provider,
@@ -42,8 +46,8 @@ pub fn show(app: App, quotes: Vec<Quote>, stale: bool) -> Result<(), PopupError>
     });
 
     gtk_app.connect_activate(move |gtk_app| {
-        if let Some((app, quotes, stale)) = seed.borrow_mut().take() {
-            build_window(gtk_app, app, quotes, stale);
+        if let Some((seeded_app, seeded_quotes, seeded_stale)) = seed.borrow_mut().take() {
+            build_window(gtk_app, seeded_app, seeded_quotes, seeded_stale);
         } else if let Some(window) = gtk_app.windows().first() {
             toggle(window);
         }
@@ -89,7 +93,7 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
     let settings = settings_panel(&app.config, &config_path);
 
     let palette = gtk4::CssProvider::new();
-    if let Some(display) = gtk4::gdk::Display::default() {
+    if let Some(display) = Display::default() {
         gtk4::style_context_add_provider_for_display(
             &display,
             &palette,
@@ -107,7 +111,7 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
             hits: Vec::new(),
             range: Range::D7,
             series: HashMap::new(),
-            onchain: std::collections::BTreeMap::new(),
+            onchain: BTreeMap::new(),
             balances: Vec::new(),
             generation: 0,
         }),
@@ -160,7 +164,7 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
     let controller = gtk4::EventControllerKey::new();
     let to_close = window.clone();
     controller.connect_key_pressed(move |_, key, _, _| {
-        if key == gtk4::gdk::Key::Escape {
+        if key == Key::Escape {
             to_close.close();
             return glib::Propagation::Stop;
         }
@@ -199,8 +203,8 @@ fn title_bar(ctx: &Rc<Ctx>) -> GtkBox {
     let owner = Rc::clone(ctx);
     refresh.connect_clicked(move |_| {
         let app = owner.app();
-        if let Err(e) = crate::commands::nav::refresh(&app) {
-            owner.note(&root_cause(&e), true);
+        if let Err(error) = nav::refresh(&app) {
+            owner.note(&root_cause(&error), true);
             return;
         }
         owner.model.borrow_mut().series.clear();

@@ -8,6 +8,9 @@ use super::payload::{AlertRow, Module};
 use super::rows::rows;
 use super::summary::summary;
 use super::tooltip::tooltip;
+use crate::alerts;
+use crate::model::CoinId;
+use std::collections::BTreeMap;
 
 /// Builds the module from the active quote and the full list.
 #[must_use]
@@ -17,7 +20,7 @@ pub fn render(
     config: &Config,
     stale: bool,
     markup: Markup,
-    onchain: &std::collections::BTreeMap<crate::model::CoinId, f64>,
+    onchain: &BTreeMap<CoinId, f64>,
 ) -> Module {
     let Some(quote) = quotes.get(active).or_else(|| quotes.first()) else {
         return Module {
@@ -41,7 +44,7 @@ pub fn render(
     };
 
     let decimals = config.decimals();
-    let triggers = crate::alerts::evaluate(config, quotes);
+    let triggers = alerts::evaluate(config, quotes);
     let wallet = portfolio::compute(quotes, onchain);
     let badge = badge::of(&quote.symbol);
     let symbol = markup.escape(&quote.symbol.to_uppercase());

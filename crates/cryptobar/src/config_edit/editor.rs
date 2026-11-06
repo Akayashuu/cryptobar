@@ -7,6 +7,8 @@ use crate::config::{Config, DEFAULT_CONFIG};
 use crate::paths;
 
 use super::error::EditError;
+use std::fs;
+use std::fs::File;
 
 /// Editor bound to a configuration file.
 #[derive(Debug, Clone)]
@@ -28,7 +30,7 @@ impl Editor {
     }
 
     fn document(&self) -> Result<DocumentMut, EditError> {
-        let raw = match std::fs::read_to_string(&self.path) {
+        let raw = match fs::read_to_string(&self.path) {
             Ok(raw) => raw,
             Err(absent) if absent.kind() == io::ErrorKind::NotFound => DEFAULT_CONFIG.to_owned(),
             Err(source) => {
@@ -72,7 +74,7 @@ impl Editor {
         }
         let tmp = self.path.with_extension("toml.tmp");
         write_temporary(&tmp, contents)?;
-        std::fs::rename(&tmp, &self.path).map_err(|source| EditError::Replace {
+        fs::rename(&tmp, &self.path).map_err(|source| EditError::Replace {
             path: self.path.clone(),
             source,
         })
@@ -84,7 +86,7 @@ fn write_temporary(tmp: &Path, contents: &str) -> Result<(), EditError> {
         path: tmp.to_path_buf(),
         source,
     };
-    let mut file = std::fs::File::create(tmp).map_err(to_error)?;
+    let mut file = File::create(tmp).map_err(to_error)?;
     file.write_all(contents.as_bytes()).map_err(to_error)?;
     file.sync_all().map_err(to_error)
 }

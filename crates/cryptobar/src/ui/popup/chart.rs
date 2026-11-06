@@ -6,6 +6,10 @@ use gtk4::prelude::*;
 use crate::numeric::to_f64;
 
 use super::hover::sample_at;
+use crate::render::braille;
+use crate::report::Report;
+use gtk4::glib::WeakRef;
+use std::f64::consts::TAU;
 
 /// Geometry of the plot inside the drawing area.
 pub(super) const CHART_WIDTH: i32 = 540;
@@ -46,12 +50,9 @@ pub(super) fn chart(
     area
 }
 
-pub(super) fn report_frame(
-    widget: &gtk4::glib::WeakRef<gtk4::DrawingArea>,
-    outcome: Result<(), cairo::Error>,
-) {
+pub(super) fn report_frame(widget: &WeakRef<gtk4::DrawingArea>, outcome: Result<(), cairo::Error>) {
     if let (Err(failure), Some(area)) = (outcome, widget.upgrade()) {
-        area.set_tooltip_text(Some(&crate::report::Report(&failure).to_string()));
+        area.set_tooltip_text(Some(&Report(&failure).to_string()));
     }
 }
 
@@ -69,11 +70,15 @@ pub(super) fn draw_series(
     detailed: bool,
     hover: Option<f64>,
 ) -> Result<(), cairo::Error> {
-    let usable: Vec<f64> = points.iter().copied().filter(|v| v.is_finite()).collect();
+    let usable: Vec<f64> = points
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite())
+        .collect();
     if usable.len() < 2 {
         return Ok(());
     }
-    let (min, max) = crate::render::braille::bounds(&usable);
+    let (min, max) = braille::bounds(&usable);
     let span = max - min;
     let inset = 3.0;
     let plot_height = (area_height - inset * 2.0).max(1.0);
@@ -89,9 +94,9 @@ pub(super) fn draw_series(
         ctx.set_line_width(1.0);
         for line in 0..=GRID_LINES {
             let ratio = f64::from(line) / f64::from(GRID_LINES);
-            let y = (inset + ratio * plot_height).round() + 0.5;
-            ctx.move_to(0.0, y);
-            ctx.line_to(area_width, y);
+            let pos_y = (inset + ratio * plot_height).round() + 0.5;
+            ctx.move_to(0.0, pos_y);
+            ctx.line_to(area_width, pos_y);
         }
         ctx.stroke()?;
     }
@@ -100,9 +105,9 @@ pub(super) fn draw_series(
         .iter()
         .enumerate()
         .map(|(index, value)| {
-            let x = to_f64(index) * step;
+            let pos_x = to_f64(index) * step;
             let ratio = ((value - min) / span).clamp(0.0, 1.0);
-            (x, inset + (1.0 - ratio) * plot_height)
+            (pos_x, inset + (1.0 - ratio) * plot_height)
         })
         .collect();
 
@@ -113,8 +118,8 @@ pub(super) fn draw_series(
     };
 
     ctx.move_to(0.0, area_height);
-    for (x, y) in &polyline {
-        ctx.line_to(*x, *y);
+    for (pos_x, pos_y) in &polyline {
+        ctx.line_to(*pos_x, *pos_y);
     }
     ctx.line_to(area_width, area_height);
     ctx.close_path();
@@ -124,11 +129,11 @@ pub(super) fn draw_series(
     ctx.set_source(&gradient)?;
     ctx.fill()?;
 
-    for (index, (x, y)) in polyline.iter().enumerate() {
+    for (index, (pos_x, pos_y)) in polyline.iter().enumerate() {
         if index == 0 {
-            ctx.move_to(*x, *y);
+            ctx.move_to(*pos_x, *pos_y);
         } else {
-            ctx.line_to(*x, *y);
+            ctx.line_to(*pos_x, *pos_y);
         }
     }
     ctx.set_source_rgb(red, green, blue);
@@ -137,28 +142,28 @@ pub(super) fn draw_series(
     ctx.set_line_cap(cairo::LineCap::Round);
     ctx.stroke()?;
 
-    if let Some((x, y)) = hover
+    if let Some((pos_x, pos_y)) = hover
         .map(|ratio| sample_at(usable.len(), ratio))
         .and_then(|index| polyline.get(index))
         .filter(|_| detailed)
     {
         ctx.set_source_rgba(0.6, 0.6, 0.6, 0.45);
         ctx.set_line_width(1.0);
-        ctx.move_to(x.round() + 0.5, 0.0);
-        ctx.line_to(x.round() + 0.5, area_height);
+        ctx.move_to(pos_x.round() + 0.5, 0.0);
+        ctx.line_to(pos_x.round() + 0.5, area_height);
         ctx.stroke()?;
         ctx.set_source_rgb(red, green, blue);
-        ctx.arc(*x, *y, 3.4, 0.0, std::f64::consts::TAU);
+        ctx.arc(*pos_x, *pos_y, 3.4, 0.0, TAU);
         ctx.fill()?;
     }
 
-    if let Some((x, y)) = polyline.last().filter(|_| detailed) {
-        let x = x.min(area_width - 4.0);
+    if let Some((pos_x, pos_y)) = polyline.last().filter(|_| detailed) {
+        let pos_x = pos_x.min(area_width - 4.0);
         ctx.set_source_rgba(red, green, blue, 0.25);
-        ctx.arc(x, *y, 6.0, 0.0, std::f64::consts::TAU);
+        ctx.arc(pos_x, *pos_y, 6.0, 0.0, TAU);
         ctx.fill()?;
         ctx.set_source_rgb(red, green, blue);
-        ctx.arc(x, *y, 2.6, 0.0, std::f64::consts::TAU);
+        ctx.arc(pos_x, *pos_y, 2.6, 0.0, TAU);
         ctx.fill()?;
     }
     Ok(())

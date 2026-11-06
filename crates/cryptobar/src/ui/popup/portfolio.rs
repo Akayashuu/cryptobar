@@ -12,6 +12,12 @@ use super::identity::css_key;
 use super::model::Ctx;
 use super::parse::rgb;
 use super::widgets::{clear, trend_class};
+use crate::onchain;
+use crate::onchain::Balance;
+use crate::onchain::Chain;
+use crate::onchain::Wallet;
+use std::f64::consts::FRAC_PI_2;
+use std::f64::consts::TAU;
 
 impl Ctx {
     /// Portfolio card: total, split, positions and watched addresses.
@@ -63,8 +69,8 @@ impl Ctx {
 
     fn wallets_section(
         self: &Rc<Self>,
-        wallets: &[crate::onchain::Wallet],
-        balances: &[crate::onchain::Balance],
+        wallets: &[Wallet],
+        balances: &[Balance],
         quotes: &[Quote],
         currency: &Currency,
         decimals: format::Decimals,
@@ -100,7 +106,7 @@ impl Ctx {
             let label = Label::new(Some(&wallet.title()));
             label.set_xalign(0.0);
             names.append(&label);
-            let address = Label::new(Some(&crate::onchain::shorten(&wallet.address)));
+            let address = Label::new(Some(&onchain::shorten(&wallet.address)));
             address.add_css_class("mono");
             address.set_xalign(0.0);
             names.append(&address);
@@ -152,36 +158,31 @@ impl Ctx {
         section
     }
 
-    fn address_placeholder(chain: crate::onchain::Chain) -> &'static str {
+    fn address_placeholder(chain: Chain) -> &'static str {
         match chain {
-            crate::onchain::Chain::Bitcoin => "bc1… or 1… or 3…",
-            crate::onchain::Chain::Ethereum => "0x…",
-            crate::onchain::Chain::Solana => "Solana address, e.g. 9xQe…",
+            Chain::Bitcoin => "bc1… or 1… or 3…",
+            Chain::Ethereum => "0x…",
+            Chain::Solana => "Solana address, e.g. 9xQe…",
         }
     }
 
     fn wallet_form(self: &Rc<Self>) -> GtkBox {
         let form = GtkBox::new(Orientation::Horizontal, 8);
 
-        let labels: Vec<&str> = crate::onchain::Chain::ALL
-            .iter()
-            .map(|chain| chain.symbol())
-            .collect();
+        let labels: Vec<&str> = Chain::ALL.iter().map(|chain| chain.symbol()).collect();
         let picker = gtk4::DropDown::from_strings(&labels);
         picker.set_valign(Align::Center);
         form.append(&picker);
 
         let address = gtk4::Entry::new();
-        address.set_placeholder_text(Some(Self::address_placeholder(
-            crate::onchain::Chain::Bitcoin,
-        )));
+        address.set_placeholder_text(Some(Self::address_placeholder(Chain::Bitcoin)));
         address.set_hexpand(true);
         form.append(&address);
 
         let hinted = address.clone();
         picker.connect_selected_notify(move |picker| {
             let index = usize::try_from(picker.selected()).unwrap_or(0);
-            if let Some(chain) = crate::onchain::Chain::ALL.get(index).copied() {
+            if let Some(chain) = Chain::ALL.get(index).copied() {
                 hinted.set_placeholder_text(Some(Self::address_placeholder(chain)));
             }
         });
@@ -198,12 +199,12 @@ impl Ctx {
         let fields = (address.clone(), label.clone());
         add.connect_clicked(move |_| {
             let index = usize::try_from(picker.selected()).unwrap_or(0);
-            let Some(chain) = crate::onchain::Chain::ALL.get(index).copied() else {
+            let Some(chain) = Chain::ALL.get(index).copied() else {
                 return;
             };
-            let (address, label) = &fields;
-            let text = address.text().to_string();
-            let name = label.text().to_string();
+            let (address_entry, label_entry) = &fields;
+            let text = address_entry.text().to_string();
+            let name = label_entry.text().to_string();
             let written = ctx.app().editor().add_wallet(
                 chain,
                 &text,
@@ -350,18 +351,18 @@ fn paint_ring(
     ctx.set_line_width(11.0);
 
     ctx.set_source_rgba(0.5, 0.5, 0.5, 0.14);
-    ctx.arc(center, center, radius, 0.0, std::f64::consts::TAU);
+    ctx.arc(center, center, radius, 0.0, TAU);
     ctx.stroke()?;
 
-    let mut start = -std::f64::consts::FRAC_PI_2;
+    let mut start = -FRAC_PI_2;
     for (share, color) in slices {
-        let sweep = (share.clamp(0.0, 1.0) * std::f64::consts::TAU - 0.04).max(0.01);
+        let sweep = (share.clamp(0.0, 1.0) * TAU - 0.04).max(0.01);
         let (red, green, blue) = rgb(color);
         ctx.set_source_rgb(red, green, blue);
         ctx.set_line_cap(cairo::LineCap::Round);
         ctx.arc(center, center, radius, start, start + sweep);
         ctx.stroke()?;
-        start += share.clamp(0.0, 1.0) * std::f64::consts::TAU;
+        start += share.clamp(0.0, 1.0) * TAU;
     }
     Ok(())
 }

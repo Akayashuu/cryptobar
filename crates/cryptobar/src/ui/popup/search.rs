@@ -11,6 +11,8 @@ use crate::source::SearchHit;
 use super::identity::identity_of;
 use super::model::{Ctx, Msg, send_unless_closed};
 use super::widgets::clear;
+use gtk4::pango::EllipsizeMode;
+use std::thread;
 
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(350);
 
@@ -53,7 +55,7 @@ impl Ctx {
             let name = Label::new(Some(&hit.name));
             name.set_hexpand(true);
             name.set_xalign(0.0);
-            name.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+            name.set_ellipsize(EllipsizeMode::End);
             row.append(&name);
 
             if known.iter().any(|id| id == hit.id.as_str()) {
@@ -97,7 +99,7 @@ impl Ctx {
         };
         let app = self.app();
         let tx = self.tx.clone();
-        std::thread::spawn(move || {
+        thread::spawn(move || {
             let mut icon_failures = Vec::new();
             let outcome = app.source.search(&term).map(|mut hits: Vec<SearchHit>| {
                 let mut agent = None;

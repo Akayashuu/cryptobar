@@ -8,9 +8,12 @@ use super::{CommandError, print, warn, warn_each};
 use crate::alerts;
 use crate::app::App;
 use crate::model::Quote;
+use crate::onchain;
 use crate::output::Output;
 use crate::render::waybar::{self, Markup};
 use crate::state::State;
+use std::fs;
+use std::thread;
 
 const POLL: Duration = Duration::from_millis(400);
 
@@ -49,7 +52,7 @@ fn watch_loop<Out: Write, Err: Write>(
             Instant::now().checked_add(Duration::from_secs(app.config.refresh_interval.max(1)));
         let mut config_changed = false;
         loop {
-            std::thread::sleep(POLL);
+            thread::sleep(POLL);
             let now_config = stamp(app.config_path());
             let now_state = stamp(&state_path);
             if now_config != config_stamp {
@@ -76,7 +79,7 @@ fn watch_loop<Out: Write, Err: Write>(
 }
 
 fn stamp(path: &Path) -> Option<SystemTime> {
-    std::fs::metadata(path)
+    fs::metadata(path)
         .ok()
         .and_then(|meta| meta.modified().ok())
 }
@@ -135,7 +138,7 @@ fn emit<Out: Write, Err: Write>(
         watcher.cached(&app.config.wallets)
     };
     warn_each(output, &refresh.failures)?;
-    let onchain = crate::onchain::totals(&refresh.balances);
+    let onchain = onchain::totals(&refresh.balances);
     let module = waybar::render(
         &quotes,
         app.active_index()?,

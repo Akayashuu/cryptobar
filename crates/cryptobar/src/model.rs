@@ -52,9 +52,9 @@ impl CoinId {
         if trimmed.is_empty() {
             return Err(ModelError::EmptyCoinId);
         }
-        let valid = trimmed
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+        let valid = trimmed.chars().all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '-'
+        });
         if !valid || trimmed.starts_with('-') || trimmed.ends_with('-') || trimmed.len() > 64 {
             return Err(ModelError::InvalidCoinId(raw.to_owned()));
         }
@@ -348,13 +348,13 @@ mod tests {
 
     #[test]
     fn trend_from_the_24h_change() {
-        let q = |c: Option<f64>| Quote {
+        let make_quote = |change_24h: Option<f64>| Quote {
             id: CoinId::parse("bitcoin").unwrap(),
             symbol: "btc".into(),
             name: "Bitcoin".into(),
             price: 1.0,
             change_1h: None,
-            change_24h: c,
+            change_24h,
             change_7d: None,
             sparkline: Vec::new(),
             image: None,
@@ -365,11 +365,11 @@ mod tests {
             ath_date: None,
             icon: None,
         };
-        assert_eq!(q(Some(2.0)).trend(), Trend::Up);
-        assert_eq!(q(Some(-2.0)).trend(), Trend::Down);
-        assert_eq!(q(Some(0.0)).trend(), Trend::Flat);
-        assert_eq!(q(None).trend(), Trend::Flat);
-        assert_eq!(q(Some(f64::NAN)).trend(), Trend::Flat);
+        assert_eq!(make_quote(Some(2.0)).trend(), Trend::Up);
+        assert_eq!(make_quote(Some(-2.0)).trend(), Trend::Down);
+        assert_eq!(make_quote(Some(0.0)).trend(), Trend::Flat);
+        assert_eq!(make_quote(None).trend(), Trend::Flat);
+        assert_eq!(make_quote(Some(f64::NAN)).trend(), Trend::Flat);
     }
 
     #[test]

@@ -7,8 +7,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::{CoinId, Currency};
 use crate::onchain::OnchainError;
+use crate::onchain::Wallet;
 use crate::paths::{self, PathsError};
 use crate::render::format::Decimals;
+use std::collections::HashSet;
+use std::fs;
+use toml::de::Error;
 
 /// Failures to read, write or validate the configuration file.
 #[derive(Debug, thiserror::Error)]
@@ -51,7 +55,7 @@ pub enum ConfigError {
     },
     /// The file is not valid TOML.
     #[error("malformed TOML")]
-    Toml(#[from] toml::de::Error),
+    Toml(#[from] Error),
     /// The configuration file is invalid.
     #[error("invalid configuration {}", .path.display())]
     File {
@@ -247,7 +251,7 @@ pub struct Config {
     pub waybar_signal: u8,
     /// Wallets watched read-only, by public address.
     #[serde(default)]
-    pub wallets: Vec<crate::onchain::Wallet>,
+    pub wallets: Vec<Wallet>,
     /// Notification thresholds. As `[[alerts]]` is an array of tables it has to
     /// stay the last serialised field; it already is by construction.
     #[serde(default)]
@@ -330,7 +334,7 @@ impl Config {
     /// # Errors
     /// Fails when the file is unreadable or invalid.
     pub fn load_from(path: &Path) -> Result<Self, ConfigError> {
-        let raw = std::fs::read_to_string(path).map_err(|source| ConfigError::Read {
+        let raw = fs::read_to_string(path).map_err(|source| ConfigError::Read {
             path: path.to_path_buf(),
             source,
         })?;
@@ -363,7 +367,7 @@ impl Config {
                 path: path.to_path_buf(),
             });
         }
-        std::fs::write(path, DEFAULT_CONFIG).map_err(|source| ConfigError::Write {
+        fs::write(path, DEFAULT_CONFIG).map_err(|source| ConfigError::Write {
             path: path.to_path_buf(),
             source,
         })
@@ -373,7 +377,7 @@ impl Config {
         if self.coins.is_empty() {
             return Err(ConfigError::NoCoin);
         }
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = HashSet::new();
         for coin in &self.coins {
             if !seen.insert(coin.as_str()) {
                 return Err(ConfigError::DuplicateCoin(coin.clone()));
@@ -412,7 +416,7 @@ impl Config {
     #[must_use]
     pub fn decimals(&self) -> Decimals {
         match &self.decimals {
-            DecimalsSetting::Fixed(n) => Decimals::Fixed(*n),
+            DecimalsSetting::Fixed(places) => Decimals::Fixed(*places),
             DecimalsSetting::Auto(_) => Decimals::Auto,
         }
     }

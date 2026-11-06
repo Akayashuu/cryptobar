@@ -12,6 +12,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::paths::{self, PathsError};
+use std::collections::BTreeSet;
+use std::fs;
+use std::io;
+use std::io::ErrorKind;
 
 /// Failures of the runtime state file.
 #[derive(Debug, thiserror::Error)]
@@ -25,7 +29,7 @@ pub enum StateError {
         /// Directory that could not be created.
         path: PathBuf,
         /// The operating system error.
-        source: std::io::Error,
+        source: io::Error,
     },
     /// The state file could not be written.
     #[error("could not write the state file {}", path.display())]
@@ -33,7 +37,7 @@ pub enum StateError {
         /// State file that could not be written.
         path: PathBuf,
         /// The operating system error.
-        source: std::io::Error,
+        source: io::Error,
     },
     /// The state could not be encoded as JSON.
     #[error("could not encode the state")]
@@ -53,13 +57,13 @@ pub struct State {
     pub manual: bool,
     /// Alert conditions already notified. A key disappears as soon as its
     /// condition becomes false again, which re-arms the alert.
-    pub fired: std::collections::BTreeSet<String>,
+    pub fired: BTreeSet<String>,
 }
 
 fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
+        .map_or(0, |elapsed| elapsed.as_secs())
 }
 
 impl State {
@@ -69,9 +73,9 @@ impl State {
     /// # Errors
     /// Only a read failure other than "not found" is an error.
     pub fn load(path: &Path) -> Result<Self, StateError> {
-        match std::fs::read_to_string(path) {
+        match fs::read_to_string(path) {
             Ok(raw) => Ok(serde_json::from_str(&raw).unwrap_or_default()),
-            Err(absent) if absent.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(absent) if absent.kind() == ErrorKind::NotFound => Ok(Self::default()),
             Err(failure) => Err(StateError::Write {
                 path: path.to_path_buf(),
                 source: failure,
@@ -93,7 +97,7 @@ impl State {
         }
         let tmp = path.with_extension("json.tmp");
         let bytes = serde_json::to_vec(self)?;
-        let written = write_synced(&tmp, &bytes).and_then(|()| std::fs::rename(&tmp, path));
+        let written = write_synced(&tmp, &bytes).and_then(|()| fs::rename(&tmp, path));
         written.map_err(|source| StateError::Write {
             path: path.to_path_buf(),
             source,
@@ -159,7 +163,7 @@ impl State {
     }
 }
 
-fn write_synced(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+fn write_synced(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut file = File::create(path)?;
     file.write_all(bytes)?;
     file.sync_all()
@@ -209,7 +213,7 @@ mod tests {
             index: 1,
             rotated_at: 0,
             manual: false,
-            fired: std::collections::BTreeSet::new(),
+            fired: BTreeSet::new(),
         };
         assert_eq!(state.effective_index(3, 0, 60), 1);
     }
@@ -227,7 +231,7 @@ mod tests {
             index: 0,
             rotated_at: 0,
             manual: false,
-            fired: std::collections::BTreeSet::new(),
+            fired: BTreeSet::new(),
         };
         let rotated = state.effective_index(3, 5, 60);
         assert!(rotated < 3);
@@ -239,7 +243,7 @@ mod tests {
             index: 42,
             rotated_at: now(),
             manual: true,
-            fired: std::collections::BTreeSet::new(),
+            fired: BTreeSet::new(),
         };
         assert_eq!(state.effective_index(3, 0, 60), 0);
     }
@@ -252,7 +256,7 @@ mod tests {
             index: 2,
             rotated_at: 123,
             manual: true,
-            fired: std::collections::BTreeSet::new(),
+            fired: BTreeSet::new(),
         };
         state.save(&path).unwrap();
         assert_eq!(State::load(&path).unwrap(), state);
@@ -263,7 +267,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("state.json");
         assert_eq!(State::load(&path).unwrap(), State::default());
-        std::fs::write(&path, b"garbage").unwrap();
+        fs::write(&path, b"garbage").unwrap();
         assert_eq!(State::load(&path).unwrap(), State::default());
     }
 }

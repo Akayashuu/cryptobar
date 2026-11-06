@@ -6,13 +6,19 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::alerts::AlertError;
 use crate::config::{Config, ConfigError};
+use crate::config_edit::Editor;
+use crate::model::Quote;
+use crate::onchain::Watcher;
 use crate::paths::{self, PathsError};
 use crate::source::cache::CachedSource;
 use crate::source::coingecko::CoinGecko;
+use crate::source::icons;
 use crate::source::icons::IconError;
 use crate::state::{State, StateError};
 use crate::waybar_signal::{self, SignalError};
+use std::path::Path;
 
 const MANUAL_HOLD: u64 = 300;
 
@@ -36,10 +42,11 @@ pub enum AppError {
     Signal(#[from] SignalError),
     /// The desktop notification could not be sent.
     #[error("could not send the desktop notification")]
-    Alert(#[from] crate::alerts::AlertError),
+    Alert(#[from] AlertError),
 }
 
 /// Runtime context shared by every command.
+#[derive(Debug)]
 pub struct App {
     /// The configuration as loaded at start-up.
     pub config: Config,
@@ -81,20 +88,20 @@ impl App {
 
     /// Path of the configuration file actually in use.
     #[must_use]
-    pub fn config_path(&self) -> &std::path::Path {
+    pub fn config_path(&self) -> &Path {
         &self.config_path
     }
 
     /// On-chain balance reader, with its cache in the cache directory.
     #[must_use]
-    pub fn watcher(&self) -> crate::onchain::Watcher {
-        crate::onchain::Watcher::new(&self.cache_dir)
+    pub fn watcher(&self) -> Watcher {
+        Watcher::new(&self.cache_dir)
     }
 
     /// Editor for the current configuration file.
     #[must_use]
-    pub fn editor(&self) -> crate::config_edit::Editor {
-        crate::config_edit::Editor::new(self.config_path.clone())
+    pub fn editor(&self) -> Editor {
+        Editor::new(self.config_path.clone())
     }
 
     /// Rebuilds the context from the configuration file.
@@ -107,8 +114,8 @@ impl App {
 
     /// Attaches the logos already present in the cache. No network access:
     /// safe to call from a bar tick.
-    pub fn attach_icons(&self, quotes: &mut [crate::model::Quote]) {
-        crate::source::icons::attach(&self.cache_dir, quotes);
+    pub fn attach_icons(&self, quotes: &mut [Quote]) {
+        icons::attach(&self.cache_dir, quotes);
     }
 
     /// Local path of a cryptocurrency logo, downloaded when needed.
@@ -124,15 +131,15 @@ impl App {
         url: Option<&str>,
         agent: &mut Option<ureq::Agent>,
     ) -> Result<Option<String>, IconError> {
-        crate::source::icons::ensure(&self.cache_dir, id, url, agent)
+        icons::ensure(&self.cache_dir, id, url, agent)
     }
 
     /// Attaches the logos, downloading the missing ones. Reserved for paths
     /// where a few hundred milliseconds go unnoticed. The failed downloads are
     /// returned, the quotes keep their badge for them.
     #[must_use]
-    pub fn fetch_icons(&self, quotes: &mut [crate::model::Quote]) -> Vec<IconError> {
-        crate::source::icons::fetch_missing(&self.cache_dir, quotes)
+    pub fn fetch_icons(&self, quotes: &mut [Quote]) -> Vec<IconError> {
+        icons::fetch_missing(&self.cache_dir, quotes)
     }
 
     /// # Errors

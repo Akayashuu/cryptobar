@@ -35,12 +35,12 @@ pub fn render(hits: &[SearchHit], term: &str) -> String {
     let shown: Vec<&SearchHit> = hits.iter().take(MAX_RESULTS).collect();
     let id_width = shown
         .iter()
-        .map(|h| h.id.as_str().chars().count())
+        .map(|coin| coin.id.as_str().chars().count())
         .max()
         .unwrap_or(0);
     let symbol_width = shown
         .iter()
-        .map(|h| h.symbol.chars().count())
+        .map(|coin| coin.symbol.chars().count())
         .max()
         .unwrap_or(0);
 
@@ -107,7 +107,7 @@ mod tests {
         let positions: Vec<_> = out
             .lines()
             .take(2)
-            .map(|l| l.find("BTC").or(l.find("ETH")))
+            .map(|line| line.find("BTC").or(line.find("ETH")))
             .collect();
         assert_eq!(positions.first(), positions.get(1));
     }

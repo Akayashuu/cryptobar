@@ -75,6 +75,7 @@ fn alerts_array(document: &mut DocumentMut) -> Result<&mut toml_edit::ArrayOfTab
 mod tests {
     use super::*;
     use crate::config_edit::fixtures::{editor, seed};
+    use std::fs;
 
     #[test]
     fn an_alert_is_added_then_removed() {
@@ -84,8 +85,8 @@ mod tests {
         let config = editor.add_alert(&id, Some(100.0), None, None).unwrap();
         assert_eq!(config.alerts.len(), 1);
         assert_eq!(config.alerts.first().unwrap().above, Some(100.0));
-        let config = editor.remove_alert(0).unwrap();
-        assert_eq!(config.alerts.len(), 0);
+        let after_removal = editor.remove_alert(0).unwrap();
+        assert_eq!(after_removal.alerts.len(), 0);
     }
 
     #[test]
@@ -103,7 +104,7 @@ mod tests {
         seed(&editor, original);
         let id = CoinId::parse("solana").unwrap();
         editor.add_alert(&id, Some(1.0), None, None).unwrap_err();
-        assert_eq!(std::fs::read_to_string(editor.path()).unwrap(), original);
+        assert_eq!(fs::read_to_string(editor.path()).unwrap(), original);
     }
 
     #[test]

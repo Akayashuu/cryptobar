@@ -62,7 +62,7 @@ fn group_thousands(rendered: &str) -> String {
     out
 }
 
-/// Formats a price with its currency. A non-finite value yields `—`.
+/// Formats a price with its currency. A non-finite value yields the missing-value placeholder.
 #[must_use]
 pub fn price(value: f64, currency: &Currency, decimals: Decimals) -> String {
     if !value.is_finite() {
@@ -70,7 +70,7 @@ pub fn price(value: f64, currency: &Currency, decimals: Decimals) -> String {
     }
     let places = match decimals {
         Decimals::Auto => auto_decimals(value),
-        Decimals::Fixed(n) => n.min(MAX_DECIMALS),
+        Decimals::Fixed(places) => places.min(MAX_DECIMALS),
     };
     let rendered = format!("{value:.*}", usize::from(places));
     let rendered = if matches!(decimals, Decimals::Auto) && rendered.contains('.') {
@@ -128,13 +128,13 @@ pub fn compact(value: f64, currency: &Currency) -> String {
     format!("{rendered}{suffix}{THIN_SPACE}{symbol}")
 }
 
-/// Formats a change in percent, always signed. `None` or non-finite yields `—`.
+/// Formats a change in percent, always signed. `None` or non-finite yields the missing-value placeholder.
 #[must_use]
 pub fn percent(value: Option<f64>) -> String {
     match value {
-        Some(v) if v.is_finite() => {
-            let rendered = format!("{:.1}", v.abs());
-            let sign = if v < 0.0 { '-' } else { '+' };
+        Some(change) if change.is_finite() => {
+            let rendered = format!("{:.1}", change.abs());
+            let sign = if change < 0.0 { '-' } else { '+' };
             format!("{sign}{rendered}{THIN_SPACE}%")
         }
         _ => MISSING.to_owned(),
@@ -144,6 +144,7 @@ pub fn percent(value: Option<f64>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::num::f64::ANY;
 
     fn eur() -> Currency {
         Currency::parse("eur").unwrap()
@@ -214,13 +215,13 @@ mod tests {
 
     proptest::proptest! {
         #[test]
-        fn price_never_panics(value in proptest::num::f64::ANY, d in 0u8..12) {
+        fn price_never_panics(value in ANY, places in 0u8..12) {
             assert_ne!(price(value, &eur(), Decimals::Auto), "");
-            assert_ne!(price(value, &eur(), Decimals::Fixed(d)), "");
+            assert_ne!(price(value, &eur(), Decimals::Fixed(places)), "");
         }
 
         #[test]
-        fn percent_never_panics(value in proptest::num::f64::ANY) {
+        fn percent_never_panics(value in ANY) {
             assert_ne!(percent(Some(value)), "");
         }
     }

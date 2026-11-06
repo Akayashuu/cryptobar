@@ -10,6 +10,7 @@ use super::{CommandError, print};
 use crate::cli::ConfigAction;
 use crate::config::Config;
 use crate::output::Output;
+use crate::paths;
 
 /// Runs the requested action on the configuration file.
 ///
@@ -24,7 +25,7 @@ pub fn run<Out: Write, Err: Write>(
 ) -> Result<(), CommandError> {
     let path = match override_path {
         Some(path) => path,
-        None => crate::paths::config_file()?,
+        None => paths::config_file()?,
     };
     match action {
         ConfigAction::Path => print(output, path.display()),

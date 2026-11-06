@@ -11,6 +11,10 @@ use super::chart::{CHART_HEIGHT, CHART_WIDTH, draw_series};
 use super::error::PopupError;
 use super::model::Ctx;
 use super::status::root_cause;
+use crate::paths;
+use std::fs;
+use std::fs::File;
+use std::io;
 
 impl Ctx {
     pub(super) fn export_buttons(
@@ -49,7 +53,7 @@ impl Ctx {
 
 fn export_path(symbol: &str, range: Range, extension: &str) -> Result<PathBuf, PopupError> {
     let name = format!("cryptobar-{}-{}.{extension}", symbol, range.slug());
-    Ok(crate::paths::export_dir()?.join(name))
+    Ok(paths::export_dir()?.join(name))
 }
 
 fn export_png(
@@ -75,7 +79,7 @@ fn export_png(
         None,
     )?;
     drop(ctx);
-    let mut file = std::fs::File::create(&path).map_err(|source| PopupError::Export {
+    let mut file = File::create(&path).map_err(|source| PopupError::Export {
         path: path.clone(),
         source,
     })?;
@@ -101,11 +105,11 @@ fn export_csv(points: &[f64], symbol: &str, range: Range) -> Result<PathBuf, Pop
         let row = format!("{index},{behind:.0},{value}\n");
         out.push_str(&row);
     }
-    std::fs::write(&path, out).map_err(|source| write_failed(&path, source))?;
+    fs::write(&path, out).map_err(|source| write_failed(&path, source))?;
     Ok(path)
 }
 
-fn write_failed(path: &Path, source: std::io::Error) -> PopupError {
+fn write_failed(path: &Path, source: io::Error) -> PopupError {
     PopupError::Export {
         path: path.to_path_buf(),
         source,

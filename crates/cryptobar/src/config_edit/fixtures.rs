@@ -1,4 +1,5 @@
 use super::Editor;
+use std::fs;
 
 pub(super) fn editor() -> (tempfile::TempDir, Editor) {
     let dir = tempfile::tempdir().unwrap();
@@ -7,5 +8,5 @@ pub(super) fn editor() -> (tempfile::TempDir, Editor) {
 }
 
 pub(super) fn seed(editor: &Editor, contents: &str) {
-    std::fs::write(editor.path(), contents).unwrap();
+    fs::write(editor.path(), contents).unwrap();
 }

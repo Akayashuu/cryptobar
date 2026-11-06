@@ -23,7 +23,10 @@ pub struct Balance {
 #[must_use]
 pub fn totals(balances: &[Balance]) -> BTreeMap<CoinId, f64> {
     let mut totals: BTreeMap<CoinId, f64> = BTreeMap::new();
-    for balance in balances.iter().filter(|b| b.amount.is_finite()) {
+    for balance in balances
+        .iter()
+        .filter(|candidate| candidate.amount.is_finite())
+    {
         *totals.entry(balance.chain.coin()).or_insert(0.0) += balance.amount;
     }
     totals

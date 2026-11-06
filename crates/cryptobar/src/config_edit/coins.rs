@@ -64,6 +64,7 @@ fn coins_array(document: &mut DocumentMut) -> Result<&mut Array, EditError> {
 mod tests {
     use super::*;
     use crate::config_edit::fixtures::{editor, seed};
+    use std::fs;
 
     #[test]
     fn adding_a_coin_preserves_the_comments() {
@@ -71,7 +72,7 @@ mod tests {
         seed(&editor, "# my comment\ncoins = [\"bitcoin\"]\n");
         let config = editor.add_coin(&CoinId::parse("solana").unwrap()).unwrap();
         assert_eq!(config.coins.len(), 2);
-        let raw = std::fs::read_to_string(editor.path()).unwrap();
+        let raw = fs::read_to_string(editor.path()).unwrap();
         assert!(raw.contains("# my comment"), "lost comment: {raw}");
         assert!(raw.contains("\"solana\""));
     }
@@ -91,7 +92,7 @@ mod tests {
         seed(&editor, "coins = [\"bitcoin\"]\n");
         editor.remove_coin("bitcoin").unwrap_err();
         assert_eq!(
-            std::fs::read_to_string(editor.path()).unwrap(),
+            fs::read_to_string(editor.path()).unwrap(),
             "coins = [\"bitcoin\"]\n"
         );
     }

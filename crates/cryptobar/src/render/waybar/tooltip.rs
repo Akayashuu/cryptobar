@@ -4,6 +4,7 @@ use crate::portfolio;
 use crate::render::format;
 
 use super::markup::Markup;
+use crate::alerts::Trigger;
 
 pub(super) fn tooltip(
     quotes: &[Quote],
@@ -12,7 +13,7 @@ pub(super) fn tooltip(
     stale: bool,
     markup: Markup,
     wallet: Option<&portfolio::Portfolio>,
-    triggers: &[crate::alerts::Trigger],
+    triggers: &[Trigger],
 ) -> String {
     let decimals = config.decimals();
     let mut lines = Vec::with_capacity(quotes.len().saturating_add(2));

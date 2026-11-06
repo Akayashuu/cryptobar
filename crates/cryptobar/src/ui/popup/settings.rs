@@ -10,6 +10,8 @@ use crate::numeric::to_f64;
 use crate::render::format;
 
 use super::model::Ctx;
+use gtk4::pango::EllipsizeMode;
+use std::iter;
 
 /// Settings controls, built once then never rebuilt: their values are those of
 /// the file at opening time.
@@ -32,23 +34,23 @@ pub(super) fn settings_panel(config: &Config, config_path: &str) -> Settings {
     let currencies = Currency::all();
     let labels: Vec<String> = currencies
         .iter()
-        .map(|c| format!("{} {}", c.as_str().to_uppercase(), c.symbol()))
+        .map(|currency| format!("{} {}", currency.as_str().to_uppercase(), currency.symbol()))
         .collect();
     let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
     let currency = gtk4::DropDown::from_strings(&refs);
     let selected = currencies
         .iter()
-        .position(|c| c.as_str() == config.currency.as_str())
+        .position(|option| option.as_str() == config.currency.as_str())
         .unwrap_or(0);
     currency.set_selected(u32::try_from(selected).unwrap_or(0));
 
-    let decimal_labels: Vec<String> = std::iter::once("auto".to_owned())
-        .chain((0..=8).map(|n: u8| n.to_string()))
+    let decimal_labels: Vec<String> = iter::once("auto".to_owned())
+        .chain((0..=8).map(|number: u8| number.to_string()))
         .collect();
     let decimal_refs: Vec<&str> = decimal_labels.iter().map(String::as_str).collect();
     let decimals = gtk4::DropDown::from_strings(&decimal_refs);
     decimals.set_selected(match config.decimals() {
-        format::Decimals::Fixed(n) => u32::from(n).saturating_add(1),
+        format::Decimals::Fixed(places) => u32::from(places).saturating_add(1),
         format::Decimals::Auto => 0,
     });
 
@@ -88,7 +90,7 @@ pub(super) fn settings_panel(config: &Config, config_path: &str) -> Settings {
     path.add_css_class("muted");
     path.set_halign(Align::Start);
     path.set_selectable(true);
-    path.set_ellipsize(gtk4::pango::EllipsizeMode::Middle);
+    path.set_ellipsize(EllipsizeMode::Middle);
     settings.panel.append(&path);
 
     settings

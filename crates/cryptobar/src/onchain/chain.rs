@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::model::CoinId;
 
 use super::error::OnchainError;
+use std::str::FromStr;
 
 /// A watched chain. The list is short on purpose: every entry needs a public,
 /// key-free endpoint and a clean balance decoder.
@@ -49,7 +50,7 @@ impl Chain {
     }
 }
 
-impl std::str::FromStr for Chain {
+impl FromStr for Chain {
     type Err = OnchainError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {

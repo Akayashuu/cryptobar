@@ -4,6 +4,8 @@ use crate::config::Config;
 
 use super::editor::Editor;
 use super::error::EditError;
+use crate::onchain::Chain;
+use crate::onchain::Wallet;
 
 impl Editor {
     /// Adds a wallet watched read-only.
@@ -16,11 +18,11 @@ impl Editor {
     /// for the reasons of [`Self::apply`].
     pub fn add_wallet(
         &self,
-        chain: crate::onchain::Chain,
+        chain: Chain,
         address: &str,
         label: Option<&str>,
     ) -> Result<Config, EditError> {
-        let candidate = crate::onchain::Wallet {
+        let candidate = Wallet {
             chain,
             address: address.trim().to_owned(),
             label: label.map(str::to_owned),
@@ -85,6 +87,8 @@ fn wallets_array(document: &mut DocumentMut) -> Result<&mut toml_edit::ArrayOfTa
 #[cfg(test)]
 mod tests {
     use crate::config_edit::fixtures::{editor, seed};
+    use crate::onchain::Chain;
+    use std::fs;
 
     #[test]
     fn a_public_address_is_added_then_removed() {
@@ -92,15 +96,15 @@ mod tests {
         seed(&editor, "coins = [\"bitcoin\"]\n");
         let config = editor
             .add_wallet(
-                crate::onchain::Chain::Bitcoin,
+                Chain::Bitcoin,
                 "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
                 Some("Ledger"),
             )
             .unwrap();
         assert_eq!(config.wallets.len(), 1);
         assert_eq!(config.wallets.first().unwrap().title(), "Ledger");
-        let config = editor.remove_wallet(0).unwrap();
-        assert_eq!(config.wallets.len(), 0);
+        let after_removal = editor.remove_wallet(0).unwrap();
+        assert_eq!(after_removal.wallets.len(), 0);
     }
 
     #[test]
@@ -109,13 +113,9 @@ mod tests {
         let original = "coins = [\"bitcoin\"]\n";
         seed(&editor, original);
         editor
-            .add_wallet(
-                crate::onchain::Chain::Bitcoin,
-                "abandon abandon abandon ability",
-                None,
-            )
+            .add_wallet(Chain::Bitcoin, "abandon abandon abandon ability", None)
             .unwrap_err();
-        assert_eq!(std::fs::read_to_string(editor.path()).unwrap(), original);
+        assert_eq!(fs::read_to_string(editor.path()).unwrap(), original);
     }
 
     #[test]
@@ -123,11 +123,9 @@ mod tests {
         let (_guard, editor) = editor();
         seed(&editor, "coins = [\"ethereum\"]\n");
         let address = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
+        editor.add_wallet(Chain::Ethereum, address, None).unwrap();
         editor
-            .add_wallet(crate::onchain::Chain::Ethereum, address, None)
-            .unwrap();
-        editor
-            .add_wallet(crate::onchain::Chain::Ethereum, address, None)
+            .add_wallet(Chain::Ethereum, address, None)
             .unwrap_err();
     }
 

@@ -9,6 +9,7 @@ use crate::render::format;
 use super::model::Ctx;
 use super::parse::field;
 use super::widgets::clear;
+use crate::config::Alert;
 
 impl Ctx {
     /// Alerts card: those already set, and what it takes to add one.
@@ -119,15 +120,17 @@ impl Ctx {
             let Some(coin) = ids.get(index) else {
                 return;
             };
-            let (above, below, change) = &fields;
-            let written =
-                ctx.app()
-                    .editor()
-                    .add_alert(coin, field(above), field(below), field(change));
+            let (above_entry, below_entry, change_entry) = &fields;
+            let written = ctx.app().editor().add_alert(
+                coin,
+                field(above_entry),
+                field(below_entry),
+                field(change_entry),
+            );
             if written.is_ok() {
-                above.set_text("");
-                below.set_text("");
-                change.set_text("");
+                above_entry.set_text("");
+                below_entry.set_text("");
+                change_entry.set_text("");
             }
             ctx.adopt(written, "alert added");
         });
@@ -136,11 +139,7 @@ impl Ctx {
     }
 }
 
-fn alert_caption(
-    alert: &crate::config::Alert,
-    currency: &Currency,
-    decimals: format::Decimals,
-) -> String {
+fn alert_caption(alert: &Alert, currency: &Currency, decimals: format::Decimals) -> String {
     let mut parts = Vec::new();
     if let Some(above) = alert.above {
         parts.push(format!(
@@ -167,10 +166,11 @@ fn alert_caption(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Config;
 
     #[test]
     fn the_alert_caption_describes_every_condition() {
-        let config = crate::config::Config::parse(
+        let config = Config::parse(
             "coins = [\"bitcoin\"]\n[[alerts]]\ncoin = \"bitcoin\"\nabove = 100000\nchange_pct = 5\n",
         )
         .expect("valid configuration");

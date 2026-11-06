@@ -2,6 +2,8 @@
 
 use super::CommandError;
 use crate::app::App;
+#[cfg(feature = "popup")]
+use crate::ui::popup;
 
 /// Opens the window from the data already on disk: the network is left to
 /// the window's own workers, so a slow API never delays its opening.
@@ -15,7 +17,7 @@ pub fn run(app: App) -> Result<(), CommandError> {
         .markets_stored(&app.config.coins, &app.config.currency)
         .map_or((Vec::new(), true), |cached| (cached.value, cached.stale));
     app.attach_icons(&mut quotes);
-    crate::ui::popup::show(app, quotes, stale)?;
+    popup::show(app, quotes, stale)?;
     Ok(())
 }
 

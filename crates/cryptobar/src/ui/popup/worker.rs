@@ -10,6 +10,8 @@ use crate::model::{Quote, Range};
 use super::model::{Ctx, Msg, send_unless_closed};
 use super::prices::series_key;
 use super::status::root_cause;
+use crate::onchain;
+use std::thread;
 
 const DRAIN: Duration = Duration::from_millis(120);
 
@@ -17,7 +19,7 @@ impl Ctx {
     pub(super) fn reload_quotes(&self) {
         let app = self.app();
         let tx = self.tx.clone();
-        std::thread::spawn(move || {
+        thread::spawn(move || {
             let message = match app
                 .source
                 .markets_cached(&app.config.coins, &app.config.currency)
@@ -32,11 +34,14 @@ impl Ctx {
             send_unless_closed(&tx, message);
         });
 
-        let app = self.app();
-        let tx = self.tx.clone();
-        std::thread::spawn(move || {
-            let refresh = app.watcher().refresh(&app.config.wallets);
-            send_unless_closed(&tx, Msg::Balances(refresh.balances, refresh.failures));
+        let balance_app = self.app();
+        let balance_tx = self.tx.clone();
+        thread::spawn(move || {
+            let refresh = balance_app.watcher().refresh(&balance_app.config.wallets);
+            send_unless_closed(
+                &balance_tx,
+                Msg::Balances(refresh.balances, refresh.failures),
+            );
         });
     }
 
@@ -51,7 +56,7 @@ impl Ctx {
         let app = self.app();
         let tx = self.tx.clone();
         let id = quote.id.clone();
-        std::thread::spawn(move || {
+        thread::spawn(move || {
             let outcome = app
                 .source
                 .series_cached(&id, range, &app.config.currency)
@@ -94,7 +99,7 @@ pub(super) fn drain(ctx: &Rc<Ctx>, rx: Receiver<Msg>) {
                 Ok(Msg::Balances(balances, failures)) => {
                     {
                         let mut model = ctx.model.borrow_mut();
-                        model.onchain = crate::onchain::totals(&balances);
+                        model.onchain = onchain::totals(&balances);
                         model.balances = balances;
                     };
                     report_first(&ctx, &failures);

@@ -90,12 +90,17 @@ pub fn compute(quotes: &[Quote], onchain: &BTreeMap<CoinId, f64>) -> Option<Port
             position.share = position.value / total;
         }
     }
-    positions.sort_by(|a, b| b.value.total_cmp(&a.value));
+    positions.sort_by(|left, right| right.value.total_cmp(&left.value));
 
     let change_24h = positions
         .iter()
         .any(|position| position.change_24h.is_some())
-        .then(|| positions.iter().filter_map(|p| p.change_24h).sum::<f64>());
+        .then(|| {
+            positions
+                .iter()
+                .filter_map(|position| position.change_24h)
+                .sum::<f64>()
+        });
     let change_24h_pct = change_24h.and_then(|gain| {
         let before = total - gain;
         (before > 0.0).then(|| gain / before * 100.0)
@@ -123,7 +128,6 @@ fn gain_24h(price: f64, change_pct: Option<f64>) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::CoinId;
 
     fn quote(id: &str, symbol: &str, price: f64, change: Option<f64>) -> Quote {
         Quote {
@@ -281,7 +285,11 @@ mod tests {
             &held(&[("bitcoin", 1.0), ("ethereum", 4.0)]),
         )
         .unwrap();
-        let sum: f64 = portfolio.positions.iter().map(|p| p.share).sum();
+        let sum: f64 = portfolio
+            .positions
+            .iter()
+            .map(|position| position.share)
+            .sum();
         assert!((sum - 1.0).abs() < 1e-9);
     }
 }

@@ -11,6 +11,7 @@ use crate::model::{CoinId, Quote, Range};
 use crate::onchain::{Balance, OnchainError};
 use crate::source::icons::IconError;
 use crate::source::{SearchHit, SourceError};
+use std::collections::BTreeMap;
 
 /// Message sent from a worker thread up to the graphical loop.
 pub(super) enum Msg {
@@ -40,7 +41,7 @@ pub(super) struct Model {
     /// from the quotes and never lands here.
     pub(super) series: HashMap<String, Vec<f64>>,
     /// Balances read from the watched addresses, summed per cryptocurrency.
-    pub(super) onchain: std::collections::BTreeMap<CoinId, f64>,
+    pub(super) onchain: BTreeMap<CoinId, f64>,
     /// Per-address detail, for the list of watched wallets.
     pub(super) balances: Vec<Balance>,
     /// Number of the last search fired: late answers, whose term the user has

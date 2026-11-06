@@ -50,9 +50,9 @@ pub(super) fn attach_hover(
         let hover = Rc::clone(hover);
         let samples = samples.to_vec();
         let currency = currency.clone();
-        motion.connect_motion(move |_, x, _| {
+        motion.connect_motion(move |_, pos_x, _| {
             let width = f64::from(area.width()).max(1.0);
-            let ratio = (x / width).clamp(0.0, 1.0);
+            let ratio = (pos_x / width).clamp(0.0, 1.0);
             hover.set(Some(ratio));
             let index = sample_at(samples.len(), ratio);
             if let Some(value) = samples.get(index) {

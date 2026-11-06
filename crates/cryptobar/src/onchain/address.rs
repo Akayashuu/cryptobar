@@ -26,7 +26,7 @@ pub(super) fn validate_bitcoin(address: &str) -> Result<(), OnchainError> {
         let ok = (11..=87).contains(&body.len())
             && body
                 .chars()
-                .all(|c| c.is_ascii_digit() || c.is_ascii_lowercase())
+                .all(|character| character.is_ascii_digit() || character.is_ascii_lowercase())
             && !body.contains(['b', 'i', 'o'])
             && !body.contains('1');
         return ok.then_some(()).ok_or(OnchainError::MalformedBech32);
@@ -42,7 +42,7 @@ pub(super) fn validate_ethereum(address: &str) -> Result<(), OnchainError> {
         && address.starts_with("0x")
         && address
             .get(2..)
-            .is_some_and(|body| body.chars().all(|c| c.is_ascii_hexdigit()));
+            .is_some_and(|body| body.chars().all(|character| character.is_ascii_hexdigit()));
     ok.then_some(()).ok_or(OnchainError::MalformedEthereum)
 }
 
@@ -51,14 +51,14 @@ pub(super) fn validate_solana(address: &str) -> Result<(), OnchainError> {
     ok.then_some(()).ok_or(OnchainError::UnrecognisedSolana)
 }
 
-fn is_base58(c: char) -> bool {
-    c.is_ascii_alphanumeric() && !matches!(c, '0' | 'O' | 'I' | 'l')
+fn is_base58(character: char) -> bool {
+    character.is_ascii_alphanumeric() && !matches!(character, '0' | 'O' | 'I' | 'l')
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::onchain::{Chain, OnchainError, Wallet};
+    use crate::onchain::{Chain, Wallet};
 
     fn wallet(chain: Chain, address: &str) -> Wallet {
         Wallet {

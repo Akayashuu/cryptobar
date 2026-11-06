@@ -5,6 +5,7 @@ use std::io::Write;
 use super::{CommandError, print_text, warn, warn_each};
 use crate::app::App;
 use crate::config::Config;
+use crate::onchain;
 use crate::output::{Output, push_line};
 use crate::portfolio::{self, Portfolio};
 use crate::render::format;
@@ -32,7 +33,7 @@ pub fn run<Out: Write, Err: Write>(
     app.attach_icons(&mut quotes);
     let refresh = app.watcher().refresh(&app.config.wallets);
     warn_each(output, &refresh.failures)?;
-    let onchain = crate::onchain::totals(&refresh.balances);
+    let onchain = onchain::totals(&refresh.balances);
     let wallet = portfolio::compute(&quotes, &onchain);
     print_text(output, render(wallet.as_ref(), &app.config, stale))
 }
@@ -62,7 +63,7 @@ pub fn render(wallet: Option<&Portfolio>, config: &Config, stale: bool) -> Strin
         .collect();
     let quantity_width = quantity_column
         .iter()
-        .map(|q| q.chars().count())
+        .map(|text| text.chars().count())
         .max()
         .unwrap_or(0);
     let value_column: Vec<String> = wallet
@@ -72,7 +73,7 @@ pub fn render(wallet: Option<&Portfolio>, config: &Config, stale: bool) -> Strin
         .collect();
     let value_width = value_column
         .iter()
-        .map(|v| v.chars().count())
+        .map(|value| value.chars().count())
         .max()
         .unwrap_or(0);
 
@@ -83,7 +84,7 @@ pub fn render(wallet: Option<&Portfolio>, config: &Config, stale: bool) -> Strin
         .collect();
     let share_width = share_column
         .iter()
-        .map(|s| s.chars().count())
+        .map(|text| text.chars().count())
         .max()
         .unwrap_or(0);
 
@@ -137,6 +138,7 @@ pub fn render(wallet: Option<&Portfolio>, config: &Config, stale: bool) -> Strin
 mod tests {
     use super::*;
     use crate::model::{CoinId, Quote};
+    use std::collections::BTreeMap;
 
     fn quote(id: &str, symbol: &str, price: f64, change: Option<f64>) -> Quote {
         Quote {
@@ -158,8 +160,8 @@ mod tests {
         }
     }
 
-    fn held(quantity: f64) -> std::collections::BTreeMap<CoinId, f64> {
-        std::collections::BTreeMap::from([(CoinId::parse("bitcoin").unwrap(), quantity)])
+    fn held(quantity: f64) -> BTreeMap<CoinId, f64> {
+        BTreeMap::from([(CoinId::parse("bitcoin").unwrap(), quantity)])
     }
 
     #[test]

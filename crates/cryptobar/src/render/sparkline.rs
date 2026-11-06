@@ -1,6 +1,7 @@
 //! Sparkline made of Unicode blocks. Pure function, no I/O.
 
 use crate::numeric::{saturating_index, to_f64};
+use std::iter;
 
 const LEVELS: &[char] = &['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 const FLAT_LEVEL: char = '▄';
@@ -42,7 +43,11 @@ pub fn sparkline(points: &[f64], width: usize) -> String {
     if width == 0 {
         return String::new();
     }
-    let finite: Vec<f64> = points.iter().copied().filter(|v| v.is_finite()).collect();
+    let finite: Vec<f64> = points
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite())
+        .collect();
     if finite.is_empty() {
         return String::new();
     }
@@ -53,7 +58,7 @@ pub fn sparkline(points: &[f64], width: usize) -> String {
     let amplitude = max - min;
 
     if !amplitude.is_finite() || amplitude <= f64::EPSILON {
-        return std::iter::repeat_n(FLAT_LEVEL, sampled.len()).collect();
+        return iter::repeat_n(FLAT_LEVEL, sampled.len()).collect();
     }
 
     let last_level = LEVELS.len().saturating_sub(1);
@@ -70,6 +75,8 @@ pub fn sparkline(points: &[f64], width: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::collection;
+    use proptest::num::f64::ANY;
 
     #[test]
     fn a_rising_series_climbs_in_steps() {
@@ -113,7 +120,7 @@ mod tests {
     proptest::proptest! {
         #[test]
         fn never_panics_and_respects_the_width(
-            points in proptest::collection::vec(proptest::num::f64::ANY, 0..200),
+            points in collection::vec(ANY, 0..200),
             width in 0usize..64,
         ) {
             let out = sparkline(&points, width);

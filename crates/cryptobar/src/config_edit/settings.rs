@@ -19,7 +19,7 @@ impl Editor {
     /// See [`Self::apply`].
     pub fn set_decimals(&self, decimals: Option<u8>) -> Result<Config, EditError> {
         let value = match decimals {
-            Some(n) => Value::from(i64::from(n)),
+            Some(number) => Value::from(i64::from(number)),
             None => Value::from("auto"),
         };
         self.set_value("decimals", value)
@@ -65,6 +65,8 @@ impl Editor {
 #[cfg(test)]
 mod tests {
     use crate::config_edit::fixtures::{editor, seed};
+    use crate::render::format::Decimals;
+    use std::fs;
 
     #[test]
     fn replacing_a_value_keeps_the_line_comment() {
@@ -75,7 +77,7 @@ mod tests {
         );
         let config = editor.set_integer("refresh_interval", 120).unwrap();
         assert_eq!(config.refresh_interval, 120);
-        let raw = std::fs::read_to_string(editor.path()).unwrap();
+        let raw = fs::read_to_string(editor.path()).unwrap();
         assert!(raw.contains("# every minute"), "lost decor: {raw}");
     }
 
@@ -85,7 +87,7 @@ mod tests {
         let original = "coins = [\"bitcoin\"]\nrefresh_interval = 60\n";
         seed(&editor, original);
         editor.set_integer("refresh_interval", 1).unwrap_err();
-        assert_eq!(std::fs::read_to_string(editor.path()).unwrap(), original);
+        assert_eq!(fs::read_to_string(editor.path()).unwrap(), original);
     }
 
     #[test]
@@ -102,11 +104,11 @@ mod tests {
         seed(&editor, "coins = [\"bitcoin\"]\n");
         assert_eq!(
             editor.set_decimals(Some(3)).unwrap().decimals(),
-            crate::render::format::Decimals::Fixed(3)
+            Decimals::Fixed(3)
         );
         assert_eq!(
             editor.set_decimals(None).unwrap().decimals(),
-            crate::render::format::Decimals::Auto
+            Decimals::Auto
         );
     }
 }

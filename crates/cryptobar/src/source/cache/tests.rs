@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use super::*;
 use std::cell::Cell;
+use std::fs;
 
 struct FakeSource {
     calls: Cell<usize>,
@@ -194,9 +195,13 @@ fn a_corrupt_cache_is_treated_as_missing() {
     let (dir, cached) = setup(Duration::from_secs(3600), false);
     let vs = Currency::default();
     cached.markets_cached(&ids(), &vs).unwrap();
-    for entry in std::fs::read_dir(dir.path()).unwrap().flatten() {
-        if entry.path().extension().is_some_and(|e| e == "json") {
-            std::fs::write(entry.path(), b"{ not json").unwrap();
+    for entry in fs::read_dir(dir.path()).unwrap().flatten() {
+        if entry
+            .path()
+            .extension()
+            .is_some_and(|extension| extension == "json")
+        {
+            fs::write(entry.path(), b"{ not json").unwrap();
         }
     }
     cached.markets_cached(&ids(), &vs).unwrap();

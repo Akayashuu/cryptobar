@@ -10,6 +10,9 @@ use crate::source::{PriceSource, SourceError};
 
 use super::key::sanitize;
 use super::{BACKOFF_MAX, BACKOFF_MIN, Backoff, Entry, now};
+use rustix::fs::{FlockOperation, flock};
+use rustix::io::Errno;
+use std::fs;
 
 /// Wraps a source with a disk cache.
 ///
@@ -17,6 +20,7 @@ use super::{BACKOFF_MAX, BACKOFF_MIN, Backoff, Entry, now};
 /// is derived from the network and is rebuilt on the next fetch. Every write
 /// that fails (entry, lock, backoff) is a [`SourceError::Cache`] or an I/O error
 /// surfaced to the caller, never dropped.
+#[derive(Debug)]
 pub struct CachedSource<S: PriceSource> {
     pub(super) source: S,
     pub(super) dir: PathBuf,
@@ -46,7 +50,7 @@ impl<S: PriceSource> CachedSource<S> {
     /// A missing, unreadable or unparsable entry is a miss: the caller fetches
     /// again and the next write replaces the broken file.
     pub(super) fn read<T: for<'de> Deserialize<'de>>(&self, key: &str) -> Option<Entry<T>> {
-        let raw = std::fs::read_to_string(self.path(key)).ok()?;
+        let raw = fs::read_to_string(self.path(key)).ok()?;
         serde_json::from_str(&raw).ok()
     }
 
@@ -62,7 +66,7 @@ impl<S: PriceSource> CachedSource<S> {
         let mut file = File::create(&tmp_path)?;
         file.write_all(&bytes)?;
         file.sync_all()?;
-        std::fs::rename(&tmp_path, &final_path)?;
+        fs::rename(&tmp_path, &final_path)?;
         Ok(())
     }
 
@@ -71,9 +75,9 @@ impl<S: PriceSource> CachedSource<S> {
     pub(super) fn try_lock(&self) -> Result<Option<File>, SourceError> {
         paths::ensure_dir(&self.dir)?;
         let file = File::create(self.dir.join(".lock"))?;
-        match rustix::fs::flock(&file, rustix::fs::FlockOperation::NonBlockingLockExclusive) {
+        match flock(&file, FlockOperation::NonBlockingLockExclusive) {
             Ok(()) => Ok(Some(file)),
-            Err(errno) if errno == rustix::io::Errno::WOULDBLOCK => Ok(None),
+            Err(errno) if errno == Errno::WOULDBLOCK => Ok(None),
             Err(errno) => Err(io::Error::from(errno).into()),
         }
     }
@@ -85,7 +89,7 @@ impl<S: PriceSource> CachedSource<S> {
     /// The backoff state of the upstream. A missing or unparsable file means no
     /// failure is recorded, which is the default backoff.
     pub(super) fn backoff(&self) -> Backoff {
-        std::fs::read_to_string(self.backoff_path())
+        fs::read_to_string(self.backoff_path())
             .ok()
             .and_then(|raw| serde_json::from_str(&raw).ok())
             .unwrap_or_default()
@@ -107,12 +111,12 @@ impl<S: PriceSource> CachedSource<S> {
         };
         let bytes = serde_json::to_vec(&next).map_err(encoding_error)?;
         paths::ensure_dir(&self.dir)?;
-        std::fs::write(self.backoff_path(), bytes)?;
+        fs::write(self.backoff_path(), bytes)?;
         Ok(())
     }
 
     pub(super) fn clear_failure(&self) -> Result<(), SourceError> {
-        match std::fs::remove_file(self.backoff_path()) {
+        match fs::remove_file(self.backoff_path()) {
             Ok(()) => Ok(()),
             Err(absent) if absent.kind() == io::ErrorKind::NotFound => Ok(()),
             Err(failure) => Err(failure.into()),

@@ -1,10 +1,11 @@
 use gtk4::prelude::*;
+use std::ops::Range;
 
 /// Splits a `#rrggbb` colour into `0.0..=1.0` components.
 ///
 /// An unexpected string yields a neutral grey: the ring stays readable.
 pub(super) fn rgb(color: &str) -> (f64, f64, f64) {
-    let parse = |range: std::ops::Range<usize>| {
+    let parse = |range: Range<usize>| {
         color
             .get(range)
             .and_then(|slice| u8::from_str_radix(slice, 16).ok())

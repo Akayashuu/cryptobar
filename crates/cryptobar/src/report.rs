@@ -4,6 +4,7 @@ use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
 /// Display adapter that prints a failure with its cause chain.
+#[derive(Debug)]
 pub struct Report<'error>(pub &'error dyn Error);
 
 impl Display for Report<'_> {
