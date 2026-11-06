@@ -39,3 +39,6 @@ popup = ["dep:gtk4", "dep:cairo-rs"]
 
 [lints]
 workspace = true
+
+[package.metadata.cargo-machete]
+ignored = ["cairo-rs"]
