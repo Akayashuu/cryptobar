@@ -1,17 +1,14 @@
-[package]
-name = "cryptobar"
-version = "0.2.1"
-edition = "2024"
-rust-version = "1.88"
-description = "Cours de cryptomonnaies dans Waybar, avec sparkline, courbe terminal et popup GTK4"
-repository = "https://github.com/Akayashuu/cryptobar"
-license = "MIT"
-readme = "README.md"
-keywords = ["waybar", "crypto", "hyprland", "wayland", "cli"]
-categories = ["command-line-utilities"]
+[workspace]
+members = ["crates/*"]
+resolver = "3"
 
-[dependencies]
-anyhow = "1"
+[workspace.package]
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+repository = "https://github.com/Akayashuu/cryptobar"
+
+[workspace.dependencies]
 clap = { version = "4", features = ["derive", "wrap_help"] }
 etcetera = "0.10"
 rustix = { version = "1", features = ["fs", "process"] }
@@ -21,24 +18,18 @@ terminal_size = "0.4"
 thiserror = "2"
 toml = "0.9"
 toml_edit = "0.25"
+num-traits = "0.2"
 ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "json"] }
-gtk4 = { version = "0.9", optional = true }
+gtk4 = { version = "0.9" }
 # The PNG encoding of Cairo is not enabled by gtk4: the window needs it to
 # export the curve. Same version as the one gtk4 pulls in, so a single copy of
 # the library.
-cairo-rs = { version = "0.20", features = ["png"], optional = true }
+cairo-rs = { version = "0.20", features = ["png"] }
 rustix-libc-wrappers = { version = "0.1.1", features = ["process"] }
-
-[dev-dependencies]
 assert_cmd = "2"
 predicates = "3"
 proptest = "1"
-serde_json = "1"
 tempfile = "3"
-
-[features]
-default = ["popup"]
-popup = ["dep:gtk4", "dep:cairo-rs"]
 
 [profile.release]
 opt-level = 3
@@ -47,17 +38,84 @@ codegen-units = 1
 panic = "abort"
 strip = "symbols"
 
-[lints.rust]
+[workspace.lints.rust]
 unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+rust_2024_compatibility = { level = "warn", priority = -1 }
+missing_docs = "deny"
+ambiguous_negative_literals = "warn"
+redundant_imports = "warn"
+redundant_lifetimes = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unused_lifetimes = "warn"
+unused_qualifications = "warn"
 
-[lints.clippy]
+[workspace.lints.rustdoc]
+missing_crate_level_docs = "warn"
+broken_intra_doc_links = "warn"
+private_intra_doc_links = "warn"
+bare_urls = "warn"
+invalid_html_tags = "warn"
+invalid_rust_codeblocks = "warn"
+redundant_explicit_links = "warn"
+unescaped_backticks = "warn"
+
+[workspace.lints.clippy]
+cargo = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+correctness = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
-unwrap_used = "deny"
-expect_used = "deny"
-panic = "deny"
-todo = "deny"
-unimplemented = "deny"
-indexing_slicing = "deny"
-integer_division = "deny"
-arithmetic_side_effects = "deny"
-exit = "deny"
+perf = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+unreachable = "warn"
+get_unwrap = "warn"
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+mem_forget = "warn"
+as_conversions = "warn"
+indexing_slicing = "warn"
+string_slice = "warn"
+arithmetic_side_effects = "warn"
+wildcard_enum_match_arm = "warn"
+enum_glob_use = "warn"
+absolute_paths = "warn"
+shadow_unrelated = "warn"
+min_ident_chars = "warn"
+let_underscore_must_use = "warn"
+unused_result_ok = "warn"
+assertions_on_result_states = "warn"
+map_err_ignore = "warn"
+if_then_some_else_none = "warn"
+unneeded_field_pattern = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+clone_on_ref_ptr = "warn"
+deref_by_slicing = "warn"
+empty_drop = "warn"
+empty_enum_variants_with_brackets = "warn"
+empty_structs_with_brackets = "warn"
+redundant_type_annotations = "warn"
+renamed_function_params = "warn"
+semicolon_outside_block = "warn"
+same_name_method = "warn"
+str_to_string = "warn"
+error_impl_error = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+disallowed_script_idents = "warn"
+too_long_first_doc_paragraph = "warn"
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+must_use_candidate = "allow"
+module_name_repetitions = "allow"
+cargo_common_metadata = "allow"
+multiple_crate_versions = "allow"

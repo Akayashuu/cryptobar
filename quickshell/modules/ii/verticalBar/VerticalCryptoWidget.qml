@@ -6,7 +6,7 @@ import qs.modules.ii.bar as Bar
 
 /**
  * Variant for the vertical bar. Forty pixels of width cannot carry a full
- * row: only the essentials remain — the logo, which already says which coin
+ * row: only the essentials remain: the logo, which already says which coin
  * this is, the price, and the 24 h change. The symbol, the curve and the
  * tinted background stay with the horizontal bar and the tooltip, where they
  * have the room to be readable.

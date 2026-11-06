@@ -28,7 +28,7 @@ wires anything twice. It backs up every upstream file it modifies as
 | `modules/ii/bar/CryptoSparkline.qml` | Canvas for the seven-day curve, a solid line above a gradient fill. |
 | `modules/ii/bar/CryptoWidget.qml` | Horizontal bar: logo, symbol, price, curve and change, background tinted by the trend, alert badge and a transition when the coin changes. |
 | `modules/ii/bar/CryptoWidgetPopup.qml` | Panel shared by both orientations: one row per cryptocurrency, plus the crossed alerts and the valued portfolio. |
-| `modules/ii/verticalBar/VerticalCryptoWidget.qml` | Vertical bar: logo, price and change, deliberately stripped down — the available width does not forgive clutter. |
+| `modules/ii/verticalBar/VerticalCryptoWidget.qml` | Vertical bar: logo, price and change, deliberately stripped down, because the available width does not forgive clutter. |
 
 ## Interactions
 
@@ -42,6 +42,12 @@ wires anything twice. It backs up every upstream file it modifies as
 
 After an action the widget reads the current value back immediately instead of
 waiting for the next interval.
+
+Actions run one at a time, in the order they were sent, and none is ever
+dropped: a burst of scrolls runs every step, in order. The queue only grows with
+the clicks and scrolls you make. An action identical to the last queued one is
+merged into it when it is idempotent (`refresh`, `select`), so three refreshes
+queued while one runs execute once; steps (`next`, `prev`) are never merged.
 
 ## Options
 

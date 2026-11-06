@@ -25,21 +25,26 @@ info "dropping the integration samples"
 install -Dm644 waybar/crypto.jsonc "$CONFIG_HOME/waybar/cryptobar.jsonc"
 install -Dm644 waybar/style.css "$CONFIG_HOME/waybar/cryptobar.css"
 install -Dm644 hypr/cryptobar.conf "$CONFIG_HOME/hypr/cryptobar.conf"
+install -Dm644 hypr/cryptobar.lua "$CONFIG_HOME/hypr/cryptobar.lua"
 
 cat <<'MSG'
 
 Installation complete. What is left to wire up, depending on your setup:
 
-  0. Quickshell (dots-hyprland "ii") — if that is your bar:
+  0. Quickshell (dots-hyprland "ii"), if that is your bar:
        ./quickshell/install.sh && qs -c ii kill && qs -c ii -d
 
-  1. Waybar — in ~/.config/waybar/config.jsonc, copy the "custom/crypto"
+  1. Waybar: in ~/.config/waybar/config.jsonc, copy the "custom/crypto"
      block from ~/.config/waybar/cryptobar.jsonc and add "custom/crypto" to
      modules-right (or left/center).
      Then in ~/.config/waybar/style.css:
        @import "cryptobar.css";
 
-  2. Hyprland — in ~/.config/hypr/hyprland.conf:
+  2. Hyprland, so the window opens floating and centred instead of tiled.
+     Check your provider with `hyprctl systeminfo | grep configProvider`, then:
+     Lua provider (hyprland.lua reads ~/.config/hypr/cryptobar.lua), add:
+       require("cryptobar")
+     Legacy provider (hyprland.conf reads ~/.config/hypr/cryptobar.conf), add:
        source = ~/.config/hypr/cryptobar.conf
 
 Make sure ~/.local/bin is in your PATH, then:

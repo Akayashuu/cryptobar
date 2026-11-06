@@ -49,7 +49,7 @@ Singleton {
     /// foreground }.
     property var coins: []
     /// Thresholds crossed right now: { symbol, kind, title, body }. Empty most
-    /// of the time — this is what lights up the badge in the bar.
+    /// of the time: this is what lights up the badge in the bar.
     property var alerts: []
     /// Valued portfolio, or `null` when no public address is watched:
     /// { total, change_24h, change_24h_pct, positive, positions }.
@@ -91,18 +91,45 @@ Singleton {
         root.series = active?.series ?? [];
     }
 
-    /// Runs a subcommand (`next`, `refresh`, `popup`…) then reads the current
-    /// value back, for immediate feedback without waiting for the interval.
+    readonly property var idempotentActions: ["refresh", "select"]
+    property var pending: []
+    property bool acting: false
+
+    function sameAction(left, right) {
+        return left.length === right.length && left.every((word, position) => word === right[position]);
+    }
+
+    function queue(argv) {
+        const last = root.pending[root.pending.length - 1];
+        const repeatsLast = last !== undefined && root.sameAction(last, argv);
+        if (repeatsLast && root.idempotentActions.includes(argv[0]))
+            return root.pending;
+        return root.pending.concat([argv]);
+    }
+
     function run(argv) {
+        if (root.acting) {
+            root.pending = root.queue(argv);
+            return;
+        }
+        root.start(argv);
+    }
+
+    function start(argv) {
+        root.acting = true;
         actionProc.command = [root.binary].concat(argv);
         actionProc.running = true;
+    }
+
+    function launch(argv) {
+        Quickshell.execDetached([root.binary].concat(argv));
     }
 
     function next() { root.run(["next"]); }
     function prev() { root.run(["prev"]); }
     function refresh() { root.run(["refresh"]); }
-    function openPopup() { root.run(["popup"]); }
-    function openChart() { root.run(["chart", "--window"]); }
+    function openPopup() { root.launch(["popup"]); }
+    function openChart() { root.launch(["chart", "--window"]); }
     /// Makes the coin at the given index in the configured list active.
     function select(index) { root.run(["select", String(index)]); }
 
@@ -141,7 +168,16 @@ Singleton {
 
     Process {
         id: actionProc
-        onExited: readProc.running = true
+        onExited: {
+            if (root.pending.length > 0) {
+                const [next, ...rest] = root.pending;
+                root.pending = rest;
+                root.start(next);
+                return;
+            }
+            root.acting = false;
+            readProc.running = true;
+        }
     }
 
     Process {

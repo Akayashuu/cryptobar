@@ -48,7 +48,7 @@ StyledPopup {
 
         StyledPopupHeaderRow {
             icon: Crypto.stale ? "cloud_off" : "monitoring"
-            label: Crypto.stale ? Translation.tr("Crypto — offline cache") : Translation.tr("Crypto")
+            label: Crypto.stale ? Translation.tr("Crypto: offline cache") : Translation.tr("Crypto")
         }
 
         Column {

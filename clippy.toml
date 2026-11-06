@@ -1,3 +1,7 @@
-msrv = "1.88.0"
-# Proper nouns of the domain: they need not be written between backticks.
+msrv = "1.99.0"
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+allowed-idents-below-min-chars = ["f"]
 doc-valid-idents = ["CoinGecko", "Waybar", "Hyprland", "GTK", "GTK4", "Cairo", "Unicode", "..default"]
