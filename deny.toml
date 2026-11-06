@@ -26,3 +26,8 @@ deny = [
   { crate = "anyhow", reason = "typed errors end to end, see rust-book errors.md" },
   { crate = "eyre", reason = "typed errors end to end, see rust-book errors.md" },
 ]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
