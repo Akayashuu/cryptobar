@@ -32,8 +32,8 @@ impl Default for CoinGecko {
 
 impl CoinGecko {
     #[must_use]
-    /// Default client. `CRYPTOBAR_API_BASE` allows targeting another instance
-    /// — that is what makes the end-to-end tests hermetic.
+    /// Default client. `CRYPTOBAR_API_BASE` allows targeting another instance,
+    /// which is what makes the end-to-end tests hermetic.
     pub fn new() -> Self {
         match std::env::var("CRYPTOBAR_API_BASE") {
             Ok(base) if !base.trim().is_empty() => Self::with_base_url(base.trim()),
@@ -81,8 +81,6 @@ impl CoinGecko {
     }
 
     fn search_url(&self, term: &str) -> String {
-        // The term comes from the user: we keep only safe characters rather
-        // than trusting an approximate encoding.
         let encoded: String = term
             .chars()
             .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == ' ')
@@ -100,14 +98,14 @@ impl CoinGecko {
                 .with_config()
                 .limit(MAX_RESPONSE_BYTES)
                 .read_to_string()
-                .map_err(|e| SourceError::Decode(e.to_string())),
+                .map_err(SourceError::Transport),
             Err(ureq::Error::StatusCode(429)) => {
                 Err(SourceError::RateLimited { retry_after: None })
             }
             Err(ureq::Error::StatusCode(code)) => {
                 Err(SourceError::Http(format!("HTTP code {code}")))
             }
-            Err(e) => Err(SourceError::Http(e.to_string())),
+            Err(e) => Err(SourceError::Transport(e)),
         }
     }
 }
@@ -156,8 +154,7 @@ struct RawMarket {
 /// Returns [`SourceError::Decode`] when the response is not the expected JSON
 /// array.
 pub fn parse_markets(raw: &str) -> Result<Vec<Quote>, SourceError> {
-    let entries: Vec<RawMarket> =
-        serde_json::from_str(raw).map_err(|e| SourceError::Decode(e.to_string()))?;
+    let entries: Vec<RawMarket> = serde_json::from_str(raw)?;
     Ok(entries
         .into_iter()
         .filter_map(|entry| {
@@ -208,8 +205,7 @@ struct RawChart {
 /// [`SourceError::Decode`] when the JSON is unreadable, [`SourceError::Payload`]
 /// when the series is empty.
 pub fn parse_market_chart(id: &CoinId, range: Range, raw: &str) -> Result<Series, SourceError> {
-    let chart: RawChart =
-        serde_json::from_str(raw).map_err(|e| SourceError::Decode(e.to_string()))?;
+    let chart: RawChart = serde_json::from_str(raw)?;
     let points: Vec<f64> = chart
         .prices
         .into_iter()
@@ -247,9 +243,10 @@ struct RawSearchCoin {
     large: Option<String>,
 }
 
+/// Converts a search response. Hits whose id is not a valid [`CoinId`] are
+/// skipped, the same as in [`parse_markets`].
 fn parse_search(raw: &str) -> Result<Vec<SearchHit>, SourceError> {
-    let parsed: RawSearch =
-        serde_json::from_str(raw).map_err(|e| SourceError::Decode(e.to_string()))?;
+    let parsed: RawSearch = serde_json::from_str(raw)?;
     Ok(parsed
         .coins
         .into_iter()
@@ -308,7 +305,6 @@ mod tests {
         assert_eq!(btc.change_24h, None);
         assert_eq!(btc.sparkline.len(), 0);
         let doge = quotes.get(1).unwrap();
-        // Without `name`, we fall back to the symbol rather than failing.
         assert_eq!(doge.name, "DOGE");
     }
 

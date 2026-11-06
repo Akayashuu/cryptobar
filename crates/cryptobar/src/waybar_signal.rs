@@ -28,7 +28,6 @@ fn pids_by_name(name: &str) -> io::Result<Vec<i32>> {
         let Some(pid) = file_name.to_str().and_then(|s| s.parse::<i32>().ok()) else {
             continue;
         };
-        // `comm` is truncated to 15 characters by the kernel; "waybar" fits.
         let Ok(comm) = std::fs::read_to_string(entry.path().join("comm")) else {
             continue;
         };
@@ -41,7 +40,8 @@ fn pids_by_name(name: &str) -> io::Result<Vec<i32>> {
 
 /// Sends `SIGRTMIN+offset` to every Waybar instance.
 ///
-/// Returns the number of processes actually signalled.
+/// Returns the number of processes actually signalled. A process that cannot
+/// be signalled (it exited, or belongs to another user) is not counted.
 ///
 /// # Errors
 /// [`SignalError::NotFound`] when no instance is running,
@@ -59,8 +59,6 @@ pub fn notify_waybar(offset: u8) -> Result<usize, SignalError> {
         let Some(pid) = Pid::from_raw(raw) else {
             continue;
         };
-        // A one-off failure (process gone in the meantime) must not prevent
-        // signalling the other instances.
         if rustix::process::kill_process(pid, signal).is_ok() {
             sent = sent.saturating_add(1);
         }
@@ -87,7 +85,6 @@ mod tests {
 
     #[test]
     fn valid_offsets_are_accepted_by_rustix() {
-        // The 1..=30 range is the one allowed by the configuration validation.
         for offset in 1_i32..=30 {
             assert!(Signal::rt(offset).is_some());
         }
@@ -95,7 +92,6 @@ mod tests {
 
     #[test]
     fn the_current_process_is_visible_in_proc() {
-        // Exercises the /proc reading machinery without depending on Waybar.
         let comm = std::fs::read_to_string("/proc/self/comm").unwrap();
         let pids = pids_by_name(comm.trim()).unwrap();
         assert!(pids.contains(&std::process::id().cast_signed()));

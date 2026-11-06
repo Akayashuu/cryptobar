@@ -7,6 +7,7 @@ use crate::model::{Currency, Quote};
 use crate::portfolio::{self, Portfolio};
 use crate::render::format;
 
+use super::chart::report_frame;
 use super::identity::css_key;
 use super::model::Ctx;
 use super::parse::rgb;
@@ -77,10 +78,8 @@ impl Ctx {
         title.set_xalign(0.0);
         section.append(&title);
 
-        // Without this sentence, "public address" gets confused with "key". So
-        // we say where to find it, and what cryptobar refuses to accept.
         let help = Label::new(Some(
-            "Paste the public address of your wallet — the one you hand out to receive \
+            "Paste the public address of your wallet, the one you hand out to receive \
              funds (Ledger Live: \"Receive\"). cryptobar reads the balance from the chain, \
              and can never spend. A private key or a recovery phrase is rejected and never \
              written to disk.",
@@ -183,8 +182,6 @@ impl Ctx {
         address.set_hexpand(true);
         form.append(&address);
 
-        // The placeholder follows the chosen chain: an Ethereum address looks
-        // nothing like a Bitcoin one.
         let hinted = address.clone();
         picker.connect_selected_notify(move |picker| {
             let index = usize::try_from(picker.selected()).unwrap_or(0);
@@ -220,7 +217,7 @@ impl Ctx {
                 address.set_text("");
                 label.set_text("");
             }
-            ctx.adopt(written, "address watched — reading the balance…");
+            ctx.adopt(written, "address watched, reading the balance…");
         });
         form.append(&add);
         form
@@ -340,30 +337,38 @@ fn donut(wallet: Option<&Portfolio>) -> gtk4::DrawingArea {
     area.set_content_width(SIZE);
     area.set_content_height(SIZE);
     area.set_valign(Align::Center);
+    let widget = area.downgrade();
     area.set_draw_func(move |_, ctx, width, height| {
-        let size = f64::from(width.min(height));
-        let center = size / 2.0;
-        let radius = center - 8.0;
-        ctx.set_line_width(11.0);
-
-        // Background track: the ring exists even without a position, which
-        // avoids a visual hole in the card when the portfolio is empty.
-        ctx.set_source_rgba(0.5, 0.5, 0.5, 0.14);
-        ctx.arc(center, center, radius, 0.0, std::f64::consts::TAU);
-        let _ = ctx.stroke();
-
-        let mut start = -std::f64::consts::FRAC_PI_2;
-        for (share, color) in &slices {
-            // A thin gap separates the slices: two close colours stay
-            // distinguishable.
-            let sweep = (share.clamp(0.0, 1.0) * std::f64::consts::TAU - 0.04).max(0.01);
-            let (red, green, blue) = rgb(color);
-            ctx.set_source_rgb(red, green, blue);
-            ctx.set_line_cap(gtk4::cairo::LineCap::Round);
-            ctx.arc(center, center, radius, start, start + sweep);
-            let _ = ctx.stroke();
-            start += share.clamp(0.0, 1.0) * std::f64::consts::TAU;
-        }
+        let outcome = paint_ring(ctx, width, height, &slices);
+        report_frame(&widget, outcome);
     });
     area
+}
+
+fn paint_ring(
+    ctx: &gtk4::cairo::Context,
+    width: i32,
+    height: i32,
+    slices: &[(f64, String)],
+) -> Result<(), gtk4::cairo::Error> {
+    let size = f64::from(width.min(height));
+    let center = size / 2.0;
+    let radius = center - 8.0;
+    ctx.set_line_width(11.0);
+
+    ctx.set_source_rgba(0.5, 0.5, 0.5, 0.14);
+    ctx.arc(center, center, radius, 0.0, std::f64::consts::TAU);
+    ctx.stroke()?;
+
+    let mut start = -std::f64::consts::FRAC_PI_2;
+    for (share, color) in slices {
+        let sweep = (share.clamp(0.0, 1.0) * std::f64::consts::TAU - 0.04).max(0.01);
+        let (red, green, blue) = rgb(color);
+        ctx.set_source_rgb(red, green, blue);
+        ctx.set_line_cap(gtk4::cairo::LineCap::Round);
+        ctx.arc(center, center, radius, start, start + sweep);
+        ctx.stroke()?;
+        start += share.clamp(0.0, 1.0) * std::f64::consts::TAU;
+    }
+    Ok(())
 }

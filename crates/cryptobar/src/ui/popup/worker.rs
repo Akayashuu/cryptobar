@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Duration;
@@ -6,20 +7,16 @@ use gtk4::glib;
 
 use crate::model::{Quote, Range};
 
-use super::model::{Ctx, Msg};
+use super::model::{Ctx, Msg, send_unless_closed};
 use super::prices::series_key;
+use super::status::root_cause;
 
-/// Drain rate of the network channel. Fine enough to be imperceptible, loose
-/// enough to cost nothing.
 const DRAIN: Duration = Duration::from_millis(120);
 
 impl Ctx {
-    /// Reloads the quotes without blocking the interface.
     pub(super) fn reload_quotes(&self) {
         let app = self.app();
         let tx = self.tx.clone();
-        // `markets_cached` serves the cache as long as it is fresh: this
-        // thread touches the network only when it is truly needed.
         std::thread::spawn(move || {
             let message = match app
                 .source
@@ -27,26 +24,22 @@ impl Ctx {
             {
                 Ok(cached) => {
                     let mut quotes = cached.value;
-                    app.fetch_icons(&mut quotes);
-                    Msg::Quotes(quotes, cached.stale)
+                    let icon_failures = app.fetch_icons(&mut quotes);
+                    Msg::Quotes(quotes, cached.stale, icon_failures)
                 }
-                Err(_) => Msg::QuotesUnavailable,
+                Err(failure) => Msg::QuotesUnavailable(failure),
             };
-            let _ = tx.send(message);
+            send_unless_closed(&tx, message);
         });
 
-        // The chains are queried separately: a slow address must not delay the
-        // display of the prices.
         let app = self.app();
         let tx = self.tx.clone();
         std::thread::spawn(move || {
-            let balances = app.watcher().refresh(&app.config.wallets);
-            let _ = tx.send(Msg::Balances(balances));
+            let refresh = app.watcher().refresh(&app.config.wallets);
+            send_unless_closed(&tx, Msg::Balances(refresh.balances, refresh.failures));
         });
     }
 
-    /// Loads in the background the series of a still unknown range. The 7 day
-    /// range is already in the quotes: it never costs a request.
     pub(super) fn request_series(self: &Rc<Self>, quote: &Quote, range: Range) {
         if range == Range::D7 {
             return;
@@ -59,51 +52,65 @@ impl Ctx {
         let tx = self.tx.clone();
         let id = quote.id.clone();
         std::thread::spawn(move || {
-            if let Ok(cached) = app.source.series_cached(&id, range, &app.config.currency) {
-                let _ = tx.send(Msg::Series(key, cached.value.points));
-            }
+            let outcome = app
+                .source
+                .series_cached(&id, range, &app.config.currency)
+                .map(|cached| cached.value.points);
+            send_unless_closed(&tx, Msg::Series(key, outcome));
         });
     }
 }
 
-/// Drains the worker channel at a fixed rate.
+fn report_first<E: Error>(ctx: &Ctx, failures: &[E]) {
+    if let Some(failure) = failures.first() {
+        ctx.note(&root_cause(failure), true);
+    }
+}
+
 pub(super) fn drain(ctx: &Rc<Ctx>, rx: Receiver<Msg>) {
     let ctx = Rc::clone(ctx);
     glib::timeout_add_local(DRAIN, move || {
         loop {
             match rx.try_recv() {
-                Ok(Msg::Quotes(quotes, stale)) => {
+                Ok(Msg::Quotes(quotes, stale, icon_failures)) => {
                     {
                         let mut model = ctx.model.borrow_mut();
                         model.quotes = quotes;
                         model.stale = stale;
                         model.answered = true;
                     }
+                    report_first(&ctx, &icon_failures);
                     ctx.redraw();
                 }
-                Ok(Msg::QuotesUnavailable) => {
+                Ok(Msg::QuotesUnavailable(failure)) => {
                     {
                         let mut model = ctx.model.borrow_mut();
                         model.stale = true;
                         model.answered = true;
                     }
+                    ctx.note(&root_cause(&failure), true);
                     ctx.redraw();
                 }
-                Ok(Msg::Balances(balances)) => {
+                Ok(Msg::Balances(balances, failures)) => {
                     {
                         let mut model = ctx.model.borrow_mut();
                         model.onchain = crate::onchain::totals(&balances);
                         model.balances = balances;
                     }
+                    report_first(&ctx, &failures);
                     ctx.redraw();
                 }
-                Ok(Msg::Series(key, points)) => {
+                Ok(Msg::Series(key, Ok(points))) => {
                     ctx.model.borrow_mut().series.insert(key, points);
                     ctx.redraw();
                 }
-                Ok(Msg::Search(generation, outcome)) => {
+                Ok(Msg::Series(_, Err(failure))) => {
+                    ctx.note(&root_cause(&failure), true);
+                    ctx.redraw();
+                }
+                Ok(Msg::Search(generation, outcome, icon_failures)) => {
                     if ctx.model.borrow().generation != generation {
-                        continue; // Stale answer: the user has already retyped.
+                        continue;
                     }
                     match outcome {
                         Ok(hits) => {
@@ -114,11 +121,12 @@ pub(super) fn drain(ctx: &Rc<Ctx>, rx: Receiver<Msg>) {
                             }
                             ctx.model.borrow_mut().hits = hits;
                         }
-                        Err(message) => {
-                            ctx.note(&message, true);
+                        Err(failure) => {
+                            ctx.note(&root_cause(&failure), true);
                             ctx.model.borrow_mut().hits.clear();
                         }
                     }
+                    report_first(&ctx, &icon_failures);
                     ctx.draw_results();
                 }
                 Err(TryRecvError::Empty) => return glib::ControlFlow::Continue,

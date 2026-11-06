@@ -23,7 +23,7 @@ pub enum ModelError {
     EmptyCoinId,
     #[error(
         "invalid cryptocurrency id: {0:?} (expected lowercase letters, digits and dashes, \
-         like `bitcoin` — search with `cryptobar coins <term>`)"
+         like `bitcoin`: search with `cryptobar coins <term>`)"
     )]
     InvalidCoinId(String),
     #[error("unsupported currency: {0:?} (supported: eur, usd, gbp, chf, cad, jpy, btc, eth)")]

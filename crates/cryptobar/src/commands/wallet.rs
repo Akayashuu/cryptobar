@@ -1,45 +1,48 @@
 //! `portfolio` subcommand: valuation in the terminal.
 
-use std::fmt::Write as _;
-use std::io::Write as _;
+use std::io::Write;
 
-use anyhow::Result;
-
+use super::{CommandError, print_text, warn, warn_each};
 use crate::app::App;
 use crate::config::Config;
+use crate::output::{Output, push_line};
 use crate::portfolio::{self, Portfolio};
 use crate::render::format;
 
 /// Prints the portfolio valued at the last known prices.
 ///
 /// # Errors
-/// Fails when writing to standard output fails. A network outage is reported in
-/// the output, not through an error: the cache stays useful.
-pub fn run(app: &App) -> Result<()> {
+/// Fails when stdout cannot be written or stderr cannot receive a warning. A
+/// network outage or an unreachable chain is reported on stderr and in the
+/// output, the cache stays useful.
+pub fn run<Out: Write, Err: Write>(
+    app: &App,
+    output: &mut Output<Out, Err>,
+) -> Result<(), CommandError> {
     let (mut quotes, stale) = match app
         .source
         .markets_cached(&app.config.coins, &app.config.currency)
     {
         Ok(cached) => (cached.value, cached.stale),
-        Err(_) => (Vec::new(), true),
+        Err(failure) => {
+            warn(output, &failure)?;
+            (Vec::new(), true)
+        }
     };
     app.attach_icons(&mut quotes);
-    // The balances of the watched addresses are refreshed here: the command is
-    // one-shot, the user expects an up-to-date figure.
-    let onchain = crate::onchain::totals(&app.watcher().refresh(&app.config.wallets));
+    let refresh = app.watcher().refresh(&app.config.wallets);
+    warn_each(output, &refresh.failures)?;
+    let onchain = crate::onchain::totals(&refresh.balances);
     let wallet = portfolio::compute(&quotes, &onchain);
-    let mut stdout = std::io::stdout().lock();
-    write!(stdout, "{}", render(wallet.as_ref(), &app.config, stale))?;
-    stdout.flush()?;
-    Ok(())
+    print_text(output, render(wallet.as_ref(), &app.config, stale))
 }
 
 /// Formats the portfolio. Pure function: testable without network.
 #[must_use]
 pub fn render(wallet: Option<&Portfolio>, config: &Config, stale: bool) -> String {
     let Some(wallet) = wallet else {
-        return "No watched address. Add a PUBLIC ADDRESS to the configuration \
-                — never a private key, never a recovery phrase:\n\n    \
+        return "No watched address. Add a PUBLIC ADDRESS to the configuration, \
+                never a private key, never a recovery phrase:\n\n    \
                 [[wallets]]\n    chain = \"bitcoin\"\n    address = \"bc1q…\"\n"
             .to_owned();
     };
@@ -92,35 +95,40 @@ pub fn render(wallet: Option<&Portfolio>, config: &Config, stale: bool) -> Strin
         .zip(value_column.iter())
         .zip(share_column.iter())
     {
-        // Writing into a `String` is infallible.
-        let _ = writeln!(
-            out,
-            "{:<symbol_width$}  {:>quantity_width$}  {:>value_width$}  {:>share_width$}",
-            position.symbol.to_uppercase(),
-            quantity,
-            value,
-            share,
+        push_line(
+            &mut out,
+            format_args!(
+                "{:<symbol_width$}  {:>quantity_width$}  {:>value_width$}  {:>share_width$}",
+                position.symbol.to_uppercase(),
+                quantity,
+                value,
+                share,
+            ),
         );
     }
-    let _ = writeln!(out);
-    let _ = writeln!(
-        out,
-        "{:<symbol_width$}  {:>width$}",
-        "TOTAL",
-        money(wallet.total),
-        width = quantity_width.saturating_add(value_width).saturating_add(2),
+    push_line(&mut out, "");
+    push_line(
+        &mut out,
+        format_args!(
+            "{:<symbol_width$}  {:>width$}",
+            "TOTAL",
+            money(wallet.total),
+            width = quantity_width.saturating_add(value_width).saturating_add(2),
+        ),
     );
     if let Some(gain) = wallet.change_24h {
         let sign = if gain >= 0.0 { "+" } else { "" };
-        let _ = writeln!(
-            out,
-            "24 h  {sign}{}  ({})",
-            money(gain),
-            format::percent(wallet.change_24h_pct)
+        push_line(
+            &mut out,
+            format_args!(
+                "24 h  {sign}{}  ({})",
+                money(gain),
+                format::percent(wallet.change_24h_pct)
+            ),
         );
     }
     if stale {
-        let _ = writeln!(out, "\nstale data — network unavailable");
+        push_line(&mut out, "\nstale data, network unavailable");
     }
     out
 }

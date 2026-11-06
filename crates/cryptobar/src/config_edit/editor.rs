@@ -1,10 +1,12 @@
-use std::io::Write as _;
+use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context as _, Result};
 use toml_edit::DocumentMut;
 
 use crate::config::{Config, DEFAULT_CONFIG};
+use crate::paths;
+
+use super::error::EditError;
 
 /// Editor bound to a configuration file.
 #[derive(Debug, Clone)]
@@ -24,16 +26,22 @@ impl Editor {
     }
 
     /// Current document, or the default template when the file is missing.
-    fn document(&self) -> Result<DocumentMut> {
+    fn document(&self) -> Result<DocumentMut, EditError> {
         let raw = match std::fs::read_to_string(&self.path) {
             Ok(raw) => raw,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => DEFAULT_CONFIG.to_owned(),
-            Err(e) => {
-                return Err(e).with_context(|| format!("reading {}", self.path.display()));
+            Err(absent) if absent.kind() == io::ErrorKind::NotFound => DEFAULT_CONFIG.to_owned(),
+            Err(source) => {
+                return Err(EditError::Read {
+                    path: self.path.clone(),
+                    source,
+                });
             }
         };
         raw.parse::<DocumentMut>()
-            .with_context(|| format!("malformed TOML: {}", self.path.display()))
+            .map_err(|source| EditError::Malformed {
+                path: self.path.clone(),
+                source,
+            })
     }
 
     /// Applies a transformation, validates it, then writes it atomically.
@@ -42,9 +50,9 @@ impl Editor {
     /// Fails when the file is unreadable, when the transformation produces an
     /// invalid configuration, or when the write fails. In the first two cases
     /// the file is left untouched.
-    pub fn apply<F>(&self, mutate: F) -> Result<Config>
+    pub fn apply<F>(&self, mutate: F) -> Result<Config, EditError>
     where
-        F: FnOnce(&mut DocumentMut) -> Result<()>,
+        F: FnOnce(&mut DocumentMut) -> Result<(), EditError>,
     {
         let mut document = self.document()?;
         mutate(&mut document)?;
@@ -56,21 +64,30 @@ impl Editor {
 
     /// Atomic write: the file is never observed half-written, even if the
     /// machine stops at the wrong moment.
-    fn write(&self, contents: &str) -> Result<()> {
+    fn write(&self, contents: &str) -> Result<(), EditError> {
         if let Some(parent) = self.path.parent() {
-            crate::paths::ensure_dir(parent)?;
+            paths::ensure_dir(parent).map_err(|source| EditError::Directory {
+                path: parent.to_path_buf(),
+                source,
+            })?;
         }
         let tmp = self.path.with_extension("toml.tmp");
-        {
-            let mut file = std::fs::File::create(&tmp)
-                .with_context(|| format!("writing {}", tmp.display()))?;
-            file.write_all(contents.as_bytes())?;
-            file.sync_all()?;
-        }
-        std::fs::rename(&tmp, &self.path)
-            .with_context(|| format!("replacing {}", self.path.display()))?;
-        Ok(())
+        write_temporary(&tmp, contents)?;
+        std::fs::rename(&tmp, &self.path).map_err(|source| EditError::Replace {
+            path: self.path.clone(),
+            source,
+        })
     }
+}
+
+fn write_temporary(tmp: &Path, contents: &str) -> Result<(), EditError> {
+    let to_error = |source: io::Error| EditError::Write {
+        path: tmp.to_path_buf(),
+        source,
+    };
+    let mut file = std::fs::File::create(tmp).map_err(to_error)?;
+    file.write_all(contents.as_bytes()).map_err(to_error)?;
+    file.sync_all().map_err(to_error)
 }
 
 #[cfg(test)]

@@ -5,6 +5,7 @@ use gtk4::prelude::*;
 use gtk4::{Align, Label};
 
 use crate::config::Config;
+use crate::config_edit::EditError;
 use crate::model::Range;
 
 use super::identity::badge_css;
@@ -16,30 +17,35 @@ use super::widgets::clear;
 impl Ctx {
     /// Takes a rewritten configuration into account: new context, reloaded
     /// data, bar woken up.
-    pub(super) fn adopt(self: &Rc<Self>, written: anyhow::Result<Config>, message: &str) {
+    pub(super) fn adopt(self: &Rc<Self>, written: Result<Config, EditError>, message: &str) {
         match written {
             Ok(_) => {
                 let reloaded = self.model.borrow().app.reload();
                 match reloaded {
                     Ok(app) => {
                         let app = Arc::new(app);
-                        app.notify();
+                        if let Err(failure) = app.notify() {
+                            self.note(&root_cause(&failure), true);
+                        }
                         self.model.borrow_mut().app = app;
                         self.note(message, false);
                         self.reload_quotes();
                         self.redraw();
                     }
-                    Err(e) => self.note(&format!("{e}"), true),
+                    Err(failure) => self.note(&root_cause(&failure), true),
                 }
             }
-            Err(e) => self.note(&root_cause(&e), true),
+            Err(failure) => self.note(&root_cause(&failure), true),
         }
     }
 
     pub(super) fn redraw(self: &Rc<Self>) {
         let model = self.model.borrow();
         self.palette.load_from_data(&badge_css(&model.quotes));
-        let active = model.app.active_index();
+        let active = model.app.active_index().unwrap_or_else(|failure| {
+            self.note(&root_cause(&failure), true);
+            0
+        });
         let currency = model.app.config.currency.clone();
         let decimals = model.app.config.decimals();
         let range = model.range;
@@ -79,7 +85,7 @@ impl Ctx {
             self.widgets.detail.append(&empty);
         }
         if stale {
-            let warning = Label::new(Some("Cached data — network unavailable"));
+            let warning = Label::new(Some("Cached data, network unavailable"));
             warning.add_css_class("muted");
             warning.set_halign(Align::Start);
             self.widgets.detail.append(&warning);

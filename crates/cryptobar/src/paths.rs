@@ -3,13 +3,19 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
 use etcetera::BaseStrategy as _;
 
 const APP: &str = "cryptobar";
 
-fn strategy() -> Result<etcetera::base_strategy::Xdg> {
-    etcetera::base_strategy::Xdg::new().context("could not resolve the XDG directories")
+/// Failures to locate the directories of the user.
+#[derive(Debug, thiserror::Error)]
+pub enum PathsError {
+    #[error("could not resolve the XDG directories")]
+    Home(#[from] etcetera::HomeDirError),
+}
+
+fn strategy() -> Result<etcetera::base_strategy::Xdg, PathsError> {
+    Ok(etcetera::base_strategy::Xdg::new()?)
 }
 
 fn overridden(var: &str) -> Option<PathBuf> {
@@ -22,7 +28,7 @@ fn overridden(var: &str) -> Option<PathBuf> {
 ///
 /// # Errors
 /// Fails when the home directory cannot be found.
-pub fn config_dir() -> Result<PathBuf> {
+pub fn config_dir() -> Result<PathBuf, PathsError> {
     if let Some(dir) = overridden("CRYPTOBAR_CONFIG_DIR") {
         return Ok(dir);
     }
@@ -33,7 +39,7 @@ pub fn config_dir() -> Result<PathBuf> {
 ///
 /// # Errors
 /// See [`config_dir`].
-pub fn config_file() -> Result<PathBuf> {
+pub fn config_file() -> Result<PathBuf, PathsError> {
     Ok(config_dir()?.join("config.toml"))
 }
 
@@ -41,7 +47,7 @@ pub fn config_file() -> Result<PathBuf> {
 ///
 /// # Errors
 /// Fails when the home directory cannot be found.
-pub fn cache_dir() -> Result<PathBuf> {
+pub fn cache_dir() -> Result<PathBuf, PathsError> {
     if let Some(dir) = overridden("CRYPTOBAR_CACHE_DIR") {
         return Ok(dir);
     }
@@ -53,7 +59,7 @@ pub fn cache_dir() -> Result<PathBuf> {
 ///
 /// # Errors
 /// Fails when no directory can be determined.
-pub fn runtime_dir() -> Result<PathBuf> {
+pub fn runtime_dir() -> Result<PathBuf, PathsError> {
     if let Some(dir) = overridden("CRYPTOBAR_RUNTIME_DIR") {
         return Ok(dir);
     }
@@ -63,20 +69,28 @@ pub fn runtime_dir() -> Result<PathBuf> {
     }
 }
 
-/// Creates the directory when missing, with restricted permissions on Unix.
+/// Creates the directory when missing, then restricts it to its owner on Unix.
+///
+/// The restriction is best effort: a filesystem that refuses it (exotic mount,
+/// no permissions) still receives the directory, so the refusal is not an error.
 ///
 /// # Errors
 /// Propagates the I/O errors of the creation.
 pub fn ensure_dir(dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt as _;
-        // A failure here (exotic mount, filesystem without permissions) must
-        // not get in the way.
-        let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
-    }
+    restrict_to_owner(dir);
     Ok(())
+}
+
+#[cfg(unix)]
+fn restrict_to_owner(dir: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt as _;
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).is_ok()
+}
+
+#[cfg(not(unix))]
+fn restrict_to_owner(_dir: &Path) -> bool {
+    true
 }
 
 /// Home directory, where the window writes its exports.
@@ -86,7 +100,7 @@ pub fn ensure_dir(dir: &Path) -> std::io::Result<()> {
 ///
 /// # Errors
 /// Fails when the home directory cannot be found.
-pub fn export_dir() -> Result<PathBuf> {
+pub fn export_dir() -> Result<PathBuf, PathsError> {
     if let Some(dir) = overridden("CRYPTOBAR_EXPORT_DIR") {
         return Ok(dir);
     }

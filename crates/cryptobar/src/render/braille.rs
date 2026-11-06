@@ -67,7 +67,6 @@ impl Canvas {
                     .map(|col| {
                         let index = row.saturating_mul(self.cols).saturating_add(col);
                         let pattern = self.cells.get(index).copied().unwrap_or(0);
-                        // U+2800 + pattern: always a valid conversion over 8 bits.
                         char::from_u32(0x2800_u32.saturating_add(u32::from(pattern))).unwrap_or(' ')
                     })
                     .collect()
@@ -104,8 +103,6 @@ pub fn bounds(points: &[f64]) -> (f64, f64) {
         return (0.0, 1.0);
     }
     if (max - min).abs() < f64::EPSILON {
-        // Flat series: open an arbitrary window to avoid a division by zero
-        // and centre the line.
         return (min - 0.5, max + 0.5);
     }
     (min, max)
@@ -127,7 +124,6 @@ pub fn plot(points: &[f64], cols: usize, rows: usize) -> Vec<String> {
 
     let mut previous: Option<(usize, usize)> = None;
     for x in 0..width {
-        // Fractional position within the series for this dot column.
         let ratio = if last_x == 0 {
             0.0
         } else {
@@ -142,7 +138,6 @@ pub fn plot(points: &[f64], cols: usize, rows: usize) -> Vec<String> {
             continue;
         }
         let normalized = ((value - min) / span).clamp(0.0, 1.0);
-        // The vertical axis is flipped: the high value goes on top.
         let y = as_usize(((1.0 - normalized) * as_f64(last_y)).round(), last_y);
         if let Some((prev_x, prev_y)) = previous {
             connect(&mut canvas, prev_x, prev_y, x, y);
@@ -214,7 +209,6 @@ mod tests {
         let lines = plot(&(0..50).map(f64::from).collect::<Vec<_>>(), 20, 4);
         let first = lines.first().unwrap();
         let last = lines.last().unwrap();
-        // The top of the chart is filled on the right, the bottom on the left.
         assert_ne!(last.chars().next(), Some('\u{2800}'));
         assert_ne!(first.chars().last(), Some('\u{2800}'));
     }

@@ -27,7 +27,6 @@ fn auto_decimals(value: f64) -> u8 {
     } else if magnitude >= 0.01 {
         4
     } else if magnitude > 0.0 {
-        // Four significant digits after the leading zeros.
         #[allow(clippy::cast_possible_truncation)]
         let leading_zeros = (-magnitude.log10().floor()) as i32;
         u8::try_from(leading_zeros.clamp(0, 7).saturating_add(3)).unwrap_or(10)
@@ -48,7 +47,6 @@ fn group_thousands(rendered: &str) -> String {
         None => ("", int_part),
     };
 
-    // Division by a non-zero constant: the capacity is an estimate, not an invariant.
     #[allow(clippy::integer_division)]
     let capacity = digits.len().saturating_add(digits.len() / 3);
     let mut grouped = String::with_capacity(capacity);
@@ -81,7 +79,6 @@ pub fn price(value: f64, currency: &Currency, decimals: Decimals) -> String {
         Decimals::Fixed(n) => n.min(MAX_DECIMALS),
     };
     let rendered = format!("{value:.*}", usize::from(places));
-    // In automatic mode, trailing zeros add nothing in a narrow bar.
     let rendered = if matches!(decimals, Decimals::Auto) && rendered.contains('.') {
         rendered
             .trim_end_matches('0')
@@ -112,8 +109,8 @@ pub fn quantity(value: f64) -> String {
     group_thousands(trimmed)
 }
 
-/// Formats a large amount compactly — market cap, volume — where the exact
-/// figure adds nothing but the order of magnitude does.
+/// Formats a large amount compactly, for market cap or volume: there the exact
+/// figure adds nothing, but the order of magnitude does.
 #[must_use]
 pub fn compact(value: f64, currency: &Currency) -> String {
     if !value.is_finite() {
@@ -226,13 +223,13 @@ mod tests {
     proptest::proptest! {
         #[test]
         fn price_never_panics(value in proptest::num::f64::ANY, d in 0u8..12) {
-            let _ = price(value, &eur(), Decimals::Auto);
-            let _ = price(value, &eur(), Decimals::Fixed(d));
+            assert_ne!(price(value, &eur(), Decimals::Auto), "");
+            assert_ne!(price(value, &eur(), Decimals::Fixed(d)), "");
         }
 
         #[test]
         fn percent_never_panics(value in proptest::num::f64::ANY) {
-            let _ = percent(Some(value));
+            assert_ne!(percent(Some(value)), "");
         }
     }
 }

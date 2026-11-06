@@ -5,6 +5,8 @@ pub mod cache;
 pub mod coingecko;
 pub mod icons;
 
+use std::io;
+
 use crate::model::{CoinId, Currency, Quote, Range, Series};
 
 #[derive(Debug, thiserror::Error)]
@@ -13,10 +15,16 @@ pub enum SourceError {
     Http(String),
     #[error("API quota exceeded")]
     RateLimited { retry_after: Option<u64> },
-    #[error("unreadable response: {0}")]
-    Decode(String),
+    #[error("unreadable response")]
+    Decode(#[from] serde_json::Error),
+    #[error("network error")]
+    Transport(#[from] ureq::Error),
     #[error("unexpected response: {0}")]
     Payload(String),
+    #[error("backoff active after a network failure, no cached data")]
+    Backoff,
+    #[error("local cache")]
+    Cache(#[from] io::Error),
 }
 
 #[derive(Debug, Clone)]

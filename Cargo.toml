@@ -9,7 +9,6 @@ license = "MIT"
 repository = "https://github.com/Akayashuu/cryptobar"
 
 [workspace.dependencies]
-anyhow = "1"
 clap = { version = "4", features = ["derive", "wrap_help"] }
 etcetera = "0.10"
 rustix = { version = "1", features = ["fs", "process"] }

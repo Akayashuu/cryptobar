@@ -85,7 +85,7 @@ fn initial(upper: &str) -> String {
 }
 
 /// Stable colour derived from the symbol: the same symbol always yields the
-/// same hue, across machines too — FNV-1a is specified, whereas the standard
+/// same hue, across machines too, FNV-1a is specified, whereas the standard
 /// library hash guarantees nothing between two runs.
 fn fallback_color(upper: &str) -> &'static str {
     const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
@@ -165,7 +165,6 @@ mod tests {
 
     #[test]
     fn the_text_contrasts_with_the_disc() {
-        // Light gold: black has to win; dark blue: white.
         assert_eq!(of("bnb").foreground, "#101010");
         assert_eq!(of("ada").foreground, "#ffffff");
     }

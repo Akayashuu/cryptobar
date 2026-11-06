@@ -1,4 +1,4 @@
-use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gtk4::prelude::*;
@@ -8,11 +8,11 @@ use crate::model::{Quote, Range};
 use crate::render::braille::as_f64;
 
 use super::chart::{CHART_HEIGHT, CHART_WIDTH, draw_series};
+use super::error::PopupError;
 use super::model::Ctx;
 use super::status::root_cause;
 
 impl Ctx {
-    /// Export buttons of the displayed curve.
     pub(super) fn export_buttons(
         self: &Rc<Self>,
         footer: &GtkBox,
@@ -39,7 +39,7 @@ impl Ctx {
                 };
                 match outcome {
                     Ok(path) => ctx.note(&format!("exported to {}", path.display()), false),
-                    Err(e) => ctx.note(&root_cause(&e), true),
+                    Err(failure) => ctx.note(&root_cause(&failure), true),
                 }
             });
             footer.append(&button);
@@ -47,35 +47,24 @@ impl Ctx {
     }
 }
 
-/// Path of an export, in the home directory.
-fn export_path(symbol: &str, range: Range, extension: &str) -> anyhow::Result<std::path::PathBuf> {
+fn export_path(symbol: &str, range: Range, extension: &str) -> Result<PathBuf, PopupError> {
     let name = format!("cryptobar-{}-{}.{extension}", symbol, range.slug());
     Ok(crate::paths::export_dir()?.join(name))
 }
 
-/// Writes the curve as displayed into a PNG file.
-///
-/// # Errors
-/// Fails when the Cairo surface cannot be created or when the write fails.
 fn export_png(
     points: &[f64],
     positive: bool,
     symbol: &str,
     range: Range,
-) -> anyhow::Result<std::path::PathBuf> {
-    use anyhow::Context as _;
-
+) -> Result<PathBuf, PopupError> {
     let path = export_path(symbol, range, "png")?;
-    // Twice the screen size: the image stays sharp once enlarged.
     let width = CHART_WIDTH.saturating_mul(2);
     let height = CHART_HEIGHT.saturating_mul(2);
-    let surface = gtk4::cairo::ImageSurface::create(gtk4::cairo::Format::ARgb32, width, height)
-        .context("export surface unavailable")?;
-    let ctx = gtk4::cairo::Context::new(&surface).context("export context unavailable")?;
-    // Opaque background: a transparent PNG would be unreadable in most
-    // viewers, which show it on white.
+    let surface = gtk4::cairo::ImageSurface::create(gtk4::cairo::Format::ARgb32, width, height)?;
+    let ctx = gtk4::cairo::Context::new(&surface)?;
     ctx.set_source_rgb(0.07, 0.08, 0.10);
-    let _ = ctx.paint();
+    ctx.paint()?;
     draw_series(
         &ctx,
         points,
@@ -84,23 +73,22 @@ fn export_png(
         f64::from(height),
         true,
         None,
-    );
+    )?;
     drop(ctx);
-    let mut file = std::fs::File::create(&path)
-        .with_context(|| format!("cannot write to {}", path.display()))?;
+    let mut file = std::fs::File::create(&path).map_err(|source| PopupError::Export {
+        path: path.clone(),
+        source,
+    })?;
     surface
         .write_to_png(&mut file)
-        .context("PNG encoding failed")?;
+        .map_err(|source| PopupError::Png {
+            path: path.clone(),
+            source,
+        })?;
     Ok(path)
 }
 
-/// Writes the points of the curve into a CSV file.
-///
-/// # Errors
-/// Fails when the write fails.
-fn export_csv(points: &[f64], symbol: &str, range: Range) -> anyhow::Result<std::path::PathBuf> {
-    use anyhow::Context as _;
-
+fn export_csv(points: &[f64], symbol: &str, range: Range) -> Result<PathBuf, PopupError> {
     let path = export_path(symbol, range, "csv")?;
     let mut out = String::from("index,age_minutes,price\n");
     let last = points.len().saturating_sub(1);
@@ -110,8 +98,16 @@ fn export_csv(points: &[f64], symbol: &str, range: Range) -> anyhow::Result<std:
         } else {
             as_f64(last.saturating_sub(index)) / as_f64(last) * range.span_minutes()
         };
-        let _ = writeln!(out, "{index},{behind:.0},{value}");
+        let row = format!("{index},{behind:.0},{value}\n");
+        out.push_str(&row);
     }
-    std::fs::write(&path, out).with_context(|| format!("cannot write to {}", path.display()))?;
+    std::fs::write(&path, out).map_err(|source| write_failed(&path, source))?;
     Ok(path)
+}
+
+fn write_failed(path: &Path, source: std::io::Error) -> PopupError {
+    PopupError::Export {
+        path: path.to_path_buf(),
+        source,
+    }
 }

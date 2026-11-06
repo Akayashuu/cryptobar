@@ -13,7 +13,6 @@ use super::chart::Hover;
 pub(super) fn sample_at(len: usize, ratio: f64) -> usize {
     let last = len.saturating_sub(1);
     let index = (ratio.clamp(0.0, 1.0) * as_f64(last)).round();
-    // `as` on a bounded, positive float: the conversion is exact.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let index = index as usize;
     index.min(last)

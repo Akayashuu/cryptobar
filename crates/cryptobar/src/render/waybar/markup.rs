@@ -13,8 +13,6 @@ impl Markup {
     pub(super) fn escape(self, raw: &str) -> String {
         match self {
             Self::Pango => escape_pango(raw),
-            // Control characters are dropped in every case: they would break
-            // the expected JSON line.
             Self::None => raw
                 .chars()
                 .map(|c| if c.is_control() { ' ' } else { c })
@@ -63,7 +61,6 @@ pub fn escape_pango(raw: &str) -> String {
             '>' => out.push_str("&gt;"),
             '\'' => out.push_str("&apos;"),
             '"' => out.push_str("&quot;"),
-            // Control characters would break the expected JSON line.
             c if c.is_control() => out.push(' '),
             c => out.push(c),
         }
@@ -97,13 +94,10 @@ mod tests {
         let quotes = vec![quote("<b>&x", 1.0, Some(1.0)), quote("eth", 2.0, Some(1.0))];
         let module = render(&quotes, 0, &config(), true, Markup::None, &no_onchain());
         for field in [&module.text, &module.tooltip] {
-            // The rendering adds no tag at all: neither <b> nor <i>.
             assert!(!field.contains("<b>"), "leftover tag: {field}");
             assert!(!field.contains("<i>"), "leftover tag: {field}");
             assert!(!field.contains("&amp;"), "leftover entity: {field}");
         }
-        // The network data comes out literal: it is up to the consumer to
-        // display it as plain text (Quickshell: `textFormat: Text.PlainText`).
         assert!(module.text.contains("<B>&X"), "text: {}", module.text);
     }
 

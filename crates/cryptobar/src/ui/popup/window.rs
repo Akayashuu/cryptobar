@@ -11,6 +11,7 @@ use gtk4::{Align, Application, ApplicationWindow, Box as GtkBox, Button, Label, 
 use crate::app::App;
 use crate::model::{Quote, Range};
 
+use super::error::PopupError;
 use super::model::{Ctx, Model, Msg, Widgets};
 use super::search::wire_search;
 use super::settings::{settings_panel, wire_settings};
@@ -24,20 +25,15 @@ const APP_ID: &str = "dev.akayashuu.cryptobar";
 /// Opens the window and returns when it closes.
 ///
 /// # Errors
-/// Fails when GTK cannot initialise — typically outside a graphical session.
-pub fn show(app: App, quotes: Vec<Quote>, stale: bool) -> anyhow::Result<()> {
+/// Fails when GTK exits without success, typically outside a graphical session.
+pub fn show(app: App, quotes: Vec<Quote>, stale: bool) -> Result<(), PopupError> {
     let gtk_app = Application::builder().application_id(APP_ID).build();
     let seed = Rc::new(RefCell::new(Some((Arc::new(app), quotes, stale))));
 
     gtk_app.connect_startup(|_| {
         let provider = gtk4::CssProvider::new();
-        // `load_from_data` works on every GTK 4 version, unlike
-        // `load_from_string` which would require GTK 4.12.
         provider.load_from_data(CSS);
         if let Some(display) = gtk4::gdk::Display::default() {
-            // Above `~/.config/gtk-4.0/gtk.css`, loaded by GTK at the "user"
-            // priority: a desktop theme repainting every button must not decide
-            // how this window looks.
             gtk4::style_context_add_provider_for_display(
                 &display,
                 &provider,
@@ -54,13 +50,12 @@ pub fn show(app: App, quotes: Vec<Quote>, stale: bool) -> anyhow::Result<()> {
         }
     });
 
-    // GTK would otherwise parse our own command line arguments.
     let empty: [&str; 0] = [];
     let status = gtk_app.run_with_args(&empty);
     if status == glib::ExitCode::SUCCESS {
         Ok(())
     } else {
-        anyhow::bail!("the window exited with an error")
+        Err(PopupError::Exited)
     }
 }
 
@@ -125,9 +120,6 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
     wire_settings(&ctx, &settings);
     drain(&ctx, rx);
 
-    // Four pages rather than one endless column: the portfolio and the
-    // settings used to sit below the fold, and nothing hinted that one had to
-    // scroll to reach them.
     let stack = gtk4::Stack::new();
     stack.set_transition_type(gtk4::StackTransitionType::Crossfade);
     stack.set_vexpand(true);
@@ -166,8 +158,6 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
         .child(&content)
         .build();
 
-    // Escape closes the window: that is the expected reflex for a popup. The
-    // search bar consumes the key first to clear its field.
     let controller = gtk4::EventControllerKey::new();
     let to_close = window.clone();
     controller.connect_key_pressed(move |_, key, _, _| {
@@ -182,8 +172,6 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
     ctx.redraw();
     ctx.reload_quotes();
     window.present();
-    // The window opens ready to take a term: that is the most frequent gesture
-    // after "I want to watch something else".
     widgets.search.grab_focus();
 }
 

@@ -1,3 +1,5 @@
+use super::OnchainError;
+
 /// Shortens an address keeping both ends, the way explorers do.
 #[must_use]
 pub fn shorten(address: &str) -> String {
@@ -17,9 +19,8 @@ pub fn shorten(address: &str) -> String {
     format!("{head}…{tail}")
 }
 
-pub(super) fn validate_bitcoin(address: &str) -> Result<(), String> {
+pub(super) fn validate_bitcoin(address: &str) -> Result<(), OnchainError> {
     let lowered = address.to_ascii_lowercase();
-    // Bech32 (bc1…): lowercase, without the ambiguous characters `1 b i o`.
     if lowered.starts_with("bc1") {
         let body = lowered.get(3..).unwrap_or_default();
         let ok = (11..=87).contains(&body.len())
@@ -28,35 +29,29 @@ pub(super) fn validate_bitcoin(address: &str) -> Result<(), String> {
                 .all(|c| c.is_ascii_digit() || c.is_ascii_lowercase())
             && !body.contains(['b', 'i', 'o'])
             && !body.contains('1');
-        return ok
-            .then_some(())
-            .ok_or_else(|| "malformed bech32 address".to_owned());
+        return ok.then_some(()).ok_or(OnchainError::MalformedBech32);
     }
-    // Legacy base58: starts with 1 (P2PKH) or 3 (P2SH).
     let ok = address.starts_with(['1', '3'])
         && (26..=35).contains(&address.chars().count())
         && address.chars().all(is_base58);
-    ok.then_some(())
-        .ok_or_else(|| "unrecognised Bitcoin address".to_owned())
+    ok.then_some(()).ok_or(OnchainError::UnrecognisedBitcoin)
 }
 
-pub(super) fn validate_ethereum(address: &str) -> Result<(), String> {
+pub(super) fn validate_ethereum(address: &str) -> Result<(), OnchainError> {
     let ok = address.len() == 42
         && address.starts_with("0x")
         && address
             .get(2..)
             .is_some_and(|body| body.chars().all(|c| c.is_ascii_hexdigit()));
-    ok.then_some(())
-        .ok_or_else(|| "expected an Ethereum address: 0x followed by 40 characters".to_owned())
+    ok.then_some(()).ok_or(OnchainError::MalformedEthereum)
 }
 
-pub(super) fn validate_solana(address: &str) -> Result<(), String> {
+pub(super) fn validate_solana(address: &str) -> Result<(), OnchainError> {
     let ok = (32..=44).contains(&address.chars().count()) && address.chars().all(is_base58);
-    ok.then_some(())
-        .ok_or_else(|| "unrecognised Solana address".to_owned())
+    ok.then_some(()).ok_or(OnchainError::UnrecognisedSolana)
 }
 
-/// Base58 alphabet: no zero, no O, no I, no l — too easy to confuse.
+/// Base58 alphabet: no zero, no O, no I, no l, too easy to confuse.
 fn is_base58(c: char) -> bool {
     c.is_ascii_alphanumeric() && !matches!(c, '0' | 'O' | 'I' | 'l')
 }
@@ -65,7 +60,7 @@ fn is_base58(c: char) -> bool {
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::onchain::{Chain, Wallet};
+    use crate::onchain::{Chain, OnchainError, Wallet};
 
     fn wallet(chain: Chain, address: &str) -> Wallet {
         Wallet {
@@ -126,7 +121,7 @@ mod tests {
     fn a_recovery_phrase_is_rejected() {
         let phrase = wallet(Chain::Bitcoin, "abandon abandon abandon ability");
         let error = phrase.validate().expect_err("must be rejected");
-        assert!(error.contains("space"), "{error}");
+        assert!(matches!(error, OnchainError::ContainsSpace), "{error}");
     }
 
     #[test]
@@ -134,7 +129,7 @@ mod tests {
         let error = wallet(Chain::Bitcoin, "xprv9s21ZrQH143K3QTDL4LXw2F7Hek")
             .validate()
             .expect_err("must be rejected");
-        assert!(error.contains("public"), "{error}");
+        assert!(matches!(error, OnchainError::NotPublic), "{error}");
     }
 
     #[test]

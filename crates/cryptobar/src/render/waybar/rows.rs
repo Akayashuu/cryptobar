@@ -59,8 +59,6 @@ mod tests {
         assert!(module.price.contains("42"));
         assert!(module.percent.contains("1.5"));
         assert_ne!(module.sparkline.len(), 0);
-        // The text stays the concatenation of the fields: no divergence is
-        // possible between the two representations.
         assert_eq!(
             module.text,
             format!(

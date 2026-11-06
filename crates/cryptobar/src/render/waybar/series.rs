@@ -18,8 +18,6 @@ pub(super) fn normalize(points: &[f64]) -> Vec<f64> {
     if span <= 0.0 {
         return vec![0.5; reduced.len()];
     }
-    // Three decimals are enough for a pixel-accurate plot and divide by five
-    // the length of the JSON line emitted at every interval.
     reduced
         .iter()
         .map(|value| ((value - min) / span * 1000.0).round() / 1000.0)
@@ -27,8 +25,6 @@ pub(super) fn normalize(points: &[f64]) -> Vec<f64> {
 }
 
 #[cfg(test)]
-// A failing test has to stop dead; normalisation puts exactly 0.0 and 1.0 on
-// the extremes, so the strict comparison is exact there.
 #[allow(clippy::panic, clippy::float_cmp)]
 mod tests {
     use super::*;
@@ -52,7 +48,6 @@ mod tests {
         let series = &row.series;
         assert_ne!(series.len(), 0);
         assert!(series.iter().all(|value| (0.0..=1.0).contains(value)));
-        // The extremes touch the bounds: the curve fills the whole height.
         assert!(series.iter().copied().any(|value| value == 0.0));
         assert!(series.iter().copied().any(|value| value == 1.0));
     }

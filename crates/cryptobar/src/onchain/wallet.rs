@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::address::{shorten, validate_bitcoin, validate_ethereum, validate_solana};
 use super::chain::Chain;
+use super::error::OnchainError;
 
 /// A watched wallet, as written in the configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,15 +27,13 @@ impl Wallet {
     ///
     /// # Errors
     /// Describes what is wrong, ready to be displayed as is.
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), OnchainError> {
         let address = self.address.trim();
         if address.is_empty() {
-            return Err("empty address".to_owned());
+            return Err(OnchainError::EmptyAddress);
         }
         if address.chars().any(char::is_whitespace) {
-            // A run of words separated by spaces is a recovery phrase. Refuse
-            // outright rather than writing it to disk.
-            return Err("a public address contains no space".to_owned());
+            return Err(OnchainError::ContainsSpace);
         }
         let lowered = address.to_ascii_lowercase();
         for secret in [
@@ -44,7 +43,7 @@ impl Wallet {
             "0x0000000000000000000000000000000000000000",
         ] {
             if lowered.starts_with(secret) {
-                return Err("this value is not a public address".to_owned());
+                return Err(OnchainError::NotPublic);
             }
         }
         match self.chain {

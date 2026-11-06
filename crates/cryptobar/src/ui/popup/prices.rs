@@ -73,8 +73,6 @@ impl Ctx {
         }
         card.append(&ranges);
 
-        // The colour follows the change observed over the displayed range, not
-        // the 24 h change alone: otherwise a falling curve could be green.
         let positive = match (series.first(), series.last()) {
             (Some(first), Some(last)) => last >= first,
             _ => quote.change_7d.unwrap_or(0.0) >= 0.0,
@@ -90,8 +88,6 @@ impl Ctx {
             Some(Rc::clone(&hover)),
         );
 
-        // Hover readout: the price of the pointed sample and its age. The line
-        // keeps its place even when empty, otherwise the card would jump.
         let readout = Label::new(Some(" "));
         readout.add_css_class("muted");
         readout.set_xalign(0.0);
@@ -110,7 +106,7 @@ impl Ctx {
         if finite.len() >= 2 {
             let (low, high) = crate::render::braille::bounds(&finite);
             let span = Label::new(Some(&format!(
-                "{} — {}",
+                "{} to {}",
                 format::price(low, currency, decimals),
                 format::price(high, currency, decimals)
             )));
@@ -165,8 +161,6 @@ impl Ctx {
                 names.set_size_request(96, -1);
                 row.append(&names);
 
-                // Thumbnail: the shape of the last seven days reads at a
-                // glance, without opening the detail of every coin.
                 let spark = chart(
                     &quote.sparkline,
                     quote.change_7d.unwrap_or(0.0) >= 0.0,
@@ -189,7 +183,6 @@ impl Ctx {
                 change.set_width_chars(8);
                 row.append(&change);
             } else {
-                // Coin just added: the row exists before its quote.
                 let pending = Label::new(Some(id.as_str()));
                 pending.add_css_class("muted");
                 pending.set_hexpand(true);
@@ -308,8 +301,6 @@ pub(super) fn stats_card(
         ));
     }
     if let Some(ath) = quote.ath.filter(|ath| *ath > 0.0) {
-        // The gap to the all-time high reads better than the high alone: it
-        // places the current price in the history of the coin.
         let gap = (quote.price - ath) / ath * 100.0;
         let date = quote
             .ath_date

@@ -11,6 +11,7 @@
 mod alerts;
 mod coins;
 mod editor;
+mod error;
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod fixtures;
@@ -18,3 +19,4 @@ mod settings;
 mod wallets;
 
 pub use editor::Editor;
+pub use error::EditError;

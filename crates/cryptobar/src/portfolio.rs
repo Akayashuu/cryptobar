@@ -2,7 +2,7 @@
 //!
 //! Pure functions: the quantities come from the balances read on the watched
 //! public addresses, the prices from the already cached quotes. Nothing is
-//! stored, nothing is sent — cryptobar knows about no exchange and no API key,
+//! stored, nothing is sent, cryptobar knows about no exchange and no API key,
 //! and the addresses never leave the machine.
 //!
 //! The price 24 h ago is reconstructed from the relative change rather than
@@ -87,8 +87,6 @@ pub fn compute(quotes: &[Quote], onchain: &BTreeMap<CoinId, f64>) -> Option<Port
     }
     positions.sort_by(|a, b| b.value.total_cmp(&a.value));
 
-    // A portfolio where no line publishes a change has no change: an em dash
-    // beats a zero that would read as "flat".
     let change_24h = positions
         .iter()
         .any(|position| position.change_24h.is_some())
@@ -111,8 +109,6 @@ pub fn compute(quotes: &[Quote], onchain: &BTreeMap<CoinId, f64>) -> Option<Port
 fn gain_24h(price: f64, change_pct: Option<f64>) -> Option<f64> {
     let change = change_pct.filter(|change| change.is_finite())?;
     let factor = 1.0 + change / 100.0;
-    // A -100% change would cancel the denominator: better to show nothing
-    // than an infinity.
     if factor.abs() < f64::EPSILON {
         return None;
     }
@@ -222,7 +218,6 @@ mod tests {
 
     #[test]
     fn the_24h_gain_is_derived_from_the_change() {
-        // 110 today after +10%: 100 yesterday, hence +10 per unit.
         let portfolio = compute(
             &[quote("bitcoin", "BTC", 110.0, Some(10.0))],
             &held(&[("bitcoin", 3.0)]),

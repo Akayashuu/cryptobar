@@ -1,17 +1,17 @@
-use anyhow::{Context as _, Result, bail};
 use toml_edit::{Array, DocumentMut, Item, Value};
 
 use crate::config::Config;
 use crate::model::CoinId;
 
 use super::editor::Editor;
+use super::error::EditError;
 
 impl Editor {
     /// Appends a cryptocurrency to the watched list.
     ///
     /// # Errors
     /// Fails when it is already there, or for the reasons of [`Self::apply`].
-    pub fn add_coin(&self, id: &CoinId) -> Result<Config> {
+    pub fn add_coin(&self, id: &CoinId) -> Result<Config, EditError> {
         self.apply(|document| {
             let array = coins_array(document)?;
             if array
@@ -19,11 +19,9 @@ impl Editor {
                 .filter_map(Value::as_str)
                 .any(|existing| existing == id.as_str())
             {
-                bail!("{id} is already watched");
+                return Err(EditError::AlreadyWatched(id.clone()));
             }
             array.push(id.as_str());
-            // `push` glues the value to the closing bracket; a space separates
-            // it from the rest, as in the hand-written file.
             if let Some(last) = array.iter_mut().last() {
                 last.decor_mut().set_prefix(" ");
             }
@@ -36,15 +34,15 @@ impl Editor {
     /// # Errors
     /// Fails when it is missing, when it is the last one, or for the reasons of
     /// [`Self::apply`].
-    pub fn remove_coin(&self, id: &str) -> Result<Config> {
+    pub fn remove_coin(&self, id: &str) -> Result<Config, EditError> {
         self.apply(|document| {
             let array = coins_array(document)?;
             let position = array
                 .iter()
                 .position(|value| value.as_str() == Some(id))
-                .with_context(|| format!("{id} is not watched"))?;
+                .ok_or_else(|| EditError::NotWatched(id.to_owned()))?;
             if array.len() <= 1 {
-                bail!("at least one cryptocurrency has to stay watched");
+                return Err(EditError::LastCoin);
             }
             array.remove(position);
             Ok(())
@@ -53,14 +51,14 @@ impl Editor {
 }
 
 /// The `coins` array, created when missing.
-fn coins_array(document: &mut DocumentMut) -> Result<&mut Array> {
+fn coins_array(document: &mut DocumentMut) -> Result<&mut Array, EditError> {
     if !document.get("coins").is_some_and(Item::is_array) {
         document.insert("coins", Item::Value(Value::Array(Array::new())));
     }
     document
         .get_mut("coins")
         .and_then(Item::as_array_mut)
-        .context("`coins` is not an array")
+        .ok_or(EditError::CoinsNotArray)
 }
 
 #[cfg(test)]

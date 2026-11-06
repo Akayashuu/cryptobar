@@ -3,27 +3,27 @@
 //! The configuration file expects ids, not symbols. This command bridges the
 //! gap for the user.
 
-use std::fmt::Write as _;
-use std::io::Write as _;
+use std::io::Write;
 
-use anyhow::{Context as _, Result};
-
+use super::{CommandError, print_text};
 use crate::app::App;
+use crate::output::{Output, push_line};
 use crate::source::SearchHit;
 
-/// Number of results displayed: beyond it, the list stops being useful.
 const MAX_RESULTS: usize = 15;
 
 /// Searches `term` and prints the matching ids.
 ///
 /// # Errors
-/// Fails when the network search fails — it is not cached.
-pub fn run(app: &App, term: &str) -> Result<()> {
-    let hits = app.source.search(term).context("search failed")?;
-    let mut stdout = std::io::stdout().lock();
-    write!(stdout, "{}", render(&hits, term))?;
-    stdout.flush()?;
-    Ok(())
+/// Fails when the network search fails (it is not cached), or stdout cannot be
+/// written.
+pub fn run<Out: Write, Err: Write>(
+    app: &App,
+    term: &str,
+    output: &mut Output<Out, Err>,
+) -> Result<(), CommandError> {
+    let hits = app.source.search(term).map_err(CommandError::Search)?;
+    print_text(output, render(&hits, term))
 }
 
 /// Formats the results. Pure function: testable without network.
@@ -46,20 +46,20 @@ pub fn render(hits: &[SearchHit], term: &str) -> String {
 
     let mut out = String::new();
     for hit in &shown {
-        // Writing into a `String` is infallible.
-        let _ = writeln!(
-            out,
-            "{:<id_width$}  {:<symbol_width$}  {}",
-            hit.id.as_str(),
-            hit.symbol.to_uppercase(),
-            hit.name,
+        push_line(
+            &mut out,
+            format_args!(
+                "{:<id_width$}  {:<symbol_width$}  {}",
+                hit.id.as_str(),
+                hit.symbol.to_uppercase(),
+                hit.name,
+            ),
         );
     }
     if hits.len() > shown.len() {
-        let _ = writeln!(
-            out,
-            "… {} more results",
-            hits.len().saturating_sub(shown.len())
+        push_line(
+            &mut out,
+            format_args!("… {} more results", hits.len().saturating_sub(shown.len())),
         );
     }
     out.push_str("\nAdd the id from the first column to `coins` in the configuration.\n");

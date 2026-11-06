@@ -15,8 +15,6 @@ pub(super) fn summary(
     PortfolioSummary {
         total: money(wallet.total),
         change_24h: match wallet.change_24h {
-            // The sign is explicit: "+€12" and "€12" do not read the same in
-            // the corner of a screen.
             Some(gain) if gain >= 0.0 => format!("+{}", money(gain)),
             Some(gain) => money(gain),
             None => "—".to_owned(),

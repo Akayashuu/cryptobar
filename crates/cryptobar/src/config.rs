@@ -1,19 +1,91 @@
 //! Loading, validating and writing the configuration file.
 
-use std::path::Path;
+use std::io;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::model::{CoinId, Currency};
-use crate::paths;
+use crate::onchain::OnchainError;
+use crate::paths::{self, PathsError};
 use crate::render::format::Decimals;
+
+/// Failures to read, write or validate the configuration file.
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigError {
+    #[error(transparent)]
+    Paths(#[from] PathsError),
+    #[error("reading the configuration {}", .path.display())]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("writing {}", .path.display())]
+    Write {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("creating {}", .path.display())]
+    Directory {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    #[error("{} already exists, use --force to overwrite it", .path.display())]
+    Exists { path: PathBuf },
+    #[error("malformed TOML")]
+    Toml(#[from] toml::de::Error),
+    #[error("invalid configuration {}", .path.display())]
+    File {
+        path: PathBuf,
+        #[source]
+        source: Box<Self>,
+    },
+    #[error("`coins` must hold at least one cryptocurrency")]
+    NoCoin,
+    #[error("`coins` holds a duplicate: {0}")]
+    DuplicateCoin(CoinId),
+    #[error(
+        "`refresh_interval` = {value} is too short; {min} s minimum to stay within the public \
+         CoinGecko API quota"
+    )]
+    RefreshTooShort { value: u64, min: u64 },
+    #[error("`waybar_signal` = {0} is out of range; expected 1..=30 (SIGRTMIN+n)")]
+    SignalOutOfRange(u8),
+    #[error("`sparkline_width` = {0} is out of range; expected 1..=64")]
+    SparklineOutOfRange(usize),
+    #[error("`wallets.address` = {address:?}")]
+    Wallet {
+        address: String,
+        #[source]
+        reason: OnchainError,
+    },
+    #[error("the alert watches `{0}`, which is not in `coins`: add it there first")]
+    AlertUnknownCoin(CoinId),
+    #[error("`alerts.{field}` = {value} must be a strictly positive number")]
+    AlertNotPositive { field: &'static str, value: f64 },
+    #[error("the alert on `{0}` defines no condition: set `above`, `below` or `change_pct`")]
+    AlertNoCondition(CoinId),
+    #[error(
+        "the alert on `{coin}` has `below` = {below} above `above` = {above}: it would fire \
+         permanently"
+    )]
+    AlertInverted {
+        coin: CoinId,
+        below: f64,
+        above: f64,
+    },
+    #[error("`decimals` must be \"auto\" or an integer, not {0:?}")]
+    Decimals(String),
+}
 
 /// Floor of the refresh interval. Below it, the public CoinGecko API answers
 /// with 429s and eventually bans the address for a while.
 pub const MIN_REFRESH_INTERVAL: u64 = 15;
 
-pub(crate) const DEFAULT_CONFIG: &str = r#"# cryptobar configuration — https://github.com/Akayashuu/cryptobar
+pub(crate) const DEFAULT_CONFIG: &str = r#"# cryptobar configuration: https://github.com/Akayashuu/cryptobar
 # CoinGecko ids; look them up with `cryptobar coins <term>`.
 coins = ["bitcoin", "ethereum", "solana"]
 
@@ -41,7 +113,7 @@ waybar_signal = 8
 
 # Wallets watched read-only. Only a PUBLIC ADDRESS goes here: cryptobar reads
 # its balance from the chain and adds it to the portfolio. No private key, no
-# recovery phrase — they are rejected.
+# recovery phrase: they are rejected.
 # Supported chains: "bitcoin", "ethereum", "solana".
 # [[wallets]]
 # chain = "bitcoin"
@@ -137,14 +209,11 @@ fn default_signal() -> u8 {
 }
 
 impl Alert {
-    fn validate(&self, coins: &[CoinId]) -> Result<()> {
+    fn validate(&self, coins: &[CoinId]) -> Result<(), ConfigError> {
         if !coins.contains(&self.coin) {
-            bail!(
-                "the alert watches `{}`, which is not in `coins`: add it there first",
-                self.coin
-            );
+            return Err(ConfigError::AlertUnknownCoin(self.coin.clone()));
         }
-        for (label, value) in [
+        for (field, value) in [
             ("above", self.above),
             ("below", self.below),
             ("change_pct", self.change_pct),
@@ -152,27 +221,30 @@ impl Alert {
             if let Some(value) = value
                 && (!value.is_finite() || value <= 0.0)
             {
-                bail!("`alerts.{label}` = {value} must be a strictly positive number");
+                return Err(ConfigError::AlertNotPositive { field, value });
             }
         }
         if self.above.is_none() && self.below.is_none() && self.change_pct.is_none() {
-            bail!(
-                "the alert on `{}` defines no condition: set `above`, `below` or \
-                 `change_pct`",
-                self.coin
-            );
+            return Err(ConfigError::AlertNoCondition(self.coin.clone()));
         }
         if let (Some(above), Some(below)) = (self.above, self.below)
             && below >= above
         {
-            bail!(
-                "the alert on `{}` has `below` = {below} above `above` = {above}: it would \
-                 fire permanently",
-                self.coin
-            );
+            return Err(ConfigError::AlertInverted {
+                coin: self.coin.clone(),
+                below,
+                above,
+            });
         }
         Ok(())
     }
+}
+
+fn ensure_directory(dir: &Path) -> Result<(), ConfigError> {
+    paths::ensure_dir(dir).map_err(|source| ConfigError::Directory {
+        path: dir.to_path_buf(),
+        source,
+    })
 }
 
 impl Config {
@@ -180,11 +252,11 @@ impl Config {
     ///
     /// # Errors
     /// Fails when the configuration is unreadable or invalid.
-    pub fn load() -> Result<Self> {
+    pub fn load() -> Result<Self, ConfigError> {
         let path = paths::config_file()?;
         if !path.exists() {
             if let Some(parent) = path.parent() {
-                paths::ensure_dir(parent)?;
+                ensure_directory(parent)?;
             }
             Self::write_default(&path, false)?;
         }
@@ -195,17 +267,22 @@ impl Config {
     ///
     /// # Errors
     /// Fails when the file is unreadable or invalid.
-    pub fn load_from(path: &Path) -> Result<Self> {
-        let raw = std::fs::read_to_string(path)
-            .with_context(|| format!("reading the configuration {}", path.display()))?;
-        Self::parse(&raw).with_context(|| format!("invalid configuration: {}", path.display()))
+    pub fn load_from(path: &Path) -> Result<Self, ConfigError> {
+        let raw = std::fs::read_to_string(path).map_err(|source| ConfigError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        Self::parse(&raw).map_err(|source| ConfigError::File {
+            path: path.to_path_buf(),
+            source: Box::new(source),
+        })
     }
 
     /// Parses and validates a TOML payload.
     ///
     /// # Errors
     /// Fails when the TOML is malformed or when a value breaks the contract.
-    pub fn parse(raw: &str) -> Result<Self> {
+    pub fn parse(raw: &str) -> Result<Self, ConfigError> {
         let config: Self = toml::from_str(raw)?;
         config.validate()?;
         Ok(config)
@@ -215,52 +292,48 @@ impl Config {
     ///
     /// # Errors
     /// Fails when the file already exists or cannot be written.
-    pub fn write_default(path: &Path, force: bool) -> Result<()> {
+    pub fn write_default(path: &Path, force: bool) -> Result<(), ConfigError> {
         if let Some(parent) = path.parent() {
-            paths::ensure_dir(parent)?;
+            ensure_directory(parent)?;
         }
         if path.exists() && !force {
-            bail!(
-                "{} already exists, use --force to overwrite it",
-                path.display()
-            );
+            return Err(ConfigError::Exists {
+                path: path.to_path_buf(),
+            });
         }
-        std::fs::write(path, DEFAULT_CONFIG).with_context(|| format!("writing {}", path.display()))
+        std::fs::write(path, DEFAULT_CONFIG).map_err(|source| ConfigError::Write {
+            path: path.to_path_buf(),
+            source,
+        })
     }
 
-    fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<(), ConfigError> {
         if self.coins.is_empty() {
-            bail!("`coins` must hold at least one cryptocurrency");
+            return Err(ConfigError::NoCoin);
         }
         let mut seen = std::collections::HashSet::new();
         for coin in &self.coins {
             if !seen.insert(coin.as_str()) {
-                bail!("`coins` holds a duplicate: {coin}");
+                return Err(ConfigError::DuplicateCoin(coin.clone()));
             }
         }
         if self.refresh_interval < MIN_REFRESH_INTERVAL {
-            bail!(
-                "`refresh_interval` = {} is too short; {MIN_REFRESH_INTERVAL} s minimum to stay \
-                 within the public CoinGecko API quota",
-                self.refresh_interval
-            );
+            return Err(ConfigError::RefreshTooShort {
+                value: self.refresh_interval,
+                min: MIN_REFRESH_INTERVAL,
+            });
         }
         if !(1..=30).contains(&self.waybar_signal) {
-            bail!(
-                "`waybar_signal` = {} is out of range; expected 1..=30 (SIGRTMIN+n)",
-                self.waybar_signal
-            );
+            return Err(ConfigError::SignalOutOfRange(self.waybar_signal));
         }
         if !(1..=64).contains(&self.sparkline_width) {
-            bail!(
-                "`sparkline_width` = {} is out of range; expected 1..=64",
-                self.sparkline_width
-            );
+            return Err(ConfigError::SparklineOutOfRange(self.sparkline_width));
         }
         for wallet in &self.wallets {
-            if let Err(reason) = wallet.validate() {
-                bail!("`wallets.address` = {:?}: {reason}", wallet.address);
-            }
+            wallet.validate().map_err(|reason| ConfigError::Wallet {
+                address: wallet.address.clone(),
+                reason,
+            })?;
         }
         for alert in &self.alerts {
             alert.validate(&self.coins)?;
@@ -268,7 +341,7 @@ impl Config {
         if let DecimalsSetting::Auto(value) = &self.decimals
             && value != "auto"
         {
-            bail!("`decimals` must be \"auto\" or an integer, not {value:?}");
+            return Err(ConfigError::Decimals(value.clone()));
         }
         Ok(())
     }
@@ -287,6 +360,7 @@ impl Config {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::report::Report;
 
     #[test]
     fn a_minimal_config_uses_the_defaults() {
@@ -330,9 +404,8 @@ mod tests {
 
     #[test]
     fn an_invalid_currency_is_rejected_naming_the_field() {
-        let err = Config::parse("coins = [\"bitcoin\"]\ncurrency = \"xyz\"")
-            .unwrap_err()
-            .to_string();
+        let failure = Config::parse("coins = [\"bitcoin\"]\ncurrency = \"xyz\"").unwrap_err();
+        let err = Report(&failure).to_string();
         assert!(err.contains("currency"), "unclear message: {err}");
     }
 
@@ -352,9 +425,8 @@ mod tests {
 
     #[test]
     fn an_unknown_field_is_rejected_to_catch_typos() {
-        let err = Config::parse("coins = [\"bitcoin\"]\nrefresh_intervall = 60")
-            .unwrap_err()
-            .to_string();
+        let failure = Config::parse("coins = [\"bitcoin\"]\nrefresh_intervall = 60").unwrap_err();
+        let err = Report(&failure).to_string();
         assert!(err.contains("refresh_intervall"), "unclear message: {err}");
     }
 

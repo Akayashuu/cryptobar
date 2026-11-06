@@ -1,19 +1,16 @@
 //! `chart` subcommand: braille chart in the terminal.
 
-use std::fmt::Write as _;
-use std::io::Write as _;
+use std::io::Write;
 
-use anyhow::{Context as _, Result, bail};
-
+use super::{CommandError, print_text};
 use crate::app::App;
 use crate::model::{CoinId, Range, Series};
+use crate::output::{Output, push_line};
 use crate::render::{braille, format};
 
-/// Margins reserved around the plot: y axis and borders.
 const AXIS_WIDTH: usize = 12;
 const MIN_COLS: usize = 20;
 const MIN_ROWS: usize = 4;
-/// Beyond it, the chart becomes unreadable rather than more precise.
 const MAX_ROWS: usize = 24;
 const DEFAULT_COLS: usize = 80;
 const DEFAULT_ROWS: usize = 24;
@@ -21,34 +18,40 @@ const DEFAULT_ROWS: usize = 24;
 /// Prints the chart of `coin` over the requested range.
 ///
 /// # Errors
-/// Fails when the id is invalid, or when the series is unavailable and missing
-/// from the cache.
-pub fn run(app: &App, coin: Option<&str>, range: Range) -> Result<()> {
+/// Fails when the id is invalid, when no cryptocurrency is configured, or when
+/// the series is unavailable and missing from the cache.
+pub fn run<Out: Write, Err: Write>(
+    app: &App,
+    coin: Option<&str>,
+    range: Range,
+    output: &mut Output<Out, Err>,
+) -> Result<(), CommandError> {
     let id = match coin {
-        Some(raw) => CoinId::parse(raw).context("invalid cryptocurrency id")?,
+        Some(raw) => CoinId::parse(raw)?,
         None => app
             .config
             .coins
-            .get(app.active_index())
+            .get(app.active_index()?)
             .or_else(|| app.config.coins.first())
             .cloned()
-            .context("no cryptocurrency configured")?,
+            .ok_or(CommandError::NoCoin)?,
     };
 
     let cached = app
         .source
         .series_cached(&id, range, &app.config.currency)
-        .with_context(|| format!("fetching the series of {}", id.as_str()))?;
+        .map_err(|source| CommandError::Series {
+            id: id.as_str().to_owned(),
+            source,
+        })?;
 
     let (cols, rows) = viewport();
-    let rendered = render(&cached.value, &app.config, cols, rows, cached.stale);
-    let mut stdout = std::io::stdout().lock();
-    write!(stdout, "{rendered}")?;
-    stdout.flush()?;
-    Ok(())
+    print_text(
+        output,
+        render(&cached.value, &app.config, cols, rows, cached.stale),
+    )
 }
 
-/// Usable dimensions, with a fallback when the output is not a terminal.
 fn viewport() -> (usize, usize) {
     terminal_size::terminal_size().map_or((DEFAULT_COLS, DEFAULT_ROWS), |(w, h)| {
         (usize::from(w.0), usize::from(h.0))
@@ -65,8 +68,6 @@ pub fn render(
     stale: bool,
 ) -> String {
     let plot_cols = cols.saturating_sub(AXIS_WIDTH).max(MIN_COLS);
-    // Two header lines and one footer line are taken off the height, then the
-    // height in cells is a quarter of the height in dots.
     let plot_rows = rows.saturating_sub(4).clamp(MIN_ROWS, MAX_ROWS);
 
     let decimals = config.decimals();
@@ -82,18 +83,18 @@ pub fn render(
     };
 
     let mut out = String::new();
-    // Writing into a `String` is infallible; the error is ignored knowingly
-    // rather than bubbled up through the whole call chain.
-    let _ = writeln!(
-        out,
-        "{}  {}   {}  ({})",
-        series.id.as_str().to_uppercase(),
-        format::price(last, &config.currency, decimals),
-        format::percent(change),
-        series.range.label(),
+    push_line(
+        &mut out,
+        format_args!(
+            "{}  {}   {}  ({})",
+            series.id.as_str().to_uppercase(),
+            format::price(last, &config.currency, decimals),
+            format::percent(change),
+            series.range.label(),
+        ),
     );
     if stale {
-        out.push_str("stale data — network unavailable\n");
+        push_line(&mut out, "stale data, network unavailable");
     }
     out.push('\n');
 
@@ -109,7 +110,7 @@ pub fn render(
         } else {
             String::new()
         };
-        let _ = writeln!(out, "{label:>width$} │{line}");
+        push_line(&mut out, format_args!("{label:>width$} │{line}"));
     }
     out
 }
@@ -117,15 +118,15 @@ pub fn render(
 /// Opens the chart in a new terminal window.
 ///
 /// # Errors
-/// Fails when the configured emulator cannot be found.
-pub fn spawn_terminal(app: &App, coin: Option<&str>, range: Range) -> Result<()> {
+/// Fails when no terminal is configured, the executable path is unknown, or the
+/// configured emulator cannot be started.
+pub fn spawn_terminal(app: &App, coin: Option<&str>, range: Range) -> Result<(), CommandError> {
     let terminal = app.config.terminal.trim();
     if terminal.is_empty() {
-        bail!("no terminal emulator configured");
+        return Err(CommandError::NoTerminal);
     }
-    let exe = std::env::current_exe().context("executable path not found")?;
+    let exe = std::env::current_exe().map_err(CommandError::Executable)?;
     let mut command = std::process::Command::new(terminal);
-    // `-e` is accepted by foot, kitty, alacritty and wezterm.
     command
         .arg("-e")
         .arg(exe)
@@ -135,9 +136,10 @@ pub fn spawn_terminal(app: &App, coin: Option<&str>, range: Range) -> Result<()>
     if let Some(coin) = coin {
         command.arg(coin);
     }
-    command
-        .spawn()
-        .with_context(|| format!("launching {terminal}"))?;
+    command.spawn().map_err(|source| CommandError::Launch {
+        program: terminal.to_owned(),
+        source,
+    })?;
     Ok(())
 }
 

@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::CoinId;
 
+use super::error::OnchainError;
+
 /// A watched chain. The list is short on purpose: every entry needs a public,
 /// key-free endpoint and a clean balance decoder.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,14 +46,14 @@ impl Chain {
 }
 
 impl std::str::FromStr for Chain {
-    type Err = String;
+    type Err = OnchainError;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.trim().to_ascii_lowercase().as_str() {
             "bitcoin" | "btc" => Ok(Self::Bitcoin),
             "ethereum" | "eth" => Ok(Self::Ethereum),
             "solana" | "sol" => Ok(Self::Solana),
-            other => Err(format!("unknown chain: {other}")),
+            other => Err(OnchainError::UnknownChain(other.to_owned())),
         }
     }
 }

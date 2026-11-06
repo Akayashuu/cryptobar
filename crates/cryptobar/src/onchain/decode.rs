@@ -1,8 +1,10 @@
 use serde::Deserialize;
 
+use super::error::OnchainError;
+
 /// Bitcoin balance: what came in minus what went out, confirmed as well as
 /// pending, converted from satoshis to BTC.
-pub(super) fn decode_bitcoin(body: &str) -> Result<f64, String> {
+pub(super) fn decode_bitcoin(body: &str) -> Result<f64, OnchainError> {
     #[derive(Deserialize, Default)]
     struct Stats {
         #[serde(default)]
@@ -17,7 +19,7 @@ pub(super) fn decode_bitcoin(body: &str) -> Result<f64, String> {
         #[serde(default)]
         mempool_stats: Stats,
     }
-    let parsed: Address = serde_json::from_str(body).map_err(|e| e.to_string())?;
+    let parsed: Address = serde_json::from_str(body)?;
     let sats = parsed
         .chain_stats
         .funded_txo_sum
@@ -28,23 +30,21 @@ pub(super) fn decode_bitcoin(body: &str) -> Result<f64, String> {
 }
 
 /// Ethereum balance: a hexadecimal integer in wei.
-pub(super) fn decode_ethereum(body: &str) -> Result<f64, String> {
+pub(super) fn decode_ethereum(body: &str) -> Result<f64, OnchainError> {
     #[derive(Deserialize)]
     struct Reply {
         #[serde(default)]
         result: Option<String>,
     }
-    let parsed: Reply = serde_json::from_str(body).map_err(|e| e.to_string())?;
-    let raw = parsed
-        .result
-        .ok_or_else(|| "response without a balance".to_owned())?;
+    let parsed: Reply = serde_json::from_str(body)?;
+    let raw = parsed.result.ok_or(OnchainError::MissingBalance)?;
     let digits = raw.trim_start_matches("0x");
-    let wei = u128::from_str_radix(digits, 16).map_err(|e| e.to_string())?;
+    let wei = u128::from_str_radix(digits, 16)?;
     Ok(units(wei_to_f64(wei), 1e18))
 }
 
 /// Solana balance: an integer number of lamports.
-pub(super) fn decode_solana(body: &str) -> Result<f64, String> {
+pub(super) fn decode_solana(body: &str) -> Result<f64, OnchainError> {
     #[derive(Deserialize)]
     struct Value {
         #[serde(default)]
@@ -55,11 +55,11 @@ pub(super) fn decode_solana(body: &str) -> Result<f64, String> {
         #[serde(default)]
         result: Option<Value>,
     }
-    let parsed: Reply = serde_json::from_str(body).map_err(|e| e.to_string())?;
+    let parsed: Reply = serde_json::from_str(body)?;
     let lamports = parsed
         .result
         .and_then(|result| result.value)
-        .ok_or_else(|| "response without a balance".to_owned())?;
+        .ok_or(OnchainError::MissingBalance)?;
     Ok(units(lamports_to_f64(lamports), 1e9))
 }
 
@@ -72,8 +72,6 @@ fn units(base: f64, divisor: f64) -> f64 {
     if value.is_finite() { value } else { 0.0 }
 }
 
-// The three conversions below lose digits beyond 2^53, which only happens to
-// unrealistic balances; the display counts in decimals, not in satoshis.
 #[allow(clippy::cast_precision_loss)]
 fn sats_to_f64(value: i64) -> f64 {
     value as f64

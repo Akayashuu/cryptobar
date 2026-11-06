@@ -8,7 +8,6 @@ use super::store::CachedSource;
 use super::{Cached, Entry, now};
 
 impl<S: PriceSource> CachedSource<S> {
-    /// Heart of the cache logic, shared by every method.
     fn get_or_refresh<T, F>(&self, key: &str, fetch: F) -> Result<Cached<T>, SourceError>
     where
         T: Serialize + for<'de> Deserialize<'de> + Clone,
@@ -28,68 +27,53 @@ impl<S: PriceSource> CachedSource<S> {
         }
 
         let blocked = now_secs < self.backoff().retry_after;
-        let lock = if blocked { None } else { self.try_lock() };
+        let lock = if blocked { None } else { self.try_lock()? };
 
         if lock.is_none() {
-            // Backoff active or lock held elsewhere: we serve what we have.
             return match existing {
-                Some(entry) => Ok(Cached {
-                    value: entry.value,
-                    fetched_at: entry.fetched_at,
-                    stale: true,
-                }),
-                None if blocked => Err(SourceError::Http(
-                    "backoff active after a network failure, no cached data".into(),
-                )),
-                None => fetch().map(|value| {
-                    let _ = self.write(
-                        key,
-                        &Entry {
-                            fetched_at: now_secs,
-                            value: value.clone(),
-                        },
-                    );
-                    Cached {
-                        value,
-                        fetched_at: now_secs,
-                        stale: false,
-                    }
-                }),
+                Some(entry) => Ok(served_stale(entry)),
+                None if blocked => Err(SourceError::Backoff),
+                None => fetch().and_then(|value| self.keep(key, value, now_secs)),
             };
         }
 
         match fetch() {
             Ok(value) => {
-                self.clear_failure();
-                let _ = self.write(
-                    key,
-                    &Entry {
-                        fetched_at: now_secs,
-                        value: value.clone(),
-                    },
-                );
-                Ok(Cached {
-                    value,
-                    fetched_at: now_secs,
-                    stale: false,
-                })
+                self.clear_failure()?;
+                self.keep(key, value, now_secs)
             }
             Err(err) => {
                 let retry_after = match &err {
                     SourceError::RateLimited { retry_after } => *retry_after,
                     _ => None,
                 };
-                self.record_failure(retry_after);
+                self.record_failure(retry_after)?;
                 match existing {
-                    Some(entry) => Ok(Cached {
-                        value: entry.value,
-                        fetched_at: entry.fetched_at,
-                        stale: true,
-                    }),
+                    Some(entry) => Ok(served_stale(entry)),
                     None => Err(err),
                 }
             }
         }
+    }
+
+    fn keep<T: Serialize + Clone>(
+        &self,
+        key: &str,
+        value: T,
+        fetched_at: u64,
+    ) -> Result<Cached<T>, SourceError> {
+        self.write(
+            key,
+            &Entry {
+                fetched_at,
+                value: value.clone(),
+            },
+        )?;
+        Ok(Cached {
+            value,
+            fetched_at,
+            stale: false,
+        })
     }
 
     /// Quotes, served from the cache as long as it is fresh.
@@ -143,12 +127,12 @@ impl<S: PriceSource> CachedSource<S> {
     ///
     /// # Errors
     /// Bubbles up I/O errors other than "file not found".
-    pub fn invalidate(&self) -> std::io::Result<()> {
-        self.clear_failure();
+    pub fn invalidate(&self) -> Result<(), SourceError> {
+        self.clear_failure()?;
         let entries = match std::fs::read_dir(&self.dir) {
             Ok(entries) => entries,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(e) => return Err(e),
+            Err(absent) if absent.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(failure) => return Err(SourceError::Cache(failure)),
         };
         for entry in entries.flatten() {
             let path = entry.path();
@@ -157,5 +141,13 @@ impl<S: PriceSource> CachedSource<S> {
             }
         }
         Ok(())
+    }
+}
+
+fn served_stale<T>(entry: Entry<T>) -> Cached<T> {
+    Cached {
+        value: entry.value,
+        fetched_at: entry.fetched_at,
+        stale: true,
     }
 }

@@ -1,9 +1,9 @@
-use anyhow::{Context as _, Result, bail};
 use toml_edit::{DocumentMut, Item, Value};
 
 use crate::config::Config;
 
 use super::editor::Editor;
+use super::error::EditError;
 
 impl Editor {
     /// Adds a wallet watched read-only.
@@ -19,16 +19,14 @@ impl Editor {
         chain: crate::onchain::Chain,
         address: &str,
         label: Option<&str>,
-    ) -> Result<Config> {
+    ) -> Result<Config, EditError> {
         let candidate = crate::onchain::Wallet {
             chain,
             address: address.trim().to_owned(),
             label: label.map(str::to_owned),
             enabled: true,
         };
-        if let Err(reason) = candidate.validate() {
-            bail!("{reason}");
-        }
+        candidate.validate()?;
         let label = label
             .map(str::trim)
             .filter(|label| !label.is_empty())
@@ -38,7 +36,7 @@ impl Editor {
             if array.iter().any(|entry| {
                 entry.get("address").and_then(Item::as_str) == Some(candidate.address.as_str())
             }) {
-                bail!("this address is already watched");
+                return Err(EditError::WalletAlreadyWatched);
             }
             let mut entry = toml_edit::Table::new();
             entry.insert("chain", Item::Value(Value::from(chain.slug())));
@@ -56,11 +54,11 @@ impl Editor {
     /// # Errors
     /// Fails when the index is out of the list, or for the reasons of
     /// [`Self::apply`].
-    pub fn remove_wallet(&self, index: usize) -> Result<Config> {
+    pub fn remove_wallet(&self, index: usize) -> Result<Config, EditError> {
         self.apply(move |document| {
             let array = wallets_array(document)?;
             if index >= array.len() {
-                bail!("no wallet at index {index}");
+                return Err(EditError::NoWallet(index));
             }
             array.remove(index);
             Ok(())
@@ -69,7 +67,7 @@ impl Editor {
 }
 
 /// The `[[wallets]]` array of tables, created when needed.
-fn wallets_array(document: &mut DocumentMut) -> Result<&mut toml_edit::ArrayOfTables> {
+fn wallets_array(document: &mut DocumentMut) -> Result<&mut toml_edit::ArrayOfTables, EditError> {
     if !document
         .get("wallets")
         .is_some_and(Item::is_array_of_tables)
@@ -82,7 +80,7 @@ fn wallets_array(document: &mut DocumentMut) -> Result<&mut toml_edit::ArrayOfTa
     document
         .get_mut("wallets")
         .and_then(Item::as_array_of_tables_mut)
-        .context("`wallets` is not an array of tables")
+        .ok_or(EditError::WalletsNotArray)
 }
 
 #[cfg(test)]

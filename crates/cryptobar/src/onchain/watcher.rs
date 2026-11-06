@@ -1,10 +1,12 @@
-use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::collections::{BTreeMap, BTreeSet};
+use std::io;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::balance::Balance;
 use super::chain::Chain;
 use super::decode::{decode_bitcoin, decode_ethereum, decode_solana};
+use super::error::OnchainError;
 use super::wallet::Wallet;
 
 const USER_AGENT: &str = concat!(
@@ -34,6 +36,16 @@ fn endpoint(chain: Chain) -> String {
     }
 }
 
+/// Balances read for a set of wallets, with the reads that failed.
+///
+/// A wallet whose read failed keeps its previous balance when one is cached: the
+/// failure is listed so that the caller can tell the user, never swallowed.
+#[derive(Debug, Default)]
+pub struct Refresh {
+    pub balances: Vec<Balance>,
+    pub failures: Vec<OnchainError>,
+}
+
 /// Balance reader, with its disk cache.
 pub struct Watcher {
     agent: ureq::Agent,
@@ -42,7 +54,7 @@ pub struct Watcher {
 
 impl Watcher {
     #[must_use]
-    pub fn new(cache_dir: &std::path::Path) -> Self {
+    pub fn new(cache_dir: &Path) -> Self {
         let config = ureq::Agent::config_builder()
             .timeout_connect(Some(CONNECT_TIMEOUT))
             .timeout_global(Some(TOTAL_TIMEOUT))
@@ -57,21 +69,32 @@ impl Watcher {
 
     /// Cached balances, with no network access at all. This is what the bar reads.
     #[must_use]
-    pub fn cached(&self, wallets: &[Wallet]) -> Vec<Balance> {
-        let stored = self.read();
-        wallets
-            .iter()
-            .filter(|wallet| wallet.enabled)
-            .filter_map(|wallet| stored.get(&wallet.address).cloned())
-            .collect()
+    pub fn cached(&self, wallets: &[Wallet]) -> Refresh {
+        match self.read() {
+            Ok(stored) => Refresh {
+                balances: Self::select(&stored, wallets),
+                failures: Vec::new(),
+            },
+            Err(failure) => Refresh {
+                balances: Vec::new(),
+                failures: vec![failure],
+            },
+        }
     }
 
     /// Up-to-date balances: the still-fresh entries come from the cache, the
     /// others from the chain. A failed read leaves the previous value in place
-    /// rather than wiping the portfolio.
+    /// rather than wiping the portfolio, and is listed in the failures.
     #[must_use]
-    pub fn refresh(&self, wallets: &[Wallet]) -> Vec<Balance> {
-        let mut stored = self.read();
+    pub fn refresh(&self, wallets: &[Wallet]) -> Refresh {
+        let mut failures = Vec::new();
+        let mut stored = match self.read() {
+            Ok(stored) => stored,
+            Err(failure) => {
+                failures.push(failure);
+                BTreeMap::new()
+            }
+        };
         let now = now();
         let mut changed = false;
 
@@ -79,37 +102,53 @@ impl Watcher {
             let fresh = stored
                 .get(&wallet.address)
                 .is_some_and(|balance| now.saturating_sub(balance.fetched_at) < TTL.as_secs());
-            if fresh || wallet.validate().is_err() {
+            if fresh {
                 continue;
             }
-            if let Ok(amount) = self.fetch(wallet.chain, &wallet.address) {
-                stored.insert(
-                    wallet.address.clone(),
-                    Balance {
-                        chain: wallet.chain,
-                        address: wallet.address.clone(),
-                        amount,
-                        fetched_at: now,
-                    },
-                );
-                changed = true;
+            if let Err(invalid) = wallet.validate() {
+                failures.push(invalid);
+                continue;
+            }
+            match self.fetch(wallet.chain, &wallet.address) {
+                Ok(amount) => {
+                    stored.insert(
+                        wallet.address.clone(),
+                        Balance {
+                            chain: wallet.chain,
+                            address: wallet.address.clone(),
+                            amount,
+                            fetched_at: now,
+                        },
+                    );
+                    changed = true;
+                }
+                Err(failure) => failures.push(failure),
             }
         }
 
-        // The cache only keeps the wallets still declared: removing an address
-        // from the configuration must erase it from disk.
-        let known: std::collections::BTreeSet<&str> =
-            wallets.iter().map(|w| w.address.as_str()).collect();
+        let known: BTreeSet<&str> = wallets.iter().map(|w| w.address.as_str()).collect();
         let before = stored.len();
         stored.retain(|address, _| known.contains(address.as_str()));
-        if changed || stored.len() != before {
-            let _ = self.write(&stored);
+        if (changed || stored.len() != before)
+            && let Err(failure) = self.write(&stored)
+        {
+            failures.push(failure);
         }
-        self.cached(wallets)
+        Refresh {
+            balances: Self::select(&stored, wallets),
+            failures,
+        }
     }
 
-    /// Queries the chain for one address.
-    fn fetch(&self, chain: Chain, address: &str) -> Result<f64, String> {
+    fn select(stored: &BTreeMap<String, Balance>, wallets: &[Wallet]) -> Vec<Balance> {
+        wallets
+            .iter()
+            .filter(|wallet| wallet.enabled)
+            .filter_map(|wallet| stored.get(&wallet.address).cloned())
+            .collect()
+    }
+
+    fn fetch(&self, chain: Chain, address: &str) -> Result<f64, OnchainError> {
         let base = endpoint(chain);
         match chain {
             Chain::Bitcoin => {
@@ -127,53 +166,55 @@ impl Watcher {
         }
     }
 
-    fn get(&self, url: &str) -> Result<String, String> {
-        self.agent
+    fn get(&self, url: &str) -> Result<String, OnchainError> {
+        Ok(self
+            .agent
             .get(url)
-            .call()
-            .map_err(|e| e.to_string())?
+            .call()?
             .body_mut()
             .with_config()
             .limit(MAX_RESPONSE_BYTES)
-            .read_to_string()
-            .map_err(|e| e.to_string())
+            .read_to_string()?)
     }
 
-    fn rpc(&self, url: &str, method: &str, params: &[serde_json::Value]) -> Result<String, String> {
+    fn rpc(
+        &self,
+        url: &str,
+        method: &str,
+        params: &[serde_json::Value],
+    ) -> Result<String, OnchainError> {
         let request = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": method,
             "params": params,
         });
-        self.agent
+        Ok(self
+            .agent
             .post(url)
-            .send_json(&request)
-            .map_err(|e| e.to_string())?
+            .send_json(&request)?
             .body_mut()
             .with_config()
             .limit(MAX_RESPONSE_BYTES)
-            .read_to_string()
-            .map_err(|e| e.to_string())
+            .read_to_string()?)
     }
 
-    fn read(&self) -> BTreeMap<String, Balance> {
-        // An unreadable cache is treated as missing: never an error.
-        std::fs::read_to_string(&self.path)
-            .ok()
-            .and_then(|raw| serde_json::from_str(&raw).ok())
-            .unwrap_or_default()
+    fn read(&self) -> Result<BTreeMap<String, Balance>, OnchainError> {
+        match std::fs::read_to_string(&self.path) {
+            Ok(raw) => Ok(serde_json::from_str(&raw)?),
+            Err(absent) if absent.kind() == io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+            Err(unreadable) => Err(unreadable.into()),
+        }
     }
 
-    fn write(&self, balances: &BTreeMap<String, Balance>) -> std::io::Result<()> {
+    fn write(&self, balances: &BTreeMap<String, Balance>) -> Result<(), OnchainError> {
         if let Some(dir) = self.path.parent() {
             crate::paths::ensure_dir(dir)?;
         }
         let tmp = self.path.with_extension("json.tmp");
-        let bytes = serde_json::to_vec(balances)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        std::fs::write(&tmp, bytes)?;
-        std::fs::rename(&tmp, &self.path)
+        std::fs::write(&tmp, serde_json::to_vec(balances)?)?;
+        std::fs::rename(&tmp, &self.path)?;
+        Ok(())
     }
 }
 

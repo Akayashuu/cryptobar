@@ -163,7 +163,6 @@ fn the_backoff_keeps_the_api_from_being_hammered_after_a_failure() {
     );
     broken.markets_cached(&ids(), &vs).unwrap();
     broken.markets_cached(&ids(), &vs).unwrap();
-    // The second call is blocked by the backoff: a single network request.
     assert_eq!(broken.source().calls.get(), 1);
 }
 

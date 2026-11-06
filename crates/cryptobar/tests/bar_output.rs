@@ -3,8 +3,6 @@
 //! The cache is seeded by hand: the CoinGecko client is therefore never called,
 //! which makes these tests hermetic and fast.
 
-// Indexing a `serde_json::Value` returns `Null` instead of panicking: the lint
-// does not apply here, and a test has to stay readable.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
 use std::path::Path;
@@ -73,7 +71,6 @@ fn cryptobar(env: &Env) -> Command {
     let mut cmd = Command::cargo_bin("cryptobar").unwrap();
     cmd.env("CRYPTOBAR_CACHE_DIR", &env.cache)
         .env("CRYPTOBAR_RUNTIME_DIR", &env.runtime)
-        // Unreachable base: no test may depend on the network.
         .env("CRYPTOBAR_API_BASE", "http://127.0.0.1:1/api")
         .arg("--config")
         .arg(&env.config);
@@ -118,8 +115,6 @@ fn next_switches_the_displayed_quote() {
 #[test]
 fn without_cache_or_network_the_module_stays_valid() {
     let env = setup();
-    // No cache entry and no network allowed: the output has to stay JSON
-    // Waybar can use rather than an error.
     let output = cryptobar(&env).arg("bar").output().unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
     let value: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();

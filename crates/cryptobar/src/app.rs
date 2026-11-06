@@ -6,15 +6,33 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use anyhow::Result;
-
-use crate::config::Config;
+use crate::config::{Config, ConfigError};
+use crate::paths::{self, PathsError};
 use crate::source::cache::CachedSource;
 use crate::source::coingecko::CoinGecko;
-use crate::state::State;
+use crate::source::icons::IconError;
+use crate::state::{State, StateError};
+use crate::waybar_signal::{self, SignalError};
 
 /// How long a manual selection suspends the rotation.
 const MANUAL_HOLD: u64 = 300;
+
+/// Failures of the application context.
+#[derive(Debug, thiserror::Error)]
+pub enum AppError {
+    #[error("could not resolve the directories")]
+    Paths(#[from] PathsError),
+    #[error("could not load the configuration")]
+    Config(#[from] ConfigError),
+    #[error("could not access the runtime state")]
+    State(#[from] StateError),
+    #[error("could not download a logo")]
+    Icon(#[from] IconError),
+    #[error("could not signal Waybar")]
+    Signal(#[from] SignalError),
+    #[error("could not send the desktop notification")]
+    Alert(#[from] crate::alerts::AlertError),
+}
 
 pub struct App {
     pub config: Config,
@@ -30,22 +48,18 @@ impl App {
     /// # Errors
     /// Fails when the configuration is unreadable or invalid, or when the XDG
     /// directories cannot be resolved.
-    pub fn new(config_path: Option<PathBuf>) -> Result<Self> {
+    pub fn new(config_path: Option<PathBuf>) -> Result<Self, AppError> {
         let config_path = if let Some(path) = config_path {
             path
         } else {
-            // `Config::load` creates the file on first run: resolve the path
-            // first so it can be edited afterwards.
-            let path = crate::paths::config_file()?;
+            let path = paths::config_file()?;
             if !path.exists() {
                 Config::write_default(&path, false)?;
             }
             path
         };
         let config = Config::load_from(&config_path)?;
-        let cache_dir = crate::paths::cache_dir()?;
-        // The cache TTL is the refresh interval: the bar can tick faster
-        // without ever triggering an extra request.
+        let cache_dir = paths::cache_dir()?;
         let ttl = Duration::from_secs(config.refresh_interval);
         let source = CachedSource::new(CoinGecko::new(), cache_dir.clone(), ttl);
         Ok(Self {
@@ -79,7 +93,7 @@ impl App {
     ///
     /// # Errors
     /// Fails when the configuration has become invalid.
-    pub fn reload(&self) -> Result<Self> {
+    pub fn reload(&self) -> Result<Self, AppError> {
         Self::new(Some(self.config_path.clone()))
     }
 
@@ -93,24 +107,29 @@ impl App {
     ///
     /// The agent passed in is reused across calls: a whole list costs a single
     /// connection.
-    #[must_use]
+    ///
+    /// # Errors
+    /// See [`IconError`]: a failed download or store, or an image that is not a PNG.
     pub fn icon_for(
         &self,
         id: &str,
         url: Option<&str>,
         agent: &mut Option<ureq::Agent>,
-    ) -> Option<String> {
+    ) -> Result<Option<String>, IconError> {
         crate::source::icons::ensure(&self.cache_dir, id, url, agent)
     }
 
     /// Attaches the logos, downloading the missing ones. Reserved for paths
-    /// where a few hundred milliseconds go unnoticed.
-    pub fn fetch_icons(&self, quotes: &mut [crate::model::Quote]) {
-        crate::source::icons::fetch_missing(&self.cache_dir, quotes);
+    /// where a few hundred milliseconds go unnoticed. The failed downloads are
+    /// returned, the quotes keep their badge for them.
+    #[must_use]
+    pub fn fetch_icons(&self, quotes: &mut [crate::model::Quote]) -> Vec<IconError> {
+        crate::source::icons::fetch_missing(&self.cache_dir, quotes)
     }
 
-    #[must_use]
-    pub fn state(&self) -> State {
+    /// # Errors
+    /// Fails when the state file exists but cannot be read.
+    pub fn state(&self) -> Result<State, StateError> {
         State::load(&self.state_path)
     }
 
@@ -118,24 +137,31 @@ impl App {
     ///
     /// # Errors
     /// Propagates the write errors.
-    pub fn save_state(&self, state: &State) -> Result<()> {
-        state.save(&self.state_path)?;
-        Ok(())
+    pub fn save_state(&self, state: &State) -> Result<(), StateError> {
+        state.save(&self.state_path)
     }
 
     /// Index of the cryptocurrency to display right now.
-    #[must_use]
-    pub fn active_index(&self) -> usize {
-        self.state().effective_index(
+    ///
+    /// # Errors
+    /// See [`App::state`].
+    pub fn active_index(&self) -> Result<usize, StateError> {
+        Ok(self.state()?.effective_index(
             self.config.coins.len(),
             self.config.cycle_interval,
             MANUAL_HOLD,
-        )
+        ))
     }
 
-    /// Wakes Waybar up when a signal number is configured. A failure is never
-    /// fatal: the user may simply not have Waybar running.
-    pub fn notify(&self) {
-        let _ = crate::waybar_signal::notify_waybar(self.config.waybar_signal);
+    /// Wakes Waybar up when a signal number is configured. Waybar not running is
+    /// the normal state of a desktop without it, so it is not a failure.
+    ///
+    /// # Errors
+    /// Fails when the signal cannot be built or delivered.
+    pub fn notify(&self) -> Result<(), SignalError> {
+        match waybar_signal::notify_waybar(self.config.waybar_signal) {
+            Ok(_) | Err(SignalError::NotFound) => Ok(()),
+            Err(failure) => Err(failure),
+        }
     }
 }

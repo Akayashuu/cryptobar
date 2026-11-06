@@ -1,15 +1,15 @@
-use anyhow::Result;
 use toml_edit::{Item, Value};
 
 use crate::config::Config;
 use crate::model::Currency;
 
 use super::editor::Editor;
+use super::error::EditError;
 
 impl Editor {
     /// # Errors
     /// See [`Self::apply`].
-    pub fn set_currency(&self, currency: &Currency) -> Result<Config> {
+    pub fn set_currency(&self, currency: &Currency) -> Result<Config, EditError> {
         self.set_value("currency", currency.as_str().into())
     }
 
@@ -17,7 +17,7 @@ impl Editor {
     ///
     /// # Errors
     /// See [`Self::apply`].
-    pub fn set_decimals(&self, decimals: Option<u8>) -> Result<Config> {
+    pub fn set_decimals(&self, decimals: Option<u8>) -> Result<Config, EditError> {
         let value = match decimals {
             Some(n) => Value::from(i64::from(n)),
             None => Value::from("auto"),
@@ -27,27 +27,25 @@ impl Editor {
 
     /// # Errors
     /// See [`Self::apply`].
-    pub fn set_integer(&self, key: &str, value: i64) -> Result<Config> {
+    pub fn set_integer(&self, key: &str, value: i64) -> Result<Config, EditError> {
         self.set_value(key, value.into())
     }
 
     /// # Errors
     /// See [`Self::apply`].
-    pub fn set_bool(&self, key: &str, value: bool) -> Result<Config> {
+    pub fn set_bool(&self, key: &str, value: bool) -> Result<Config, EditError> {
         self.set_value(key, value.into())
     }
 
     /// # Errors
     /// See [`Self::apply`].
-    pub fn set_string(&self, key: &str, value: &str) -> Result<Config> {
+    pub fn set_string(&self, key: &str, value: &str) -> Result<Config, EditError> {
         self.set_value(key, value.into())
     }
 
-    fn set_value(&self, key: &str, value: Value) -> Result<Config> {
+    fn set_value(&self, key: &str, value: Value) -> Result<Config, EditError> {
         let key = key.to_owned();
         self.apply(move |document| {
-            // A key already present keeps its position and its comment: only
-            // the value is replaced.
             let decor = document
                 .get(&key)
                 .and_then(Item::as_value)

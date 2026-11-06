@@ -1,10 +1,10 @@
-use anyhow::{Context as _, Result, bail};
 use toml_edit::{DocumentMut, Item, Value};
 
 use crate::config::Config;
 use crate::model::CoinId;
 
 use super::editor::Editor;
+use super::error::EditError;
 
 impl Editor {
     /// Adds an alert on a cryptocurrency.
@@ -18,9 +18,9 @@ impl Editor {
         above: Option<f64>,
         below: Option<f64>,
         change_pct: Option<f64>,
-    ) -> Result<Config> {
+    ) -> Result<Config, EditError> {
         if above.is_none() && below.is_none() && change_pct.is_none() {
-            bail!("an alert has to define at least one condition");
+            return Err(EditError::AlertWithoutCondition);
         }
         let key = id.as_str().to_owned();
         self.apply(move |document| {
@@ -46,11 +46,11 @@ impl Editor {
     /// # Errors
     /// Fails when the index is out of the list, or for the reasons of
     /// [`Self::apply`].
-    pub fn remove_alert(&self, index: usize) -> Result<Config> {
+    pub fn remove_alert(&self, index: usize) -> Result<Config, EditError> {
         self.apply(move |document| {
             let array = alerts_array(document)?;
             if index >= array.len() {
-                bail!("no alert at index {index}");
+                return Err(EditError::NoAlert(index));
             }
             array.remove(index);
             Ok(())
@@ -58,7 +58,7 @@ impl Editor {
     }
 }
 
-fn alerts_array(document: &mut DocumentMut) -> Result<&mut toml_edit::ArrayOfTables> {
+fn alerts_array(document: &mut DocumentMut) -> Result<&mut toml_edit::ArrayOfTables, EditError> {
     if !document.get("alerts").is_some_and(Item::is_array_of_tables) {
         document.insert(
             "alerts",
@@ -68,7 +68,7 @@ fn alerts_array(document: &mut DocumentMut) -> Result<&mut toml_edit::ArrayOfTab
     document
         .get_mut("alerts")
         .and_then(Item::as_array_of_tables_mut)
-        .context("`alerts` is not an array of tables")
+        .ok_or(EditError::AlertsNotArray)
 }
 
 #[cfg(test)]

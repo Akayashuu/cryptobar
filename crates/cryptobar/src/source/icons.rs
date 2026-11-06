@@ -1,7 +1,7 @@
 //! Official cryptocurrency logos, downloaded once then served from disk.
 //!
 //! The source hands the image URL over with every quote. It is fetched off the
-//! critical path — never during a bar tick — and filed in the cache under the
+//! critical path, never during a bar tick, and filed in the cache under the
 //! coin id. The sizes are modest (about ten kilobytes) and the download happens
 //! only once.
 
@@ -51,42 +51,63 @@ pub fn attach(cache_dir: &Path, quotes: &mut [Quote]) {
 
 /// Downloads the missing logos, then fills [`Quote::icon`] in.
 ///
-/// Every failure is silent and harmless: the display falls back to the badge.
-/// Only call it where a few hundred milliseconds go unnoticed — `--watch` mode,
-/// `refresh`, the window.
-pub fn fetch_missing(cache_dir: &Path, quotes: &mut [Quote]) {
+/// A logo that cannot be downloaded leaves its quote on the badge: the display
+/// is degraded, not wrong. The failures are returned so the caller can report
+/// them; they never abort the refresh. Only call it where a few hundred
+/// milliseconds go unnoticed: `--watch` mode, `refresh`, the window.
+#[must_use]
+pub fn fetch_missing(cache_dir: &Path, quotes: &mut [Quote]) -> Vec<IconError> {
     let mut agent = None;
+    let mut failures = Vec::new();
     for quote in quotes.iter_mut() {
-        quote.icon = ensure(
+        match ensure(
             cache_dir,
             quote.id.as_str(),
             quote.image.as_deref(),
             &mut agent,
-        );
+        ) {
+            Ok(icon) => quote.icon = icon,
+            Err(failure) => failures.push(failure),
+        }
     }
+    failures
 }
 
-/// Path of a cryptocurrency logo, downloaded when needed, or `None` when the
-/// cache is empty and the URL is missing, off the allowed domain, or
-/// unreachable.
+/// Failures to download a cryptocurrency logo.
+#[derive(Debug, thiserror::Error)]
+pub enum IconError {
+    #[error("could not download the logo of {id}")]
+    Transport { id: String, source: ureq::Error },
+    #[error("the logo of {id} is not a PNG file")]
+    NotPng { id: String },
+    #[error("could not store the logo of {id}")]
+    Store { id: String, source: std::io::Error },
+}
+
+/// Path of a cryptocurrency logo, downloaded when needed. `Ok(None)` when the
+/// logo is not cached and its URL is missing or off the allowed domain.
 ///
 /// The agent is created on the first request then reused: a list of search
 /// results therefore opens a single connection.
-#[must_use]
+///
+/// # Errors
+/// Fails when the logo has to be downloaded and the download is refused.
 pub fn ensure(
     cache_dir: &Path,
     id: &str,
     url: Option<&str>,
     agent: &mut Option<ureq::Agent>,
-) -> Option<String> {
+) -> Result<Option<String>, IconError> {
     let file = path(cache_dir, id);
     if file.is_file() {
-        return file.to_str().map(ToOwned::to_owned);
+        return Ok(file.to_str().map(ToOwned::to_owned));
     }
-    let url = url.filter(|url| url.starts_with(IMAGE_HOST))?;
+    let Some(url) = url.filter(|url| url.starts_with(IMAGE_HOST)) else {
+        return Ok(None);
+    };
     let agent = agent.get_or_insert_with(build_agent);
-    download(agent, url, &file).ok()?;
-    file.to_str().map(ToOwned::to_owned)
+    download(agent, id, url, &file)?;
+    Ok(file.to_str().map(ToOwned::to_owned))
 }
 
 fn build_agent() -> ureq::Agent {
@@ -99,37 +120,48 @@ fn build_agent() -> ureq::Agent {
         .into()
 }
 
-/// Fetches an image and writes it atomically to its final place.
-fn download(agent: &ureq::Agent, url: &str, destination: &Path) -> std::io::Result<()> {
-    let bytes = agent
+/// Fetches an image and writes it atomically to its final place. The write goes
+/// through a temporary file, so a partial file can never be served.
+fn download(agent: &ureq::Agent, id: &str, url: &str, destination: &Path) -> Result<(), IconError> {
+    let bytes = fetch_bytes(agent, id, url)?;
+    if !bytes.starts_with(PNG_MAGIC) {
+        return Err(IconError::NotPng { id: id.to_owned() });
+    }
+    store(id, destination, &bytes)
+}
+
+fn fetch_bytes(agent: &ureq::Agent, id: &str, url: &str) -> Result<Vec<u8>, IconError> {
+    let transport = |source| IconError::Transport {
+        id: id.to_owned(),
+        source,
+    };
+    agent
         .get(url)
         .call()
-        .map_err(|e| std::io::Error::other(e.to_string()))?
+        .map_err(transport)?
         .body_mut()
         .with_config()
         .limit(MAX_ICON_BYTES)
         .read_to_vec()
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
+        .map_err(transport)
+}
 
-    if !bytes.starts_with(PNG_MAGIC) {
-        return Err(std::io::Error::other("response that is not a PNG"));
-    }
-
+fn store(id: &str, destination: &Path, bytes: &[u8]) -> Result<(), IconError> {
+    let failure = |source| IconError::Store {
+        id: id.to_owned(),
+        source,
+    };
     if let Some(parent) = destination.parent() {
-        std::fs::create_dir_all(parent)?;
+        std::fs::create_dir_all(parent).map_err(failure)?;
     }
-    // Atomic write: a partial file can never be served.
     let temporary = destination.with_extension("png.tmp");
-    {
-        let mut file = std::fs::File::create(&temporary)?;
-        file.write_all(&bytes)?;
-        file.sync_all()?;
-    }
-    std::fs::rename(&temporary, destination)
+    let mut file = std::fs::File::create(&temporary).map_err(failure)?;
+    file.write_all(bytes).map_err(failure)?;
+    file.sync_all().map_err(failure)?;
+    std::fs::rename(&temporary, destination).map_err(failure)
 }
 
 #[cfg(test)]
-// A test that cannot find what it just wrote has to stop dead.
 #[allow(clippy::unwrap_used, clippy::panic)]
 mod tests {
     use super::*;
@@ -158,7 +190,9 @@ mod tests {
     #[test]
     fn an_already_present_logo_is_attached_without_network() {
         let temporary = std::env::temp_dir().join("cryptobar-icons-attach");
-        let _ = std::fs::remove_dir_all(&temporary);
+        if temporary.exists() {
+            std::fs::remove_dir_all(&temporary).unwrap();
+        }
         std::fs::create_dir_all(dir(&temporary)).unwrap();
         std::fs::write(path(&temporary, "bitcoin"), PNG_MAGIC).unwrap();
 
@@ -170,18 +204,20 @@ mod tests {
         };
         assert!(bitcoin.icon.is_some());
         assert!(ethereum.icon.is_none());
-        let _ = std::fs::remove_dir_all(&temporary);
+        std::fs::remove_dir_all(&temporary).unwrap();
     }
 
     #[test]
     fn a_url_off_the_allowed_domain_is_ignored() {
         let temporary = std::env::temp_dir().join("cryptobar-icons-host");
-        let _ = std::fs::remove_dir_all(&temporary);
+        if temporary.exists() {
+            std::fs::remove_dir_all(&temporary).unwrap();
+        }
         let mut hostile = quote("bitcoin");
         hostile.image = Some("https://example.invalid/logo.png".into());
         let mut quotes = vec![hostile];
 
-        fetch_missing(&temporary, &mut quotes);
+        assert!(fetch_missing(&temporary, &mut quotes).is_empty());
 
         assert!(quotes.first().is_some_and(|q| q.icon.is_none()));
         assert!(!path(&temporary, "bitcoin").exists());

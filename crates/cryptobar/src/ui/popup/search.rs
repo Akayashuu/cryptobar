@@ -9,7 +9,7 @@ use crate::model::CoinId;
 use crate::source::SearchHit;
 
 use super::identity::identity_of;
-use super::model::{Ctx, Msg};
+use super::model::{Ctx, Msg, send_unless_closed};
 use super::widgets::clear;
 
 /// Delay left to typing before querying the API: below it, every letter would
@@ -103,19 +103,18 @@ impl Ctx {
         let app = self.app();
         let tx = self.tx.clone();
         std::thread::spawn(move || {
-            let outcome = app.source.search(&term).map_err(|e| e.to_string()).map(
-                |mut hits: Vec<SearchHit>| {
-                    // The logos are fetched here, on the search thread: only
-                    // those actually displayed are downloaded, and the
-                    // interface never blocks on them.
-                    let mut agent = None;
-                    for hit in hits.iter_mut().take(SEARCH_LIMIT) {
-                        hit.icon = app.icon_for(hit.id.as_str(), hit.image.as_deref(), &mut agent);
+            let mut icon_failures = Vec::new();
+            let outcome = app.source.search(&term).map(|mut hits: Vec<SearchHit>| {
+                let mut agent = None;
+                for hit in hits.iter_mut().take(SEARCH_LIMIT) {
+                    match app.icon_for(hit.id.as_str(), hit.image.as_deref(), &mut agent) {
+                        Ok(icon) => hit.icon = icon,
+                        Err(failure) => icon_failures.push(failure),
                     }
-                    hits
-                },
-            );
-            let _ = tx.send(Msg::Search(generation, outcome));
+                }
+                hits
+            });
+            send_unless_closed(&tx, Msg::Search(generation, outcome, icon_failures));
         });
     }
 }

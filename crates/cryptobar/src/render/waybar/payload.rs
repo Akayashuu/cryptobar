@@ -2,7 +2,7 @@ use serde::Serialize;
 
 /// One quote, split into display-ready fields.
 ///
-/// Bars able to compose their own layout — Quickshell, Ags, Eww — use them to
+/// Bars able to compose their own layout (Quickshell, Ags, Eww) use them to
 /// draw an aligned list and a curve, where `tooltip` would only hand them a
 /// block of text to parse.
 #[derive(Debug, Clone, Serialize, PartialEq)]

@@ -43,8 +43,8 @@ window { background-color: @theme_bg_color; }
   font-size: 26px;
   min-width: 56px;
   min-height: 56px;
-  /* Neutral fallback: a coin with no known brand colour — a search result,
-     say — stays readable instead of vanishing. */
+  /* Neutral fallback: a coin with no known brand colour, a search result,
+     say, stays readable instead of vanishing. */
   background-color: alpha(@theme_fg_color, 0.10);
   color: @theme_fg_color;
 }

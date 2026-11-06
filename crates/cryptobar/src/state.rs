@@ -2,7 +2,7 @@
 //!
 //! In `exec` mode every Waybar tick spawns a new process: the index of the
 //! displayed cryptocurrency therefore has to live on disk. It is stored under
-//! `$XDG_RUNTIME_DIR`, volatile by nature — losing it on reboot is harmless.
+//! `$XDG_RUNTIME_DIR`, volatile by nature, losing it on reboot is harmless.
 
 use std::fs::File;
 use std::io::Write as _;
@@ -10,6 +10,27 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
+
+use crate::paths::{self, PathsError};
+
+/// Failures of the runtime state file.
+#[derive(Debug, thiserror::Error)]
+pub enum StateError {
+    #[error("could not locate the runtime directory")]
+    Paths(#[from] PathsError),
+    #[error("could not create the state directory {}", path.display())]
+    Directory {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("could not write the state file {}", path.display())]
+    Write {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("could not encode the state")]
+    Encode(#[from] serde_json::Error),
+}
 
 /// Minimal persistent state.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,32 +55,41 @@ fn now() -> u64 {
 }
 
 impl State {
-    /// Reads the state, or returns the default when the file is missing or unreadable.
-    #[must_use]
-    pub fn load(path: &Path) -> Self {
-        std::fs::read_to_string(path)
-            .ok()
-            .and_then(|raw| serde_json::from_str(&raw).ok())
-            .unwrap_or_default()
+    /// Reads the state. The file is a volatile cache: when it is absent or
+    /// does not parse, the default is the answer and the next save rewrites it.
+    ///
+    /// # Errors
+    /// Only a read failure other than "not found" is an error.
+    pub fn load(path: &Path) -> Result<Self, StateError> {
+        match std::fs::read_to_string(path) {
+            Ok(raw) => Ok(serde_json::from_str(&raw).unwrap_or_default()),
+            Err(absent) if absent.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(failure) => Err(StateError::Write {
+                path: path.to_path_buf(),
+                source: failure,
+            }),
+        }
     }
 
     /// Writes the state atomically.
     ///
     /// # Errors
-    /// Propagates the I/O errors of the directory creation or of the write.
-    pub fn save(&self, path: &Path) -> std::io::Result<()> {
+    /// Fails when the directory cannot be created, the state cannot be encoded,
+    /// or the file cannot be written.
+    pub fn save(&self, path: &Path) -> Result<(), StateError> {
         if let Some(parent) = path.parent() {
-            crate::paths::ensure_dir(parent)?;
+            paths::ensure_dir(parent).map_err(|source| StateError::Directory {
+                path: parent.to_path_buf(),
+                source,
+            })?;
         }
         let tmp = path.with_extension("json.tmp");
-        {
-            let mut file = File::create(&tmp)?;
-            let bytes = serde_json::to_vec(self)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-            file.write_all(&bytes)?;
-            file.sync_all()?;
-        }
-        std::fs::rename(&tmp, path)
+        let bytes = serde_json::to_vec(self)?;
+        let written = write_synced(&tmp, &bytes).and_then(|()| std::fs::rename(&tmp, path));
+        written.map_err(|source| StateError::Write {
+            path: path.to_path_buf(),
+            source,
+        })
     }
 
     /// Moves `delta` positions through a list of `len` items and pins the
@@ -71,7 +101,6 @@ impl State {
         }
         let len_i = isize::try_from(len).unwrap_or(isize::MAX);
         let current = isize::try_from(self.index).unwrap_or(0);
-        // `rem_euclid` with a strictly positive modulus: always within 0..len.
         let next = current.saturating_add(delta).rem_euclid(len_i);
         self.index = usize::try_from(next).unwrap_or(0);
         self.rotated_at = now();
@@ -98,8 +127,6 @@ impl State {
         if len == 0 {
             return 0;
         }
-        // `checked_rem` avoids any unproven arithmetic: `len` is non-zero here,
-        // but let the compiler check it rather than asserting it.
         let index = self.index.checked_rem(len).unwrap_or(0);
         if rotate_every == 0 {
             return index;
@@ -108,8 +135,6 @@ impl State {
         if self.manual && elapsed < manual_hold {
             return index;
         }
-        // The rotation is derived from the elapsed time: no state to rewrite on
-        // every tick, which keeps `exec` mode free of side effects.
         let steps = elapsed.checked_div(rotate_every).unwrap_or(0);
         let len_u64 = u64::try_from(len).unwrap_or(u64::MAX);
         let wrapped = steps.checked_rem(len_u64).unwrap_or(0);
@@ -121,9 +146,15 @@ impl State {
     ///
     /// # Errors
     /// Propagates the runtime directory resolution error.
-    pub fn default_path() -> anyhow::Result<PathBuf> {
-        Ok(crate::paths::runtime_dir()?.join("state.json"))
+    pub fn default_path() -> Result<PathBuf, StateError> {
+        Ok(paths::runtime_dir()?.join("state.json"))
     }
+}
+
+fn write_synced(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut file = File::create(path)?;
+    file.write_all(bytes)?;
+    file.sync_all()
 }
 
 #[cfg(test)]
@@ -185,7 +216,6 @@ mod tests {
 
     #[test]
     fn the_automatic_rotation_derives_from_the_elapsed_time() {
-        // Very old `rotated_at`: the rotation had time to advance.
         let state = State {
             index: 0,
             rotated_at: 0,
@@ -218,15 +248,15 @@ mod tests {
             fired: std::collections::BTreeSet::new(),
         };
         state.save(&path).unwrap();
-        assert_eq!(State::load(&path), state);
+        assert_eq!(State::load(&path).unwrap(), state);
     }
 
     #[test]
     fn a_missing_or_corrupt_state_falls_back_to_the_default() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("state.json");
-        assert_eq!(State::load(&path), State::default());
+        assert_eq!(State::load(&path).unwrap(), State::default());
         std::fs::write(&path, b"garbage").unwrap();
-        assert_eq!(State::load(&path), State::default());
+        assert_eq!(State::load(&path).unwrap(), State::default());
     }
 }

@@ -15,9 +15,8 @@ impl Ctx {
 }
 
 /// Most concrete message of the error chain: that is the helpful one.
-pub(super) fn root_cause(error: &anyhow::Error) -> String {
-    error
-        .chain()
+pub(super) fn root_cause(error: &dyn std::error::Error) -> String {
+    std::iter::successors(Some(error), |cause| cause.source())
         .last()
         .map_or_else(|| error.to_string(), ToString::to_string)
 }

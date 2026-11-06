@@ -31,8 +31,9 @@ pub(super) fn chart(
     area.set_content_height(height);
     let points = points.to_vec();
 
+    let widget = area.downgrade();
     area.set_draw_func(move |_, ctx, width, height| {
-        draw_series(
+        let outcome = draw_series(
             ctx,
             &points,
             positive,
@@ -41,8 +42,18 @@ pub(super) fn chart(
             detailed,
             hover.as_ref().and_then(|hover| hover.get()),
         );
+        report_frame(&widget, outcome);
     });
     area
+}
+
+pub(super) fn report_frame(
+    widget: &gtk4::glib::WeakRef<gtk4::DrawingArea>,
+    outcome: Result<(), cairo::Error>,
+) {
+    if let (Err(failure), Some(area)) = (outcome, widget.upgrade()) {
+        area.set_tooltip_text(Some(&crate::report::Report(&failure).to_string()));
+    }
 }
 
 /// Draws the curve into any Cairo context.
@@ -59,14 +70,13 @@ pub(super) fn draw_series(
     area_height: f64,
     detailed: bool,
     hover: Option<f64>,
-) {
+) -> Result<(), cairo::Error> {
     let usable: Vec<f64> = points.iter().copied().filter(|v| v.is_finite()).collect();
     if usable.len() < 2 {
-        return;
+        return Ok(());
     }
     let (min, max) = crate::render::braille::bounds(&usable);
     let span = max - min;
-    // The stroke must not be clipped by the edges of the area.
     let inset = 3.0;
     let plot_height = (area_height - inset * 2.0).max(1.0);
     let last = usable.len().saturating_sub(1);
@@ -76,8 +86,6 @@ pub(super) fn draw_series(
         area_width / as_f64(last)
     };
 
-    // Guide lines: a neutral grey at low opacity shows on a light background
-    // as well as on a dark one, without competing with the curve.
     if detailed {
         ctx.set_source_rgba(0.5, 0.5, 0.5, 0.18);
         ctx.set_line_width(1.0);
@@ -87,11 +95,9 @@ pub(super) fn draw_series(
             ctx.move_to(0.0, y);
             ctx.line_to(area_width, y);
         }
-        let _ = ctx.stroke();
+        ctx.stroke()?;
     }
 
-    // The polyline is computed once then reused for the area, the stroke and
-    // the end point.
     let polyline: Vec<(f64, f64)> = usable
         .iter()
         .enumerate()
@@ -108,8 +114,6 @@ pub(super) fn draw_series(
         (0.90, 0.28, 0.30)
     };
 
-    // Area under the curve: a gradient fading downwards, to give volume
-    // without hiding the guide lines.
     ctx.move_to(0.0, area_height);
     for (x, y) in &polyline {
         ctx.line_to(*x, *y);
@@ -119,9 +123,8 @@ pub(super) fn draw_series(
     let gradient = gtk4::cairo::LinearGradient::new(0.0, 0.0, 0.0, area_height);
     gradient.add_color_stop_rgba(0.0, red, green, blue, 0.32);
     gradient.add_color_stop_rgba(1.0, red, green, blue, 0.0);
-    if ctx.set_source(&gradient).is_ok() {
-        let _ = ctx.fill();
-    }
+    ctx.set_source(&gradient)?;
+    ctx.fill()?;
 
     for (index, (x, y)) in polyline.iter().enumerate() {
         if index == 0 {
@@ -134,10 +137,8 @@ pub(super) fn draw_series(
     ctx.set_line_width(if detailed { 2.0 } else { 1.4 });
     ctx.set_line_join(gtk4::cairo::LineJoin::Round);
     ctx.set_line_cap(gtk4::cairo::LineCap::Round);
-    let _ = ctx.stroke();
+    ctx.stroke()?;
 
-    // Hover marker: a vertical stroke and a dot on the curve, at the sample
-    // closest to the pointer.
     if let Some((x, y)) = hover
         .map(|ratio| sample_at(usable.len(), ratio))
         .and_then(|index| polyline.get(index))
@@ -147,20 +148,20 @@ pub(super) fn draw_series(
         ctx.set_line_width(1.0);
         ctx.move_to(x.round() + 0.5, 0.0);
         ctx.line_to(x.round() + 0.5, area_height);
-        let _ = ctx.stroke();
+        ctx.stroke()?;
         ctx.set_source_rgb(red, green, blue);
         ctx.arc(*x, *y, 3.4, 0.0, std::f64::consts::TAU);
-        let _ = ctx.fill();
+        ctx.fill()?;
     }
 
-    // End point: the eye finds the current price immediately.
     if let Some((x, y)) = polyline.last().filter(|_| detailed) {
         let x = x.min(area_width - 4.0);
         ctx.set_source_rgba(red, green, blue, 0.25);
         ctx.arc(x, *y, 6.0, 0.0, std::f64::consts::TAU);
-        let _ = ctx.fill();
+        ctx.fill()?;
         ctx.set_source_rgb(red, green, blue);
         ctx.arc(x, *y, 2.6, 0.0, std::f64::consts::TAU);
-        let _ = ctx.fill();
+        ctx.fill()?;
     }
+    Ok(())
 }

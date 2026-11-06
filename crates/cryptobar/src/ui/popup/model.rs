@@ -1,26 +1,30 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{SendError, Sender};
 
 use gtk4::glib;
 use gtk4::{Box as GtkBox, Label};
 
 use crate::app::App;
 use crate::model::{CoinId, Quote, Range};
-use crate::source::SearchHit;
+use crate::onchain::{Balance, OnchainError};
+use crate::source::icons::IconError;
+use crate::source::{SearchHit, SourceError};
 
 /// Message sent from a worker thread up to the graphical loop.
 pub(super) enum Msg {
-    /// Results of a search, tagged by the generation that asked for them.
-    Search(u64, Result<Vec<SearchHit>, String>),
-    /// Freshly loaded quotes, with the "served from cache" flag.
-    Quotes(Vec<Quote>, bool),
-    QuotesUnavailable,
-    /// Series of a range other than 7 days, keyed by its cache key.
-    Series(String, Vec<f64>),
-    /// Freshly read balances from the watched chains.
-    Balances(Vec<crate::onchain::Balance>),
+    Search(u64, Result<Vec<SearchHit>, SourceError>, Vec<IconError>),
+    Quotes(Vec<Quote>, bool, Vec<IconError>),
+    QuotesUnavailable(SourceError),
+    Series(String, Result<Vec<f64>, SourceError>),
+    Balances(Vec<Balance>, Vec<OnchainError>),
+}
+
+pub(super) fn send_unless_closed(tx: &Sender<Msg>, message: Msg) {
+    match tx.send(message) {
+        Ok(()) | Err(SendError(_)) => {}
+    }
 }
 
 /// Live data of the window.

@@ -42,7 +42,6 @@ pub(super) fn settings_panel(config: &Config, config_path: &str) -> Settings {
         .unwrap_or(0);
     currency.set_selected(u32::try_from(selected).unwrap_or(0));
 
-    // Index 0 = "auto", then 0 to 8 decimals.
     let decimal_labels: Vec<String> = std::iter::once("auto".to_owned())
         .chain((0..=8).map(|n: u8| n.to_string()))
         .collect();
@@ -117,8 +116,6 @@ fn settings_groups(
     signal: &gtk4::SpinButton,
     terminal: &gtk4::Entry,
 ) {
-    // Three groups rather than a list of eight rows: a setting is looked up by
-    // what it affects, not by its rank in the configuration.
     for (heading, rows) in [
         (
             "QUOTES",
@@ -251,12 +248,7 @@ pub(super) fn wire_settings(ctx: &Rc<Ctx>, settings: &Settings) {
     let owner = Rc::clone(ctx);
     settings.decimals.connect_selected_notify(move |dropdown| {
         let selected = dropdown.selected();
-        let decimals = if selected == 0 {
-            None
-        } else {
-            u8::try_from(selected.saturating_sub(1)).ok()
-        };
-        let written = owner.app().editor().set_decimals(decimals);
+        let written = owner.app().editor().set_decimals(decimals_at(selected));
         owner.adopt(written, "Decimals saved");
     });
 
@@ -287,6 +279,15 @@ pub(super) fn wire_settings(ctx: &Rc<Ctx>, settings: &Settings) {
         let written = owner.app().editor().set_string("terminal", &value);
         owner.adopt(written, "Terminal saved");
     });
+}
+
+/// Decimal places of a dropdown position: position 0 is automatic and position
+/// `n` is `n - 1` decimals. A position beyond `u8` cannot come from the dropdown
+/// and reads as automatic.
+fn decimals_at(selected: u32) -> Option<u8> {
+    selected
+        .checked_sub(1)
+        .and_then(|places| u8::try_from(places).ok())
 }
 
 fn wire_spin(ctx: &Rc<Ctx>, spin: &gtk4::SpinButton, key: &'static str, message: &'static str) {

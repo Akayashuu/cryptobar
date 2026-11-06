@@ -4,7 +4,7 @@
 //! `text` and `tooltip` are read as Pango markup: anything coming from the
 //! network therefore has to be escaped.
 //!
-//! Other bars — Quickshell, Ags, Eww — consume the same JSON but display plain
+//! Other bars (Quickshell, Ags, Eww) consume the same JSON but display plain
 //! text. [`Markup::None`] then produces output without a single tag or entity.
 
 #[cfg(test)]

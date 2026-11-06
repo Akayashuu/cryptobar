@@ -111,8 +111,6 @@ fn triggers_for(
         });
     }
     if let Some(threshold) = alert.change_pct {
-        // The amplitude is absolute: a 6% drop counts as much as a 6% rise,
-        // which is what a volatility alert should do.
         let amplitude = quote
             .change_24h
             .filter(|change| change.is_finite())
@@ -151,21 +149,31 @@ pub fn diff(triggers: &[Trigger], fired: &BTreeSet<String>) -> (Vec<Trigger>, BT
     (fresh, current)
 }
 
-/// Sends a desktop notification. A missing `notify-send` or notification
-/// daemon is not an error: the bar keeps showing the alert, only the bubble is
-/// missing.
-pub fn notify(trigger: &Trigger) {
+/// Failures to run `notify-send`.
+#[derive(Debug, thiserror::Error)]
+pub enum AlertError {
+    #[error("could not run notify-send")]
+    Spawn(#[source] std::io::Error),
+    #[error("could not wait for notify-send")]
+    Wait(#[source] std::io::Error),
+}
+
+/// Sends a desktop notification. A missing `notify-send` binary or notification
+/// daemon is not a failure: the bar keeps showing the alert, only the bubble is
+/// missing. The exit status of `notify-send` is not read for the same reason.
+///
+/// # Errors
+/// Fails when `notify-send` exists but cannot be started or waited for.
+pub fn notify(trigger: &Trigger) -> Result<(), AlertError> {
     let urgency = if trigger.kind == Kind::Change {
         "normal"
     } else {
         "critical"
     };
-    let _ = std::process::Command::new("notify-send")
+    let spawned = std::process::Command::new("notify-send")
         .arg("--app-name=cryptobar")
         .arg("--icon=network-transmit-receive")
         .arg(format!("--urgency={urgency}"))
-        // One alert per coin and per condition: the bubbles replace each other
-        // instead of stacking up when the price oscillates around the threshold.
         .arg(format!(
             "--hint=string:x-canonical-private-synchronous:cryptobar-{}",
             trigger.key
@@ -174,8 +182,12 @@ pub fn notify(trigger: &Trigger) {
         .arg(&trigger.body)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(|mut child| child.wait());
+        .spawn();
+    match spawned {
+        Ok(mut child) => child.wait().map(drop).map_err(AlertError::Wait),
+        Err(absent) if absent.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(failure) => Err(AlertError::Spawn(failure)),
+    }
 }
 
 #[cfg(test)]
@@ -295,13 +307,11 @@ mod tests {
             &evaluate(&config, &[quote("bitcoin", "BTC", 101_000.0, None)]),
             &BTreeSet::new(),
         );
-        // The price falls back under the threshold: no condition holds any more.
         let (_, cleared) = diff(
             &evaluate(&config, &[quote("bitcoin", "BTC", 90_000.0, None)]),
             &fired,
         );
         assert_eq!(cleared.len(), 0);
-        // Then it rises above again: it has to notify once more.
         let (fresh, _) = diff(
             &evaluate(&config, &[quote("bitcoin", "BTC", 101_000.0, None)]),
             &cleared,
