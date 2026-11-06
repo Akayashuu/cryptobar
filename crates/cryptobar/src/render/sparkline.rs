@@ -1,6 +1,8 @@
 //! Sparkline made of Unicode blocks. Pure function, no I/O.
 
-const LEVELS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+use crate::numeric::{saturating_index, to_f64};
+
+const LEVELS: &[char] = &['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 const FLAT_LEVEL: char = '▄';
 
 /// Reduces the series to at most `width` points by averaging contiguous slices.
@@ -10,18 +12,24 @@ pub(crate) fn downsample(points: &[f64], width: usize) -> Vec<f64> {
         return points.to_vec();
     }
     let mut out = Vec::with_capacity(width);
-    for bucket in 0..width {
-        let start = bucket.saturating_mul(points.len()) / width;
-        let end = bucket.saturating_add(1).saturating_mul(points.len()) / width;
-        let end = end.max(start.saturating_add(1));
-        if let Some(slice) = points.get(start..end.min(points.len()))
-            && !slice.is_empty()
-        {
-            let sum: f64 = slice.iter().sum();
-            out.push(sum / slice.len() as f64);
-        }
-    }
+    out.extend((0..width).filter_map(|bucket| bucket_mean(points, bucket, width)));
     out
+}
+
+fn bucket_mean(points: &[f64], bucket: usize, width: usize) -> Option<f64> {
+    let len = points.len();
+    let start = bucket.saturating_mul(len).checked_div(width)?;
+    let end = bucket
+        .saturating_add(1)
+        .saturating_mul(len)
+        .checked_div(width)?
+        .max(start.saturating_add(1));
+    let slice = points.get(start..end.min(len))?;
+    if slice.is_empty() {
+        return None;
+    }
+    let sum: f64 = slice.iter().sum();
+    Some(sum / to_f64(slice.len()))
 }
 
 /// Renders a numeric series as a sparkline of at most `width` characters.
@@ -52,11 +60,9 @@ pub fn sparkline(points: &[f64], width: usize) -> String {
     sampled
         .iter()
         .map(|value| {
-            let index = (((value - min) / amplitude) * last_level as f64).round() as usize;
-            LEVELS
-                .get(index.min(last_level))
-                .copied()
-                .unwrap_or(FLAT_LEVEL)
+            let scaled = ((value - min) / amplitude) * to_f64(last_level);
+            let level = saturating_index(scaled.round(), last_level);
+            LEVELS.get(level).copied().unwrap_or(FLAT_LEVEL)
         })
         .collect()
 }

@@ -18,6 +18,7 @@ terminal_size = "0.4"
 thiserror = "2"
 toml = "0.9"
 toml_edit = "0.25"
+num-traits = "0.2"
 ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "json"] }
 gtk4 = { version = "0.9" }
 # The PNG encoding of Cairo is not enabled by gtk4: the window needs it to

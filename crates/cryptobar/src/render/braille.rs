@@ -4,9 +4,12 @@
 //! the pattern. As a cell offers eight dots, the vertical resolution is four
 //! times that of block characters.
 
+use crate::numeric::{saturating_index, to_f64};
+
 const DOTS: [[u8; 4]; 2] = [[0x01, 0x02, 0x04, 0x40], [0x08, 0x10, 0x20, 0x80]];
 
 /// Braille dot canvas, addressable in pixels.
+#[derive(Debug)]
 pub struct Canvas {
     cols: usize,
     rows: usize,
@@ -71,21 +74,6 @@ impl Canvas {
     }
 }
 
-/// `usize` → `f64` conversion for position maths. Terminal dimensions fit very
-/// comfortably in an `f64` mantissa; the degenerate case is clamped rather than
-/// left imprecise.
-#[must_use]
-pub fn as_f64(value: usize) -> f64 {
-    value.min(1 << 52) as f64
-}
-
-fn as_usize(value: f64, max: usize) -> usize {
-    if !value.is_finite() || value <= 0.0 {
-        return 0;
-    }
-    (value as usize).min(max)
-}
-
 /// Vertical bounds of a series, widened when the series is flat.
 #[must_use]
 pub fn bounds(points: &[f64]) -> (f64, f64) {
@@ -120,10 +108,10 @@ pub fn plot(points: &[f64], cols: usize, rows: usize) -> Vec<String> {
         let ratio = if last_x == 0 {
             0.0
         } else {
-            as_f64(x) / as_f64(last_x)
+            to_f64(x) / to_f64(last_x)
         };
-        let position = ratio * as_f64(points.len().saturating_sub(1));
-        let index = as_usize(position.round(), points.len().saturating_sub(1));
+        let position = ratio * to_f64(points.len().saturating_sub(1));
+        let index = saturating_index(position.round(), points.len().saturating_sub(1));
         let Some(value) = points.get(index) else {
             continue;
         };
@@ -131,7 +119,7 @@ pub fn plot(points: &[f64], cols: usize, rows: usize) -> Vec<String> {
             continue;
         }
         let normalized = ((value - min) / span).clamp(0.0, 1.0);
-        let y = as_usize(((1.0 - normalized) * as_f64(last_y)).round(), last_y);
+        let y = saturating_index(((1.0 - normalized) * to_f64(last_y)).round(), last_y);
         if let Some((prev_x, prev_y)) = previous {
             connect(&mut canvas, prev_x, prev_y, x, y);
         }

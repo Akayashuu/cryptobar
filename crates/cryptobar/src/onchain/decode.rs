@@ -1,6 +1,7 @@
 use serde::Deserialize;
 
 use super::error::OnchainError;
+use crate::numeric::to_f64;
 
 /// Bitcoin balance: what came in minus what went out, confirmed as well as
 /// pending, converted from satoshis to BTC.
@@ -26,7 +27,7 @@ pub(super) fn decode_bitcoin(body: &str) -> Result<f64, OnchainError> {
         .saturating_sub(parsed.chain_stats.spent_txo_sum)
         .saturating_add(parsed.mempool_stats.funded_txo_sum)
         .saturating_sub(parsed.mempool_stats.spent_txo_sum);
-    Ok(units(sats_to_f64(sats), 100_000_000.0))
+    Ok(units(to_f64(sats), 100_000_000.0))
 }
 
 /// Ethereum balance: a hexadecimal integer in wei.
@@ -40,7 +41,7 @@ pub(super) fn decode_ethereum(body: &str) -> Result<f64, OnchainError> {
     let raw = parsed.result.ok_or(OnchainError::MissingBalance)?;
     let digits = raw.trim_start_matches("0x");
     let wei = u128::from_str_radix(digits, 16)?;
-    Ok(units(wei_to_f64(wei), 1e18))
+    Ok(units(to_f64(wei), 1e18))
 }
 
 /// Solana balance: an integer number of lamports.
@@ -60,7 +61,7 @@ pub(super) fn decode_solana(body: &str) -> Result<f64, OnchainError> {
         .result
         .and_then(|result| result.value)
         .ok_or(OnchainError::MissingBalance)?;
-    Ok(units(lamports_to_f64(lamports), 1e9))
+    Ok(units(to_f64(lamports), 1e9))
 }
 
 fn units(base: f64, divisor: f64) -> f64 {
@@ -69,18 +70,6 @@ fn units(base: f64, divisor: f64) -> f64 {
     }
     let value = base / divisor;
     if value.is_finite() { value } else { 0.0 }
-}
-
-fn sats_to_f64(value: i64) -> f64 {
-    value as f64
-}
-
-fn wei_to_f64(value: u128) -> f64 {
-    value as f64
-}
-
-fn lamports_to_f64(value: u64) -> f64 {
-    value as f64
 }
 
 #[cfg(test)]

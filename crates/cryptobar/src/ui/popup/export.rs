@@ -5,7 +5,7 @@ use gtk4::prelude::*;
 use gtk4::{Box as GtkBox, Button};
 
 use crate::model::{Quote, Range};
-use crate::render::braille::as_f64;
+use crate::numeric::to_f64;
 
 use super::chart::{CHART_HEIGHT, CHART_WIDTH, draw_series};
 use super::error::PopupError;
@@ -96,7 +96,7 @@ fn export_csv(points: &[f64], symbol: &str, range: Range) -> Result<PathBuf, Pop
         let behind = if last == 0 {
             0.0
         } else {
-            as_f64(last.saturating_sub(index)) / as_f64(last) * range.span_minutes()
+            to_f64(last.saturating_sub(index)) / to_f64(last) * range.span_minutes()
         };
         let row = format!("{index},{behind:.0},{value}\n");
         out.push_str(&row);

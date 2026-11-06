@@ -10,6 +10,7 @@ pub mod commands;
 pub mod config;
 pub mod config_edit;
 pub mod model;
+mod numeric;
 pub mod onchain;
 pub mod output;
 pub mod paths;

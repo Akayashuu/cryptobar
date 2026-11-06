@@ -6,7 +6,7 @@ use gtk4::{Align, Box as GtkBox, Label, Orientation};
 
 use crate::config::{Config, MIN_REFRESH_INTERVAL};
 use crate::model::Currency;
-use crate::render::braille::as_f64;
+use crate::numeric::to_f64;
 use crate::render::format;
 
 use super::model::Ctx;
@@ -53,13 +53,13 @@ pub(super) fn settings_panel(config: &Config, config_path: &str) -> Settings {
     });
 
     let refresh = spin(
-        as_f64_u64(MIN_REFRESH_INTERVAL),
+        to_f64(MIN_REFRESH_INTERVAL),
         3600.0,
         5.0,
-        as_f64_u64(config.refresh_interval),
+        to_f64(config.refresh_interval),
     );
-    let cycle = spin(0.0, 3600.0, 5.0, as_f64_u64(config.cycle_interval));
-    let sparkline_width = spin(1.0, 64.0, 1.0, as_f64(config.sparkline_width));
+    let cycle = spin(0.0, 3600.0, 5.0, to_f64(config.cycle_interval));
+    let sparkline_width = spin(1.0, 64.0, 1.0, to_f64(config.sparkline_width));
     let signal = spin(1.0, 30.0, 1.0, f64::from(config.waybar_signal));
 
     let sparkline = gtk4::Switch::new();
@@ -71,26 +71,7 @@ pub(super) fn settings_panel(config: &Config, config_path: &str) -> Settings {
     terminal.set_text(&config.terminal);
     terminal.set_width_chars(14);
 
-    settings_groups(
-        &grid,
-        &currency,
-        &refresh,
-        &cycle,
-        &decimals,
-        &sparkline,
-        &sparkline_width,
-        &signal,
-        &terminal,
-    );
-
-    let path = Label::new(Some(config_path));
-    path.add_css_class("muted");
-    path.set_halign(Align::Start);
-    path.set_selectable(true);
-    path.set_ellipsize(gtk4::pango::EllipsizeMode::Middle);
-    grid.append(&path);
-
-    Settings {
+    let settings = Settings {
         panel: grid,
         currency,
         decimals,
@@ -100,20 +81,31 @@ pub(super) fn settings_panel(config: &Config, config_path: &str) -> Settings {
         sparkline_width,
         signal,
         terminal,
-    }
+    };
+    settings_groups(&settings);
+
+    let path = Label::new(Some(config_path));
+    path.add_css_class("muted");
+    path.set_halign(Align::Start);
+    path.set_selectable(true);
+    path.set_ellipsize(gtk4::pango::EllipsizeMode::Middle);
+    settings.panel.append(&path);
+
+    settings
 }
 
-fn settings_groups(
-    grid: &GtkBox,
-    currency: &gtk4::DropDown,
-    refresh: &gtk4::SpinButton,
-    cycle: &gtk4::SpinButton,
-    decimals: &gtk4::DropDown,
-    sparkline: &gtk4::Switch,
-    sparkline_width: &gtk4::SpinButton,
-    signal: &gtk4::SpinButton,
-    terminal: &gtk4::Entry,
-) {
+fn settings_groups(settings: &Settings) {
+    let Settings {
+        panel: grid,
+        currency,
+        refresh,
+        cycle,
+        decimals,
+        sparkline,
+        sparkline_width,
+        signal,
+        terminal,
+    } = settings;
     for (heading, rows) in [
         (
             "QUOTES",
@@ -218,10 +210,6 @@ fn spin(min: f64, max: f64, step: f64, value: f64) -> gtk4::SpinButton {
     spin
 }
 
-fn as_f64_u64(value: u64) -> f64 {
-    as_f64(usize::try_from(value).unwrap_or(usize::MAX))
-}
-
 pub(super) fn wire_settings(ctx: &Rc<Ctx>, settings: &Settings) {
     let owner = Rc::clone(ctx);
     let currencies = Currency::all();
@@ -240,11 +228,14 @@ pub(super) fn wire_settings(ctx: &Rc<Ctx>, settings: &Settings) {
         );
     });
 
-    let owner = Rc::clone(ctx);
+    let decimals_owner = Rc::clone(ctx);
     settings.decimals.connect_selected_notify(move |dropdown| {
         let selected = dropdown.selected();
-        let written = owner.app().editor().set_decimals(decimals_at(selected));
-        owner.adopt(written, "Decimals saved");
+        let written = decimals_owner
+            .app()
+            .editor()
+            .set_decimals(decimals_at(selected));
+        decimals_owner.adopt(written, "Decimals saved");
     });
 
     wire_spin(ctx, &settings.refresh, "refresh_interval", "Interval saved");
@@ -257,22 +248,22 @@ pub(super) fn wire_settings(ctx: &Rc<Ctx>, settings: &Settings) {
     );
     wire_spin(ctx, &settings.signal, "waybar_signal", "Signal saved");
 
-    let owner = Rc::clone(ctx);
+    let sparkline_owner = Rc::clone(ctx);
     settings.sparkline.connect_state_set(move |_, active| {
-        let written = owner.app().editor().set_bool("sparkline", active);
-        owner.adopt(written, "Sparkline saved");
+        let written = sparkline_owner.app().editor().set_bool("sparkline", active);
+        sparkline_owner.adopt(written, "Sparkline saved");
         glib::Propagation::Proceed
     });
 
-    let owner = Rc::clone(ctx);
+    let terminal_owner = Rc::clone(ctx);
     settings.terminal.connect_activate(move |entry| {
         let value = entry.text().trim().to_owned();
         if value.is_empty() {
-            owner.note("The terminal cannot be empty", true);
+            terminal_owner.note("The terminal cannot be empty", true);
             return;
         }
-        let written = owner.app().editor().set_string("terminal", &value);
-        owner.adopt(written, "Terminal saved");
+        let written = terminal_owner.app().editor().set_string("terminal", &value);
+        terminal_owner.adopt(written, "Terminal saved");
     });
 }
 

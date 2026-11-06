@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use gtk4::prelude::*;
 
-use crate::render::braille::as_f64;
+use crate::numeric::to_f64;
 
 use super::hover::sample_at;
 
@@ -31,13 +31,13 @@ pub(super) fn chart(
     let points = points.to_vec();
 
     let widget = area.downgrade();
-    area.set_draw_func(move |_, ctx, width, height| {
+    area.set_draw_func(move |_, ctx, draw_width, draw_height| {
         let outcome = draw_series(
             ctx,
             &points,
             positive,
-            f64::from(width),
-            f64::from(height),
+            f64::from(draw_width),
+            f64::from(draw_height),
             detailed,
             hover.as_ref().and_then(|hover| hover.get()),
         );
@@ -81,7 +81,7 @@ pub(super) fn draw_series(
     let step = if last == 0 {
         area_width
     } else {
-        area_width / as_f64(last)
+        area_width / to_f64(last)
     };
 
     if detailed {
@@ -100,7 +100,7 @@ pub(super) fn draw_series(
         .iter()
         .enumerate()
         .map(|(index, value)| {
-            let x = as_f64(index) * step;
+            let x = to_f64(index) * step;
             let ratio = ((value - min) / span).clamp(0.0, 1.0);
             (x, inset + (1.0 - ratio) * plot_height)
         })

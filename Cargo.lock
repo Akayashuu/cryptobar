@@ -275,6 +275,7 @@ dependencies = [
  "clap",
  "etcetera",
  "gtk4",
+ "num-traits",
  "predicates",
  "proptest",
  "rustix",

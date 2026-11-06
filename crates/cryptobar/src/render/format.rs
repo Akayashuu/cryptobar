@@ -1,6 +1,7 @@
 //! Number formatting for display. Pure functions, no I/O.
 
 use crate::model::Currency;
+use crate::numeric::saturating_index;
 
 const THIN_SPACE: char = '\u{202f}';
 const MISSING: &str = "—";
@@ -24,8 +25,8 @@ fn auto_decimals(value: f64) -> u8 {
     } else if magnitude >= 0.01 {
         4
     } else if magnitude > 0.0 {
-        let leading_zeros = (-magnitude.log10().floor()) as i32;
-        u8::try_from(leading_zeros.clamp(0, 7).saturating_add(3)).unwrap_or(10)
+        let leading_zeros = saturating_index((-magnitude.log10()).floor(), 7);
+        u8::try_from(leading_zeros.saturating_add(3)).unwrap_or(10)
     } else {
         2
     }
@@ -37,7 +38,7 @@ fn group_thousands(rendered: &str) -> String {
         None => (rendered, None),
     };
     let (sign, digits) = match int_part.strip_prefix('-') {
-        Some(rest) => ("-", rest),
+        Some(unsigned) => ("-", unsigned),
         None => ("", int_part),
     };
 
@@ -143,7 +144,6 @@ pub fn percent(value: Option<f64>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Currency;
 
     fn eur() -> Currency {
         Currency::parse("eur").unwrap()

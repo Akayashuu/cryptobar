@@ -4,7 +4,7 @@ use gtk4::Label;
 use gtk4::prelude::*;
 
 use crate::model::{Currency, Range};
-use crate::render::braille::as_f64;
+use crate::numeric::{saturating_index, to_f64};
 use crate::render::format;
 
 use super::chart::Hover;
@@ -12,9 +12,7 @@ use super::chart::Hover;
 /// Index of the sample sitting at the given relative abscissa.
 pub(super) fn sample_at(len: usize, ratio: f64) -> usize {
     let last = len.saturating_sub(1);
-    let index = (ratio.clamp(0.0, 1.0) * as_f64(last)).round();
-    let index = index as usize;
-    index.min(last)
+    saturating_index((ratio.clamp(0.0, 1.0) * to_f64(last)).round(), last)
 }
 
 fn age_at(range: Range, len: usize, index: usize) -> String {
@@ -22,7 +20,7 @@ fn age_at(range: Range, len: usize, index: usize) -> String {
     if last == 0 {
         return "now".to_owned();
     }
-    let behind = as_f64(last.saturating_sub(index)) / as_f64(last);
+    let behind = to_f64(last.saturating_sub(index)) / to_f64(last);
     let minutes = behind * range.span_minutes();
     if minutes < 1.0 {
         "now".to_owned()
