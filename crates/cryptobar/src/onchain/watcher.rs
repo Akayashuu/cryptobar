@@ -1,4 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::env;
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -9,8 +11,6 @@ use super::decode::{decode_bitcoin, decode_ethereum, decode_solana};
 use super::error::OnchainError;
 use super::wallet::Wallet;
 use crate::paths;
-use std::env;
-use std::fs;
 
 const USER_AGENT: &str = concat!(
     "cryptobar/",

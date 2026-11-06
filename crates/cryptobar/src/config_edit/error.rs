@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use crate::config::ConfigError;
 use crate::model::CoinId;
 use crate::onchain::OnchainError;
+use crate::paths::PathsError;
 
 /// Failures of the configuration editor.
 #[derive(Debug, thiserror::Error)]
@@ -32,11 +33,11 @@ pub enum EditError {
     /// The directory of the configuration file could not be created.
     #[error("creating {}", .path.display())]
     Directory {
-        /// Directory that could not be created.
+        /// Directory that could not be prepared.
         path: PathBuf,
-        /// The operating system error.
+        /// Why the directory could not be prepared.
         #[source]
-        source: io::Error,
+        source: PathsError,
     },
     /// The configuration file could not be written.
     #[error("writing {}", .path.display())]

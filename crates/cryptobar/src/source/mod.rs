@@ -8,6 +8,7 @@ pub mod icons;
 use std::io;
 
 use crate::model::{CoinId, Currency, Quote, Range, Series};
+use crate::paths::PathsError;
 
 /// Failures of the market data sources.
 #[derive(Debug, thiserror::Error)]
@@ -36,6 +37,9 @@ pub enum SourceError {
     /// The disk cache could not be read or written.
     #[error("local cache")]
     Cache(#[from] io::Error),
+    /// The cache directory could not be prepared.
+    #[error(transparent)]
+    Directory(#[from] PathsError),
 }
 
 /// A cryptocurrency returned by a search.

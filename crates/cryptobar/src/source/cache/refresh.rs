@@ -1,13 +1,13 @@
-use serde::{Deserialize, Serialize};
+use std::fs;
+use std::io::ErrorKind;
 
-use crate::model::{CoinId, Currency, Quote, Range, Series};
-use crate::source::{PriceSource, SearchHit, SourceError};
+use serde::{Deserialize, Serialize};
 
 use super::key::markets_key;
 use super::store::CachedSource;
 use super::{Cached, Entry, now};
-use std::fs;
-use std::io::ErrorKind;
+use crate::model::{CoinId, Currency, Quote, Range, Series};
+use crate::source::{PriceSource, SearchHit, SourceError};
 
 impl<S: PriceSource> CachedSource<S> {
     fn get_or_refresh<T, F>(&self, key: &str, fetch: F) -> Result<Cached<T>, SourceError>
@@ -52,7 +52,8 @@ impl<S: PriceSource> CachedSource<S> {
                     | SourceError::Transport(_)
                     | SourceError::Payload(_)
                     | SourceError::Backoff
-                    | SourceError::Cache(_) => None,
+                    | SourceError::Cache(_)
+                    | SourceError::Directory(_) => None,
                 };
                 self.record_failure(retry_after)?;
                 match existing {

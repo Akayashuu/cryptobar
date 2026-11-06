@@ -4,6 +4,8 @@
 use std::io;
 use std::num::ParseIntError;
 
+use crate::paths::PathsError;
+
 /// Failures of the watch-only layer.
 #[derive(Debug, thiserror::Error)]
 pub enum OnchainError {
@@ -46,4 +48,7 @@ pub enum OnchainError {
     /// The balance cache could not be read or written.
     #[error("balance cache")]
     Cache(#[from] io::Error),
+    /// The balance cache directory could not be prepared.
+    #[error(transparent)]
+    Directory(#[from] PathsError),
 }

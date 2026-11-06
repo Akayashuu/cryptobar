@@ -1,18 +1,17 @@
+use std::fs;
 use std::fs::File;
 use std::io::{self, Write as _};
 use std::path::PathBuf;
 use std::time::Duration;
 
+use rustix::fs::{FlockOperation, flock};
+use rustix::io::Errno;
 use serde::{Deserialize, Serialize};
-
-use crate::paths;
-use crate::source::{PriceSource, SourceError};
 
 use super::key::sanitize;
 use super::{BACKOFF_MAX, BACKOFF_MIN, Backoff, Entry, now};
-use rustix::fs::{FlockOperation, flock};
-use rustix::io::Errno;
-use std::fs;
+use crate::paths;
+use crate::source::{PriceSource, SourceError};
 
 /// Wraps a source with a disk cache.
 ///
@@ -47,8 +46,6 @@ impl<S: PriceSource> CachedSource<S> {
         self.dir.join(format!("{}.json", sanitize(key)))
     }
 
-    /// A missing, unreadable or unparsable entry is a miss: the caller fetches
-    /// again and the next write replaces the broken file.
     pub(super) fn read<T: for<'de> Deserialize<'de>>(&self, key: &str) -> Option<Entry<T>> {
         let raw = fs::read_to_string(self.path(key)).ok()?;
         serde_json::from_str(&raw).ok()
@@ -70,8 +67,6 @@ impl<S: PriceSource> CachedSource<S> {
         Ok(())
     }
 
-    /// Takes the write lock. `None` when another process already holds it: the
-    /// caller then serves the existing cache instead of waiting.
     pub(super) fn try_lock(&self) -> Result<Option<File>, SourceError> {
         paths::ensure_dir(&self.dir)?;
         let file = File::create(self.dir.join(".lock"))?;
@@ -86,13 +81,11 @@ impl<S: PriceSource> CachedSource<S> {
         self.dir.join("backoff.state")
     }
 
-    /// The backoff state of the upstream. A missing or unparsable file means no
-    /// failure is recorded, which is the default backoff.
     pub(super) fn backoff(&self) -> Backoff {
-        fs::read_to_string(self.backoff_path())
-            .ok()
-            .and_then(|raw| serde_json::from_str(&raw).ok())
-            .unwrap_or_default()
+        match fs::read_to_string(self.backoff_path()) {
+            Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
+            Err(_missing_or_unreadable) => Backoff::default(),
+        }
     }
 
     pub(super) fn record_failure(&self, retry_after: Option<u64>) -> Result<(), SourceError> {

@@ -1,7 +1,9 @@
 //! `bar` subcommand: emission of the Waybar module.
 
-use std::io::Write;
+use std::fs;
+use std::io::{ErrorKind, Write};
 use std::path::Path;
+use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use super::{CommandError, print, warn, warn_each};
@@ -11,9 +13,7 @@ use crate::model::Quote;
 use crate::onchain;
 use crate::output::Output;
 use crate::render::waybar::{self, Markup};
-use crate::state::State;
-use std::fs;
-use std::thread;
+use crate::state::{State, StateError};
 
 const POLL: Duration = Duration::from_millis(400);
 
@@ -79,9 +79,27 @@ fn watch_loop<Out: Write, Err: Write>(
 }
 
 fn stamp(path: &Path) -> Option<SystemTime> {
-    fs::metadata(path)
-        .ok()
-        .and_then(|meta| meta.modified().ok())
+    match fs::metadata(path).and_then(|meta| meta.modified()) {
+        Ok(modified) => Some(modified),
+        Err(absent) if absent.kind() == ErrorKind::NotFound => None,
+        Err(_unavailable) => None,
+    }
+}
+
+fn state_or_default<Out: Write, Err: Write>(
+    app: &App,
+    output: &mut Output<Out, Err>,
+) -> Result<State, CommandError> {
+    match app.state() {
+        Ok(state) => Ok(state),
+        Err(failure @ StateError::Corrupt { .. }) => {
+            if app.claim_corrupt_state_report() {
+                warn(output, &failure)?;
+            }
+            Ok(State::default())
+        }
+        Err(failure) => Err(failure.into()),
+    }
 }
 
 fn dispatch_alerts<Out: Write, Err: Write>(
@@ -93,7 +111,7 @@ fn dispatch_alerts<Out: Write, Err: Write>(
         return Ok(());
     }
     let triggers = alerts::evaluate(&app.config, quotes);
-    let mut state = app.state()?;
+    let mut state = state_or_default(app, output)?;
     let (fresh, current) = alerts::diff(&triggers, &state.fired);
     for trigger in &fresh {
         if let Err(failure) = alerts::notify(trigger) {
@@ -141,7 +159,7 @@ fn emit<Out: Write, Err: Write>(
     let onchain = onchain::totals(&refresh.balances);
     let module = waybar::render(
         &quotes,
-        app.active_index()?,
+        app.index_of(&state_or_default(app, output)?),
         &app.config,
         stale,
         markup,

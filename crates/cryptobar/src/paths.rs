@@ -1,14 +1,14 @@
 //! XDG directory resolution. The `CRYPTOBAR_*_DIR` variables take precedence,
 //! which keeps the integration tests hermetic.
 
+use std::env;
+use std::fs::{self, Permissions};
+use std::io;
 use std::path::{Path, PathBuf};
 
 use etcetera::BaseStrategy as _;
 use etcetera::base_strategy::Xdg;
-use std::env;
-use std::fs;
-use std::fs::Permissions;
-use std::io;
+use rustix::process;
 
 const APP: &str = "cryptobar";
 
@@ -18,6 +18,15 @@ pub enum PathsError {
     /// The home directory is unknown.
     #[error("could not resolve the XDG directories")]
     Home(#[from] etcetera::HomeDirError),
+    /// The directory could not be created or restricted to its owner.
+    #[error("could not prepare the directory {}", .path.display())]
+    Directory {
+        /// Directory that could not be prepared.
+        path: PathBuf,
+        /// The operating system error.
+        #[source]
+        source: io::Error,
+    },
 }
 
 fn strategy() -> Result<Xdg, PathsError> {
@@ -77,26 +86,35 @@ pub fn runtime_dir() -> Result<PathBuf, PathsError> {
 
 /// Creates the directory when missing, then restricts it to its owner on Unix.
 ///
-/// The restriction is best effort: a filesystem that refuses it (exotic mount,
-/// no permissions) still receives the directory, so the refusal is not an error.
+/// A directory owned by another user is left as it is: it is not ours to restrict.
 ///
 /// # Errors
-/// Propagates the I/O errors of the creation.
-pub fn ensure_dir(dir: &Path) -> io::Result<()> {
+/// Fails when the directory cannot be created, or when it belongs to the current
+/// user and cannot be restricted to it.
+pub fn ensure_dir(dir: &Path) -> Result<(), PathsError> {
+    prepare_dir(dir).map_err(|source| PathsError::Directory {
+        path: dir.to_path_buf(),
+        source,
+    })
+}
+
+fn prepare_dir(dir: &Path) -> io::Result<()> {
     fs::create_dir_all(dir)?;
-    restrict_to_owner(dir);
-    Ok(())
+    restrict_to_owner(dir)
 }
 
 #[cfg(unix)]
-fn restrict_to_owner(dir: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt as _;
-    fs::set_permissions(dir, Permissions::from_mode(0o700)).is_ok()
+fn restrict_to_owner(dir: &Path) -> io::Result<()> {
+    use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
+    if fs::metadata(dir)?.uid() != process::geteuid().as_raw() {
+        return Ok(());
+    }
+    fs::set_permissions(dir, Permissions::from_mode(0o700))
 }
 
 #[cfg(not(unix))]
-fn restrict_to_owner(_dir: &Path) -> bool {
-    true
+fn restrict_to_owner(_dir: &Path) -> io::Result<()> {
+    Ok(())
 }
 
 /// Home directory, where the window writes its exports.
@@ -111,4 +129,30 @@ pub fn export_dir() -> Result<PathBuf, PathsError> {
         return Ok(dir);
     }
     Ok(strategy()?.home_dir().to_path_buf())
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt as _;
+
+    #[test]
+    fn a_created_directory_is_restricted_to_its_owner() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("cache");
+        ensure_dir(&target).unwrap();
+        let mode = fs::metadata(&target).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o700);
+    }
+
+    #[test]
+    fn a_path_that_is_a_file_is_reported_as_a_directory_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("occupied");
+        fs::write(&file, b"not a directory").unwrap();
+        assert!(matches!(
+            ensure_dir(&file),
+            Err(PathsError::Directory { .. })
+        ));
+    }
 }

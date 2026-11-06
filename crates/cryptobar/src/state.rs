@@ -4,18 +4,15 @@
 //! displayed cryptocurrency therefore has to live on disk. It is stored under
 //! `$XDG_RUNTIME_DIR`, volatile by nature, losing it on reboot is harmless.
 
-use std::fs::File;
-use std::io::Write as _;
+use std::collections::BTreeSet;
+use std::fs::{self, File};
+use std::io::{self, ErrorKind, Write as _};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
 use crate::paths::{self, PathsError};
-use std::collections::BTreeSet;
-use std::fs;
-use std::io;
-use std::io::ErrorKind;
 
 /// Failures of the runtime state file.
 #[derive(Debug, thiserror::Error)]
@@ -28,8 +25,24 @@ pub enum StateError {
     Directory {
         /// Directory that could not be created.
         path: PathBuf,
+        /// Why the directory could not be prepared.
+        source: PathsError,
+    },
+    /// The state file could not be read.
+    #[error("could not read the state file {}", path.display())]
+    Read {
+        /// State file that could not be read.
+        path: PathBuf,
         /// The operating system error.
         source: io::Error,
+    },
+    /// The state file exists but is not a valid state. It is left untouched on disk.
+    #[error("the state file {} is corrupt", path.display())]
+    Corrupt {
+        /// State file that does not parse.
+        path: PathBuf,
+        /// The JSON error.
+        source: serde_json::Error,
     },
     /// The state file could not be written.
     #[error("could not write the state file {}", path.display())]
@@ -67,16 +80,20 @@ fn now() -> u64 {
 }
 
 impl State {
-    /// Reads the state. The file is a volatile cache: when it is absent or
-    /// does not parse, the default is the answer and the next save rewrites it.
+    /// Reads the state. An absent file is the default state.
     ///
     /// # Errors
-    /// Only a read failure other than "not found" is an error.
+    /// Fails with [`StateError::Corrupt`] when the file does not parse, so the
+    /// caller decides whether to fall back to the default, and with
+    /// [`StateError::Read`] when the file cannot be read.
     pub fn load(path: &Path) -> Result<Self, StateError> {
         match fs::read_to_string(path) {
-            Ok(raw) => Ok(serde_json::from_str(&raw).unwrap_or_default()),
+            Ok(raw) => serde_json::from_str(&raw).map_err(|source| StateError::Corrupt {
+                path: path.to_path_buf(),
+                source,
+            }),
             Err(absent) if absent.kind() == ErrorKind::NotFound => Ok(Self::default()),
-            Err(failure) => Err(StateError::Write {
+            Err(failure) => Err(StateError::Read {
                 path: path.to_path_buf(),
                 source: failure,
             }),
@@ -263,11 +280,21 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_or_corrupt_state_falls_back_to_the_default() {
+    fn a_missing_state_is_the_default() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("state.json");
         assert_eq!(State::load(&path).unwrap(), State::default());
+    }
+
+    #[test]
+    fn a_corrupt_state_is_reported_and_left_on_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.json");
         fs::write(&path, b"garbage").unwrap();
-        assert_eq!(State::load(&path).unwrap(), State::default());
+        assert!(matches!(
+            State::load(&path),
+            Err(StateError::Corrupt { .. })
+        ));
+        assert_eq!(fs::read(&path).unwrap(), b"garbage");
     }
 }

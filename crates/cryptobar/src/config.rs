@@ -1,18 +1,18 @@
 //! Loading, validating and writing the configuration file.
 
+use std::collections::HashSet;
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use toml::de::Error;
 
 use crate::model::{CoinId, Currency};
 use crate::onchain::OnchainError;
 use crate::onchain::Wallet;
 use crate::paths::{self, PathsError};
 use crate::render::format::Decimals;
-use std::collections::HashSet;
-use std::fs;
-use toml::de::Error;
 
 /// Failures to read, write or validate the configuration file.
 #[derive(Debug, thiserror::Error)]
@@ -41,11 +41,11 @@ pub enum ConfigError {
     /// The directory of the configuration file could not be created.
     #[error("creating {}", .path.display())]
     Directory {
-        /// Directory that could not be created.
+        /// Directory that could not be prepared.
         path: PathBuf,
-        /// The operating system error.
+        /// Why the directory could not be prepared.
         #[source]
-        source: io::Error,
+        source: PathsError,
     },
     /// The configuration file already exists and `--force` was not given.
     #[error("{} already exists, use --force to overwrite it", .path.display())]

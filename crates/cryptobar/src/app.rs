@@ -3,7 +3,8 @@
 //! Every command receives this struct; it is the only place that wires up the
 //! I/O, which keeps the rest of the code testable without a network.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use crate::alerts::AlertError;
@@ -14,11 +15,9 @@ use crate::onchain::Watcher;
 use crate::paths::{self, PathsError};
 use crate::source::cache::CachedSource;
 use crate::source::coingecko::CoinGecko;
-use crate::source::icons;
-use crate::source::icons::IconError;
+use crate::source::icons::{self, IconError};
 use crate::state::{State, StateError};
 use crate::waybar_signal::{self, SignalError};
-use std::path::Path;
 
 const MANUAL_HOLD: u64 = 300;
 
@@ -55,6 +54,7 @@ pub struct App {
     config_path: PathBuf,
     cache_dir: PathBuf,
     state_path: PathBuf,
+    corrupt_state_reported: AtomicBool,
 }
 
 impl App {
@@ -83,6 +83,7 @@ impl App {
             config_path,
             cache_dir,
             state_path: State::default_path()?,
+            corrupt_state_reported: AtomicBool::new(false),
         })
     }
 
@@ -143,9 +144,16 @@ impl App {
     }
 
     /// # Errors
-    /// Fails when the state file exists but cannot be read.
+    /// Fails with [`StateError::Corrupt`] when the state file does not parse, and
+    /// with [`StateError::Read`] when it cannot be read.
     pub fn state(&self) -> Result<State, StateError> {
         State::load(&self.state_path)
+    }
+
+    /// Returns `true` the first time it is called, so a corrupt state is reported once.
+    #[must_use]
+    pub fn claim_corrupt_state_report(&self) -> bool {
+        !self.corrupt_state_reported.swap(true, Ordering::Relaxed)
     }
 
     /// Persists the cycling state.
@@ -161,11 +169,17 @@ impl App {
     /// # Errors
     /// See [`App::state`].
     pub fn active_index(&self) -> Result<usize, StateError> {
-        Ok(self.state()?.effective_index(
+        Ok(self.index_of(&self.state()?))
+    }
+
+    /// Index of the cryptocurrency to display for the given state.
+    #[must_use]
+    pub fn index_of(&self, state: &State) -> usize {
+        state.effective_index(
             self.config.coins.len(),
             self.config.cycle_interval,
             MANUAL_HOLD,
-        ))
+        )
     }
 
     /// Wakes Waybar up when a signal number is configured. Waybar not running is
@@ -175,7 +189,7 @@ impl App {
     /// Fails when the signal cannot be built or delivered.
     pub fn notify(&self) -> Result<(), SignalError> {
         match waybar_signal::notify_waybar(self.config.waybar_signal) {
-            Ok(_) | Err(SignalError::NotFound) => Ok(()),
+            Ok(_) | Err(SignalError::NotRunning) => Ok(()),
             Err(failure) => Err(failure),
         }
     }
