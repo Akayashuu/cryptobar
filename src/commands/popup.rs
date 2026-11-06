@@ -4,22 +4,18 @@ use anyhow::Result;
 
 use crate::app::App;
 
-/// Opens the window from the cached data.
+/// Opens the window from the data already on disk: the network is left to
+/// the window's own workers, so a slow API never delays its opening.
 ///
 /// # Errors
 /// Fails when GTK cannot initialise.
 #[cfg(feature = "popup")]
 pub fn run(app: App) -> Result<()> {
-    let (mut quotes, stale) = match app
+    let (mut quotes, stale) = app
         .source
-        .markets_cached(&app.config.coins, &app.config.currency)
-    {
-        Ok(cached) => (cached.value, cached.stale),
-        Err(_) => (Vec::new(), true),
-    };
+        .markets_stored(&app.config.coins, &app.config.currency)
+        .map_or((Vec::new(), true), |cached| (cached.value, cached.stale));
     app.attach_icons(&mut quotes);
-    // The window tops the missing logos up itself, on a dedicated thread: it
-    // opens immediately rather than after the download.
     crate::ui::popup::show(app, quotes, stale)
 }
 

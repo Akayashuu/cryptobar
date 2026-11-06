@@ -195,6 +195,9 @@ enum Msg {
     Search(u64, Result<Vec<SearchHit>, String>),
     /// Freshly loaded quotes, with the "served from cache" flag.
     Quotes(Vec<Quote>, bool),
+    /// The quotes could not be loaded, from the network nor from the cache:
+    /// the ones on screen stay, flagged as stale.
+    QuotesUnavailable,
     /// Series of a range other than 7 days, keyed by its cache key.
     Series(String, Vec<f64>),
     /// Freshly read balances from the watched chains.
@@ -227,12 +230,10 @@ pub fn show(app: App, quotes: Vec<Quote>, stale: bool) -> anyhow::Result<()> {
     });
 
     gtk_app.connect_activate(move |gtk_app| {
-        // GTK activates only once per process; a second activation (single
-        // instance) simply presents the existing window.
         if let Some((app, quotes, stale)) = seed.borrow_mut().take() {
             build_window(gtk_app, app, quotes, stale);
         } else if let Some(window) = gtk_app.windows().first() {
-            window.present();
+            toggle(window);
         }
     });
 
@@ -246,11 +247,24 @@ pub fn show(app: App, quotes: Vec<Quote>, stale: bool) -> anyhow::Result<()> {
     }
 }
 
+/// Second launch while the window is open: a click on the bar closes the
+/// window it opened, and brings it back when it hid behind another one.
+fn toggle(window: &gtk4::Window) {
+    if window.is_active() {
+        window.close();
+    } else {
+        window.present();
+    }
+}
+
 /// Live data of the window.
 struct Model {
     app: Arc<App>,
     quotes: Vec<Quote>,
     stale: bool,
+    /// `false` until the first worker answers about the quotes: an empty list
+    /// before that is a load in progress, not a network failure.
+    answered: bool,
     hits: Vec<SearchHit>,
     /// Range displayed under the curve.
     range: Range,
@@ -312,15 +326,18 @@ impl Ctx {
         // `markets_cached` serves the cache as long as it is fresh: this
         // thread touches the network only when it is truly needed.
         std::thread::spawn(move || {
-            let (mut quotes, stale) = match app
+            let message = match app
                 .source
                 .markets_cached(&app.config.coins, &app.config.currency)
             {
-                Ok(cached) => (cached.value, cached.stale),
-                Err(_) => (Vec::new(), true),
+                Ok(cached) => {
+                    let mut quotes = cached.value;
+                    app.fetch_icons(&mut quotes);
+                    Msg::Quotes(quotes, cached.stale)
+                }
+                Err(_) => Msg::QuotesUnavailable,
             };
-            app.fetch_icons(&mut quotes);
-            let _ = tx.send(Msg::Quotes(quotes, stale));
+            let _ = tx.send(message);
         });
 
         // The chains are queried separately: a slow address must not delay the
@@ -368,6 +385,11 @@ impl Ctx {
             .or_else(|| model.quotes.first())
             .cloned();
         let stale = model.stale && !model.quotes.is_empty();
+        let empty_caption = if model.answered {
+            "No data — check the network connection"
+        } else {
+            "Loading prices…"
+        };
         let series = selected
             .as_ref()
             .map(|quote| series_of(&model, quote, range))
@@ -387,7 +409,7 @@ impl Ctx {
             }
             self.request_series(&quote, range);
         } else {
-            let empty = Label::new(Some("No data — check the network connection"));
+            let empty = Label::new(Some(empty_caption));
             empty.add_css_class("muted");
             empty.set_halign(Align::Start);
             self.widgets.detail.append(&empty);
@@ -1166,6 +1188,7 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
             app,
             quotes,
             stale,
+            answered: false,
             hits: Vec::new(),
             range: Range::D7,
             series: HashMap::new(),
@@ -1254,6 +1277,15 @@ fn drain(ctx: &Rc<Ctx>, rx: Receiver<Msg>) {
                         let mut model = ctx.model.borrow_mut();
                         model.quotes = quotes;
                         model.stale = stale;
+                        model.answered = true;
+                    }
+                    ctx.redraw();
+                }
+                Ok(Msg::QuotesUnavailable) => {
+                    {
+                        let mut model = ctx.model.borrow_mut();
+                        model.stale = true;
+                        model.answered = true;
                     }
                     ctx.redraw();
                 }

@@ -25,6 +25,7 @@ info "dropping the integration samples"
 install -Dm644 waybar/crypto.jsonc "$CONFIG_HOME/waybar/cryptobar.jsonc"
 install -Dm644 waybar/style.css "$CONFIG_HOME/waybar/cryptobar.css"
 install -Dm644 hypr/cryptobar.conf "$CONFIG_HOME/hypr/cryptobar.conf"
+install -Dm644 hypr/cryptobar.lua "$CONFIG_HOME/hypr/cryptobar.lua"
 
 cat <<'MSG'
 
@@ -39,7 +40,10 @@ Installation complete. What is left to wire up, depending on your setup:
      Then in ~/.config/waybar/style.css:
        @import "cryptobar.css";
 
-  2. Hyprland — in ~/.config/hypr/hyprland.conf:
+  2. Hyprland, so the window opens floating and centred instead of tiled.
+     With the Lua config (hyprland.lua, `hyprctl systeminfo | grep configProvider`):
+       require("cryptobar")
+     With the legacy config, in ~/.config/hypr/hyprland.conf:
        source = ~/.config/hypr/cryptobar.conf
 
 Make sure ~/.local/bin is in your PATH, then:

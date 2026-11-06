@@ -97,6 +97,19 @@ Waybar's `interval` and cryptobar's `refresh_interval` are independent. Waybar
 can tick every 5 seconds without issuing a single request: the disk cache
 serves the data for as long as it is fresh.
 
+### Hyprland
+
+Without a window rule, Hyprland tiles the window like any other one. The rules
+ship for both config providers (`hyprctl systeminfo | grep configProvider`):
+
+| Provider | File | Line to add |
+|---|---|---|
+| Lua (`hyprland.lua`) | `~/.config/hypr/cryptobar.lua` | `require("cryptobar")` |
+| legacy (`hyprland.conf`) | `~/.config/hypr/cryptobar.conf` | `source = ~/.config/hypr/cryptobar.conf` |
+
+Launching `cryptobar popup` while the window is open brings it to the front,
+or closes it when it already has the focus: the same click opens and closes it.
+
 ### Ags, Eww, and the rest
 
 `cryptobar bar --markup none` produces the same line without Pango markup. On

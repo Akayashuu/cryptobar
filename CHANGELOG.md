@@ -3,6 +3,28 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 semantic versioning.
 
+## [Unreleased]
+
+### Fixed
+
+- Quickshell: a click on the widget always opens the window. The window used
+  to share the process of the quick actions, so a click landing during a
+  scroll was dropped, and a scroll was dropped for as long as the window stayed
+  open. The window now leaves on a detached process and the quick actions
+  queue up.
+- The window opens from the disk cache without waiting for the network; the
+  prices are refreshed once it is on screen.
+- A failed refresh no longer empties the window: the prices on screen stay,
+  flagged as stale. Before the first answer the window says it is loading
+  instead of blaming the network.
+- Hyprland rules for the Lua config provider (`hypr/cryptobar.lua`): with
+  `hyprland.lua`, `cryptobar.conf` is never read and the window opened tiled.
+
+### Changed
+
+- A second `cryptobar popup` closes the window when it has the focus, and
+  brings it to the front otherwise.
+
 ## [0.2.1] — 2026-08-22
 
 ### Changed

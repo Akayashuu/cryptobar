@@ -91,18 +91,36 @@ Singleton {
         root.series = active?.series ?? [];
     }
 
-    /// Runs a subcommand (`next`, `refresh`, `popup`…) then reads the current
+    /// Short subcommands waiting for the one running to exit. A scroll of
+    /// three notches is three moves, never one.
+    property var pending: []
+
+    /// Runs a short subcommand (`next`, `refresh`…) then reads the current
     /// value back, for immediate feedback without waiting for the interval.
     function run(argv) {
+        if (actionProc.running) {
+            root.pending = root.pending.concat([argv]);
+            return;
+        }
+        root.start(argv);
+    }
+
+    function start(argv) {
         actionProc.command = [root.binary].concat(argv);
         actionProc.running = true;
+    }
+
+    /// Windows live as long as the user keeps them open: they leave on a
+    /// process of their own, or they would hold the action queue for as long.
+    function launch(argv) {
+        Quickshell.execDetached([root.binary].concat(argv));
     }
 
     function next() { root.run(["next"]); }
     function prev() { root.run(["prev"]); }
     function refresh() { root.run(["refresh"]); }
-    function openPopup() { root.run(["popup"]); }
-    function openChart() { root.run(["chart", "--window"]); }
+    function openPopup() { root.launch(["popup"]); }
+    function openChart() { root.launch(["chart", "--window"]); }
     /// Makes the coin at the given index in the configured list active.
     function select(index) { root.run(["select", String(index)]); }
 
@@ -141,7 +159,15 @@ Singleton {
 
     Process {
         id: actionProc
-        onExited: readProc.running = true
+        onExited: {
+            if (root.pending.length > 0) {
+                const [next, ...rest] = root.pending;
+                root.pending = rest;
+                root.start(next);
+                return;
+            }
+            readProc.running = true;
+        }
     }
 
     Process {

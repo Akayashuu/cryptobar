@@ -63,6 +63,14 @@ fn sanitize(key: &str) -> String {
         .collect()
 }
 
+fn markets_key(ids: &[CoinId], vs: &Currency) -> String {
+    format!(
+        "markets-{}-{}",
+        vs.as_str(),
+        ids.iter().map(CoinId::as_str).collect::<Vec<_>>().join("_")
+    )
+}
+
 /// Wraps a source with a disk cache.
 pub struct CachedSource<S: PriceSource> {
     source: S,
@@ -244,12 +252,20 @@ impl<S: PriceSource> CachedSource<S> {
         ids: &[CoinId],
         vs: &Currency,
     ) -> Result<Cached<Vec<Quote>>, SourceError> {
-        let key = format!(
-            "markets-{}-{}",
-            vs.as_str(),
-            ids.iter().map(CoinId::as_str).collect::<Vec<_>>().join("_")
-        );
-        self.get_or_refresh(&key, || self.source.markets(ids, vs))
+        self.get_or_refresh(&markets_key(ids, vs), || self.source.markets(ids, vs))
+    }
+
+    /// Quotes as the disk holds them, without ever touching the network: what
+    /// a window shows while it opens, before a worker refreshes it.
+    #[must_use]
+    pub fn markets_stored(&self, ids: &[CoinId], vs: &Currency) -> Option<Cached<Vec<Quote>>> {
+        let entry = self.read::<Vec<Quote>>(&markets_key(ids, vs))?;
+        let age = now().saturating_sub(entry.fetched_at);
+        Some(Cached {
+            value: entry.value,
+            fetched_at: entry.fetched_at,
+            stale: age >= self.ttl.as_secs(),
+        })
     }
 
     /// Price series, cached per (cryptocurrency, range) pair.
@@ -411,6 +427,27 @@ mod tests {
         let result = broken.markets_cached(&ids(), &vs).unwrap();
         assert!(result.stale);
         assert_eq!(result.value.len(), 1);
+    }
+
+    #[test]
+    fn the_stored_quotes_never_reach_the_network() {
+        let (_dir, cached) = setup(Duration::from_secs(3600), false);
+        let vs = Currency::default();
+        assert!(cached.markets_stored(&ids(), &vs).is_none());
+        cached.markets_cached(&ids(), &vs).unwrap();
+        let stored = cached.markets_stored(&ids(), &vs).unwrap();
+        assert_eq!(cached.source().calls.get(), 1);
+        assert!(!stored.stale);
+        assert_eq!(stored.value.len(), 1);
+    }
+
+    #[test]
+    fn stored_quotes_past_the_ttl_are_flagged_stale() {
+        let (_dir, cached) = setup(Duration::from_secs(0), false);
+        let vs = Currency::default();
+        cached.markets_cached(&ids(), &vs).unwrap();
+        assert!(cached.markets_stored(&ids(), &vs).unwrap().stale);
+        assert_eq!(cached.source().calls.get(), 1);
     }
 
     #[test]
