@@ -41,7 +41,9 @@ impl<S: PriceSource> CachedSource<S> {
 
         match fetch() {
             Ok(value) => {
-                self.clear_failure()?;
+                if let Err(failure) = self.clear_failure() {
+                    self.note(failure);
+                }
                 self.keep(key, value, now_secs)
             }
             Err(err) => {
@@ -55,7 +57,7 @@ impl<S: PriceSource> CachedSource<S> {
                     | SourceError::Cache(_)
                     | SourceError::Directory(_) => None,
                 };
-                self.record_failure(retry_after)?;
+                self.record_failure(retry_after);
                 match existing {
                     Some(entry) => Ok(served_stale(entry)),
                     None => Err(err),

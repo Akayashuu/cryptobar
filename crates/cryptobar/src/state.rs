@@ -28,12 +28,14 @@ pub enum StateError {
         /// Why the directory could not be prepared.
         source: PathsError,
     },
-    /// The state file could not be read.
-    #[error("could not read the state file {}", path.display())]
+    /// The state file could not be read. The commands carry on from the default
+    /// state and leave the file alone.
+    #[error("could not read the state file {}, starting from the default state", path.display())]
     Read {
         /// State file that could not be read.
         path: PathBuf,
         /// The operating system error.
+        #[source]
         source: io::Error,
     },
     /// The state file exists but does not parse. Commands report it once, then
@@ -42,6 +44,9 @@ pub enum StateError {
     Corrupt {
         /// State file that does not parse.
         path: PathBuf,
+        /// The parse failure, with its position in the file.
+        #[source]
+        source: serde_json::Error,
     },
     /// The state file could not be written.
     #[error("could not write the state file {}", path.display())]
@@ -56,13 +61,34 @@ pub enum StateError {
     Encode(#[from] serde_json::Error),
 }
 
-/// A state read from disk, with the corruption repaired on the way, if any.
+/// A state read from disk, with the failures met on the way.
 #[derive(Debug)]
 pub struct LoadedState {
-    /// The state to use: the stored one, or the default after a repair.
+    /// The state to use: the stored one, or the default one when the file was
+    /// corrupt or cannot be read.
     pub state: State,
-    /// The corruption that the default state replaced, to report once.
-    pub reset: Option<StateError>,
+    /// Failures to report once: a corrupt file that was replaced, a replacement
+    /// that failed, or a file that could not be read.
+    pub notices: Vec<StateError>,
+    /// Whether a save may overwrite the file the state was read from.
+    pub access: StateAccess,
+}
+
+impl LoadedState {
+    /// Whether the state may be saved over the file it was read from.
+    #[must_use]
+    pub fn is_writable(&self) -> bool {
+        self.access == StateAccess::Writable
+    }
+}
+
+/// Whether a save may overwrite the state file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StateAccess {
+    /// The file holds the state, or was just replaced by the default one.
+    Writable,
+    /// The file could not be read: it is left as it is.
+    Unreadable,
 }
 
 /// Minimal persistent state.
@@ -98,8 +124,9 @@ impl State {
         match fs::read_to_string(path) {
             Ok(raw) => match serde_json::from_str(&raw) {
                 Ok(state) => Ok(state),
-                Err(_unparsable) => Err(StateError::Corrupt {
+                Err(source) => Err(StateError::Corrupt {
                     path: path.to_path_buf(),
+                    source,
                 }),
             },
             Err(absent) if absent.kind() == ErrorKind::NotFound => Ok(Self::default()),
@@ -198,6 +225,8 @@ fn write_synced(path: &Path, bytes: &[u8]) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+
     use super::*;
 
     #[test]
@@ -306,5 +335,17 @@ mod tests {
             Err(StateError::Corrupt { .. })
         ));
         assert_eq!(fs::read(&path).unwrap(), b"garbage");
+    }
+
+    #[test]
+    fn a_corrupt_state_keeps_the_parse_position_as_its_source() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("state.json");
+        fs::write(&path, b"garbage").unwrap();
+        let failure = State::load(&path).unwrap_err();
+        assert!(
+            Error::source(&failure)
+                .is_some_and(|cause| cause.to_string().contains("line 1 column 1"))
+        );
     }
 }

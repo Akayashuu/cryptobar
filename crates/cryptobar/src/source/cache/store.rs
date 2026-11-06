@@ -17,9 +17,10 @@ use crate::source::{PriceSource, SourceError};
 /// Wraps a source with a disk cache.
 ///
 /// An entry that is corrupt or unreadable is a miss, never an error: the cache
-/// is derived from the network and is rebuilt on the next fetch. Every write
-/// that fails (entry, lock, backoff) is a [`SourceError::Cache`] or an I/O error
-/// surfaced to the caller, never dropped.
+/// is derived from the network and is rebuilt on the next fetch. A failed entry
+/// or lock write is surfaced to the caller. The backoff is a side channel: a
+/// failed read or write of it is kept as the notice, taken once by the caller,
+/// and never replaces the outcome of the fetch.
 #[derive(Debug)]
 pub struct CachedSource<S: PriceSource> {
     pub(super) source: S,
@@ -39,9 +40,9 @@ impl<S: PriceSource> CachedSource<S> {
         }
     }
 
-    /// The failure of a side read that did not stop the value from being
-    /// served, such as an unreadable backoff file. Taken once, so the caller
-    /// reports it once.
+    /// The failure of a side read or write that did not stop the value from
+    /// being served, such as an unreadable backoff file. Taken once, so the
+    /// caller reports it once.
     #[must_use]
     pub fn take_notice(&self) -> Option<SourceError> {
         self.notice
@@ -103,7 +104,7 @@ impl<S: PriceSource> CachedSource<S> {
         match self.read_backoff() {
             Ok(backoff) => backoff,
             Err(failure) => {
-                self.note(failure);
+                self.note(failure.into());
                 Backoff::default()
             }
         }
@@ -117,12 +118,17 @@ impl<S: PriceSource> CachedSource<S> {
         }
     }
 
-    fn note(&self, failure: io::Error) {
-        *self.notice.lock().unwrap_or_else(PoisonError::into_inner) =
-            Some(SourceError::Cache(failure));
+    pub(super) fn note(&self, failure: SourceError) {
+        *self.notice.lock().unwrap_or_else(PoisonError::into_inner) = Some(failure);
     }
 
-    pub(super) fn record_failure(&self, retry_after: Option<u64>) -> Result<(), SourceError> {
+    pub(super) fn record_failure(&self, retry_after: Option<u64>) {
+        if let Err(failure) = self.write_backoff(retry_after) {
+            self.note(failure);
+        }
+    }
+
+    fn write_backoff(&self, retry_after: Option<u64>) -> Result<(), SourceError> {
         let previous = self.backoff();
         let delay = retry_after.unwrap_or_else(|| {
             if previous.delay == 0 {

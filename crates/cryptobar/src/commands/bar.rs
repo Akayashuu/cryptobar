@@ -13,7 +13,7 @@ use crate::model::Quote;
 use crate::onchain;
 use crate::output::Output;
 use crate::render::waybar::{self, Markup};
-use crate::state::State;
+use crate::state::{LoadedState, State};
 
 const POLL: Duration = Duration::from_millis(400);
 
@@ -137,22 +137,22 @@ fn stamp(path: &Path) -> io::Result<Option<SystemTime>> {
 fn dispatch_alerts<Out: Write, Err: Write>(
     app: &App,
     quotes: &[Quote],
+    loaded: &mut LoadedState,
     output: &mut Output<Out, Err>,
 ) -> Result<(), CommandError> {
-    if app.config.alerts.is_empty() {
+    if app.config.alerts.is_empty() || !loaded.is_writable() {
         return Ok(());
     }
     let triggers = alerts::evaluate(&app.config, quotes);
-    let mut state = load_state(app, output)?;
-    let (fresh, current) = alerts::diff(&triggers, &state.fired);
+    let (fresh, current) = alerts::diff(&triggers, &loaded.state.fired);
     for trigger in &fresh {
         if let Err(failure) = alerts::notify(trigger) {
             warn(output, &failure)?;
         }
     }
-    if current != state.fired {
-        state.fired = current;
-        if let Err(failure) = app.save_state(&state) {
+    if current != loaded.state.fired {
+        loaded.state.fired = current;
+        if let Err(failure) = app.save_state(&loaded.state) {
             warn(output, &failure)?;
         }
     }
@@ -178,9 +178,10 @@ fn emit<Out: Write, Err: Write>(
     if let Some(notice) = app.source.take_notice() {
         warn(output, &notice)?;
     }
+    let mut loaded = load_state(app, output)?;
     if live {
         warn_each(output, &app.fetch_icons(&mut quotes))?;
-        dispatch_alerts(app, &quotes, output)?;
+        dispatch_alerts(app, &quotes, &mut loaded, output)?;
     } else {
         app.attach_icons(&mut quotes);
     }
@@ -194,7 +195,7 @@ fn emit<Out: Write, Err: Write>(
     let onchain = onchain::totals(&refresh.balances);
     let module = waybar::render(
         &quotes,
-        app.index_of(&load_state(app, output)?),
+        app.index_of(&loaded.state),
         &app.config,
         stale,
         markup,

@@ -7,6 +7,7 @@ use gtk4::{Align, Label};
 use crate::config::Config;
 use crate::config_edit::EditError;
 use crate::model::Range;
+use crate::report::Report;
 
 use super::identity::badge_css;
 use super::model::Ctx;
@@ -40,18 +41,11 @@ impl Ctx {
     pub(super) fn redraw(self: &Rc<Self>) {
         let model = self.model.borrow();
         self.palette.load_from_data(&badge_css(&model.quotes));
-        let active = match model.app.state() {
-            Ok(loaded) => {
-                if let Some(reset) = &loaded.reset {
-                    self.note(&root_cause(reset), false);
-                }
-                model.app.index_of(&loaded.state)
-            }
-            Err(failure) => {
-                self.note(&root_cause(&failure), true);
-                0
-            }
-        };
+        let loaded = model.app.state();
+        for notice in &loaded.notices {
+            self.note(&Report(notice).to_string(), true);
+        }
+        let active = model.app.index_of(&loaded.state);
         let currency = model.app.config.currency.clone();
         let decimals = model.app.config.decimals();
         let range = model.range;

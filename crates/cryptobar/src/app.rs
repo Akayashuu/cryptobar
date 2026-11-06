@@ -15,7 +15,7 @@ use crate::paths::{self, PathsError};
 use crate::source::cache::CachedSource;
 use crate::source::coingecko::CoinGecko;
 use crate::source::icons::{self, IconError};
-use crate::state::{LoadedState, State, StateError};
+use crate::state::{LoadedState, State, StateAccess, StateError};
 use crate::waybar_signal::{self, SignalError};
 
 const MANUAL_HOLD: u64 = 300;
@@ -140,25 +140,37 @@ impl App {
         icons::fetch_missing(&self.cache_dir, quotes)
     }
 
-    /// Reads the state. A corrupt file is replaced by the default state right
-    /// away, so the next command starts clean; the corruption is returned in
-    /// [`LoadedState::reset`] for the caller to report.
-    ///
-    /// # Errors
-    /// Fails with [`StateError::Read`] when the file cannot be read, and with
-    /// [`StateError::Write`] when a corrupt file cannot be replaced.
-    pub fn state(&self) -> Result<LoadedState, StateError> {
+    /// Reads the state. The state is a volatile cache, so no failure stops a
+    /// command: a corrupt file is replaced by the default state right away, a
+    /// file that cannot be read is left alone, and each failure is returned in
+    /// [`LoadedState::notices`] for the caller to report.
+    #[must_use]
+    pub fn state(&self) -> LoadedState {
         match State::load(&self.state_path) {
-            Ok(state) => Ok(LoadedState { state, reset: None }),
-            Err(corrupt @ StateError::Corrupt { .. }) => {
-                let state = State::default();
-                self.save_state(&state)?;
-                Ok(LoadedState {
-                    state,
-                    reset: Some(corrupt),
-                })
-            }
-            Err(failure) => Err(failure),
+            Ok(state) => LoadedState {
+                state,
+                notices: Vec::new(),
+                access: StateAccess::Writable,
+            },
+            Err(corrupt @ StateError::Corrupt { .. }) => self.repair(corrupt),
+            Err(unreadable) => LoadedState {
+                state: State::default(),
+                notices: vec![unreadable],
+                access: StateAccess::Unreadable,
+            },
+        }
+    }
+
+    fn repair(&self, corrupt: StateError) -> LoadedState {
+        let state = State::default();
+        let mut notices = vec![corrupt];
+        if let Err(failure) = self.save_state(&state) {
+            notices.push(failure);
+        }
+        LoadedState {
+            state,
+            notices,
+            access: StateAccess::Writable,
         }
     }
 

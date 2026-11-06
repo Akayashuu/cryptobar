@@ -42,6 +42,16 @@ mod support {
         }
     }
 
+    pub(crate) fn with_runtime_under_a_file() -> Env {
+        let env = setup();
+        let blocker = env.runtime.with_file_name("blocker");
+        fs::write(&blocker, b"").unwrap();
+        Env {
+            runtime: blocker.join("run"),
+            ..env
+        }
+    }
+
     pub(crate) fn seed_cache(cache: &Path) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -159,9 +169,54 @@ fn config_init_refuses_to_overwrite_without_force() {
 
 fn corrupt_state_warning(state: &Path) -> String {
     format!(
-        "cryptobar: the state file {} is corrupt, starting from the default state\n",
+        "cryptobar: the state file {} is corrupt, starting from the default state: expected value at line 1 column 1\n",
         state.display()
     )
+}
+
+#[test]
+fn an_unreadable_state_still_renders_the_bar() {
+    let env = support::with_runtime_under_a_file();
+    seed_cache(&env.cache);
+    let output = run(&env, &["bar"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.lines().count(), 1);
+    assert!(stdout.contains("BTC"));
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(stderr.lines().count(), 1);
+    assert!(stderr.starts_with("cryptobar: could not read the state file "));
+    assert!(stderr.contains(", starting from the default state: "));
+}
+
+#[test]
+fn next_warns_once_and_leaves_an_unreadable_state_alone() {
+    let env = setup();
+    seed_cache(&env.cache);
+    fs::create_dir(env.runtime.join("state.json")).unwrap();
+    let output = run(&env, &["next"]);
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "");
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(stderr.lines().count(), 1);
+    assert!(stderr.starts_with("cryptobar: could not read the state file "));
+    assert!(env.runtime.join("state.json").is_dir());
+}
+
+#[test]
+fn an_unreadable_backoff_is_reported_once_per_run() {
+    let env = setup();
+    fs::create_dir(env.cache.join("backoff.state")).unwrap();
+    let output = run(&env, &["bar"]);
+    assert!(output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(
+        stderr
+            .lines()
+            .filter(|line| line.contains("local cache"))
+            .count(),
+        1
+    );
 }
 
 #[test]

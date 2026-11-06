@@ -34,7 +34,7 @@ pub fn run<Out: Write, Err: Write>(
         None => app
             .config
             .coins
-            .get(app.index_of(&load_state(app, output)?))
+            .get(app.index_of(&load_state(app, output)?.state))
             .or_else(|| app.config.coins.first())
             .cloned()
             .ok_or(CommandError::NoCoin)?,

@@ -13,7 +13,7 @@ use crate::output::Output;
 use crate::paths::PathsError;
 use crate::report::Report;
 use crate::source::SourceError;
-use crate::state::{State, StateError};
+use crate::state::{LoadedState, StateError};
 #[cfg(feature = "popup")]
 use crate::ui::popup::PopupError;
 use crate::waybar_signal::SignalError;
@@ -130,21 +130,18 @@ pub fn print_text<Out: Write, Err: Write>(
     output.text(text).map_err(CommandError::Write)
 }
 
-/// Loads the state, reporting once on stderr when a corrupt file was replaced
-/// by the default state.
+/// Loads the state, reporting each of its notices once on stderr. Call it once
+/// per run and pass the result along: a second call would report them again.
 ///
 /// # Errors
-/// Fails when the state cannot be read or a corrupt file cannot be replaced,
-/// or when stderr cannot be written.
+/// Fails only when stderr cannot be written.
 pub fn load_state<Out: Write, Err: Write>(
     app: &App,
     output: &mut Output<Out, Err>,
-) -> Result<State, CommandError> {
-    let loaded = app.state()?;
-    if let Some(reset) = &loaded.reset {
-        warn(output, reset)?;
-    }
-    Ok(loaded.state)
+) -> Result<LoadedState, CommandError> {
+    let loaded = app.state();
+    warn_each(output, &loaded.notices)?;
+    Ok(loaded)
 }
 
 /// Writes one failure to stderr, as `cryptobar: outer: cause: root`.
