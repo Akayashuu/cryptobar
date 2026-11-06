@@ -43,6 +43,11 @@ wires anything twice. It backs up every upstream file it modifies as
 After an action the widget reads the current value back immediately instead of
 waiting for the next interval.
 
+Actions run one at a time, in the order they were sent. Up to 8 actions can wait
+behind the running one: a burst past 8 queued actions is dropped, and each drop
+is logged as a warning on the Quickshell output (`qs -c ii log`), naming the
+action.
+
 ## Options
 
 In `~/.config/illogical-impulse/config.json`:

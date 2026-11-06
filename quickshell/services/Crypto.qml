@@ -97,8 +97,11 @@ Singleton {
 
     function run(argv) {
         if (root.acting) {
-            if (root.pending.length < root.pendingLimit)
+            if (root.pending.length < root.pendingLimit) {
                 root.pending = root.pending.concat([argv]);
+            } else {
+                console.warn(`cryptobar: dropped "${argv.join(" ")}", more than ${root.pendingLimit} actions are queued`);
+            }
             return;
         }
         root.start(argv);
