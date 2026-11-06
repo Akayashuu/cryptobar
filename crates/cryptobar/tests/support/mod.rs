@@ -138,6 +138,7 @@ pub(crate) struct Watch {
     child: Child,
     ticks: Receiver<String>,
     log: PathBuf,
+    tick_number: usize,
 }
 
 impl Watch {
@@ -160,16 +161,33 @@ impl Watch {
                 }
             }
         });
-        Self { child, ticks, log }
+        Self {
+            child,
+            ticks,
+            log,
+            tick_number: 0,
+        }
     }
 
-    pub(crate) fn tick(&self) {
-        self.ticks.recv_timeout(TICK_TIMEOUT).unwrap();
+    pub(crate) fn tick(&mut self) {
+        self.tick_number = self.tick_number.saturating_add(1);
+        if let Err(error) = self.ticks.recv_timeout(TICK_TIMEOUT) {
+            panic!(
+                "tick {} got no line within {TICK_TIMEOUT:?} ({error})\nchild stderr:\n{}",
+                self.tick_number,
+                self.stderr()
+            );
+        }
     }
 
     pub(crate) fn stop(&mut self) -> String {
         self.kill();
-        fs::read_to_string(&self.log).unwrap()
+        self.stderr()
+    }
+
+    fn stderr(&self) -> String {
+        fs::read_to_string(&self.log)
+            .unwrap_or_else(|error| panic!("cannot read {}: {error}", self.log.display()))
     }
 
     fn kill(&mut self) {

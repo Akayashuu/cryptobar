@@ -15,6 +15,7 @@ use crate::model::Quote;
 use crate::onchain;
 use crate::output::Output;
 use crate::render::waybar::{self, Markup};
+use crate::report::Report;
 use crate::source::SourceError;
 use crate::state::{LoadedState, Occurrence, State, StateError};
 
@@ -83,7 +84,7 @@ fn watch_loop<Out: Write, Err: Write>(
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct SourceOccurrence {
     kind: Discriminant<SourceError>,
-    message: String,
+    chain: String,
 }
 
 #[derive(Debug, Default)]
@@ -98,7 +99,7 @@ impl Session {
     fn source_failed(&mut self, failure: &SourceError) -> bool {
         self.source.begin(SourceOccurrence {
             kind: mem::discriminant(failure),
-            message: failure.to_string(),
+            chain: Report(failure).to_string(),
         })
     }
 
@@ -362,6 +363,36 @@ mod tests {
         assert!(session.source_failed(&SourceError::Http("status 500".to_owned())));
         assert!(session.source_failed(&SourceError::Http("connection reset".to_owned())));
         assert!(!session.source_failed(&SourceError::Http("connection reset".to_owned())));
+    }
+
+    #[test]
+    fn transport_failures_with_different_causes_are_distinct_occurrences() {
+        let mut session = Session::default();
+        assert!(session.source_failed(&transport("dns lookup failed")));
+        assert!(session.source_failed(&transport("connection refused")));
+        assert!(!session.source_failed(&transport("connection refused")));
+    }
+
+    #[test]
+    fn a_transport_failure_with_the_same_cause_twice_is_one_occurrence() {
+        let mut session = Session::default();
+        assert!(session.source_failed(&transport("dns lookup failed")));
+        assert!(!session.source_failed(&transport("dns lookup failed")));
+    }
+
+    #[test]
+    fn a_rate_limit_is_one_occurrence_whatever_its_retry_hint() {
+        let mut session = Session::default();
+        assert!(session.source_failed(&SourceError::RateLimited {
+            retry_after: Some(30),
+        }));
+        assert!(!session.source_failed(&SourceError::RateLimited {
+            retry_after: Some(12),
+        }));
+    }
+
+    fn transport(cause: &str) -> SourceError {
+        SourceError::Transport(ureq::Error::Io(io::Error::other(cause.to_owned())))
     }
 
     #[test]
