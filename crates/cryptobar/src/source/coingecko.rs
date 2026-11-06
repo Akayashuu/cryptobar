@@ -1,12 +1,12 @@
 //! Client of the public CoinGecko API. No key required.
 
+use std::env;
 use std::time::Duration;
 
 use serde::Deserialize;
 
 use super::{PriceSource, SearchHit, SourceError};
 use crate::model::{CoinId, Currency, Quote, Range, Series};
-use std::env;
 
 const DEFAULT_BASE_URL: &str = "https://api.coingecko.com/api/v3";
 const USER_AGENT: &str = concat!(

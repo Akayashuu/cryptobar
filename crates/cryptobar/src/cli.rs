@@ -1,10 +1,11 @@
 //! Command line interface definition.
 
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 
 use crate::model::Range;
 use crate::render::waybar::Markup;
-use std::path::PathBuf;
 
 /// Cryptocurrency prices for your bar, terminal and desktop.
 #[derive(Debug, Parser)]

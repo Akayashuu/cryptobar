@@ -1,24 +1,20 @@
 use std::cell::Cell;
+use std::f64::consts::TAU;
 use std::rc::Rc;
 
+use gtk4::glib::WeakRef;
 use gtk4::prelude::*;
 
-use crate::numeric::to_f64;
-
 use super::hover::sample_at;
+use crate::numeric::to_f64;
 use crate::render::braille;
 use crate::report::Report;
-use gtk4::glib::WeakRef;
-use std::f64::consts::TAU;
 
-/// Geometry of the plot inside the drawing area.
 pub(super) const CHART_WIDTH: i32 = 540;
 pub(super) const CHART_HEIGHT: i32 = 230;
 
 const GRID_LINES: i32 = 4;
 
-/// Hovered abscissa, within `0.0..=1.0`, shared between the mouse controller
-/// and the drawing function. `None` when the pointer is elsewhere.
 pub(super) type Hover = Rc<Cell<Option<f64>>>;
 
 pub(super) fn chart(
@@ -51,16 +47,15 @@ pub(super) fn chart(
 }
 
 pub(super) fn report_frame(widget: &WeakRef<gtk4::DrawingArea>, outcome: Result<(), cairo::Error>) {
-    if let (Err(failure), Some(area)) = (outcome, widget.upgrade()) {
-        area.set_tooltip_text(Some(&Report(&failure).to_string()));
+    let Some(area) = widget.upgrade() else {
+        return;
+    };
+    match outcome {
+        Ok(()) => area.set_tooltip_text(None),
+        Err(failure) => area.set_tooltip_text(Some(&Report(&failure).to_string())),
     }
 }
 
-/// Draws the curve into any Cairo context.
-///
-/// The function does not depend on the widget: it is the one drawing on screen
-/// and filling the image surface of the PNG export, which guarantees the
-/// exported file is exactly what one sees.
 pub(super) fn draw_series(
     ctx: &cairo::Context,
     points: &[f64],

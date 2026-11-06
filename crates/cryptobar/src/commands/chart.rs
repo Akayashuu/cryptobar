@@ -1,6 +1,8 @@
 //! `chart` subcommand: braille chart in the terminal.
 
+use std::env;
 use std::io::Write;
+use std::process::Command;
 
 use super::{CommandError, print_text};
 use crate::app::App;
@@ -8,8 +10,6 @@ use crate::config::Config;
 use crate::model::{CoinId, Range, Series};
 use crate::output::{Output, push_line};
 use crate::render::{braille, format};
-use std::env;
-use std::process::Command;
 
 const AXIS_WIDTH: usize = 12;
 const MIN_COLS: usize = 20;

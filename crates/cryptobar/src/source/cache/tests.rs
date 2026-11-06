@@ -1,10 +1,10 @@
-use crate::model::{CoinId, Currency, Quote, Range, Series};
-use crate::source::{PriceSource, SearchHit, SourceError};
+use std::cell::Cell;
+use std::fs;
 use std::time::Duration;
 
 use super::*;
-use std::cell::Cell;
-use std::fs;
+use crate::model::{CoinId, Currency, Quote, Range, Series};
+use crate::source::{PriceSource, SearchHit, SourceError};
 
 struct FakeSource {
     calls: Cell<usize>,

@@ -1,7 +1,4 @@
-use crate::config::Config;
-use crate::model::Quote;
-use crate::portfolio;
-use crate::render::{badge, format, sparkline};
+use std::collections::BTreeMap;
 
 use super::markup::Markup;
 use super::payload::{AlertRow, Module};
@@ -9,8 +6,11 @@ use super::rows::rows;
 use super::summary::summary;
 use super::tooltip::tooltip;
 use crate::alerts;
+use crate::config::Config;
 use crate::model::CoinId;
-use std::collections::BTreeMap;
+use crate::model::Quote;
+use crate::portfolio;
+use crate::render::{badge, format, sparkline};
 
 /// Builds the module from the active quote and the full list.
 #[must_use]

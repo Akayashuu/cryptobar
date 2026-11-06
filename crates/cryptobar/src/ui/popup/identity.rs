@@ -4,14 +4,10 @@ use gtk4::{Align, Label};
 use crate::model::Quote;
 use crate::render::badge;
 
-/// Visual identity of a cryptocurrency: its official logo when the cache holds
-/// it, otherwise a coloured badge carrying its glyph.
 pub(super) fn identity_widget(quote: &Quote, size: i32) -> gtk4::Widget {
     identity_of(quote.icon.as_deref(), &quote.symbol, size)
 }
 
-/// Same thing from the raw fields, for what is not a quote, such as a search
-/// result.
 pub(super) fn identity_of(icon: Option<&str>, symbol: &str, size: i32) -> gtk4::Widget {
     if let Some(path) = icon {
         let image = gtk4::Image::from_file(path);
@@ -30,7 +26,6 @@ pub(super) fn identity_of(icon: Option<&str>, symbol: &str, size: i32) -> gtk4::
     label.upcast()
 }
 
-/// One CSS class per displayed cryptocurrency, carrying its brand colour.
 pub(super) fn badge_css(quotes: &[Quote]) -> String {
     let mut sheet = String::new();
     for quote in quotes {
@@ -47,7 +42,6 @@ pub(super) fn badge_css(quotes: &[Quote]) -> String {
     sheet
 }
 
-/// Reduces a symbol to a safe CSS class suffix.
 pub(super) fn css_key(symbol: &str) -> String {
     symbol
         .chars()

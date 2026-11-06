@@ -1,11 +1,9 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use gtk4::pango::EllipsizeMode;
 use gtk4::prelude::*;
 use gtk4::{Align, Box as GtkBox, Button, Label, ListBox, Orientation};
-
-use crate::model::{Currency, Quote, Range};
-use crate::render::format;
 
 use super::chart::{CHART_HEIGHT, CHART_WIDTH, Hover, chart};
 use super::hover::attach_hover;
@@ -14,19 +12,17 @@ use super::model::{Ctx, Model};
 use super::status::root_cause;
 use super::widgets::{clear, trend_class};
 use crate::commands::nav;
+use crate::model::{Currency, Quote, Range};
 use crate::render::braille;
-use gtk4::pango::EllipsizeMode;
+use crate::render::format;
 
 const SPARK_WIDTH: i32 = 72;
 const SPARK_HEIGHT: i32 = 26;
 
-/// Cache key of a series inside the model.
 pub(super) fn series_key(id: &str, range: Range) -> String {
     format!("{id}-{}", range.slug())
 }
 
-/// Points to plot for a range: the quotes already cover 7 days, the other
-/// ranges come from the series cache.
 pub(super) fn series_of(model: &Model, quote: &Quote, range: Range) -> Vec<f64> {
     if range == Range::D7 {
         return quote.sparkline.clone();
@@ -49,7 +45,6 @@ fn range_caption(range: Range) -> String {
 }
 
 impl Ctx {
-    /// Chart card: the curve, its range selector and its bounds.
     pub(super) fn chart_card(
         self: &Rc<Self>,
         quote: &Quote,
@@ -284,7 +279,6 @@ pub(super) fn header(quote: &Quote, currency: &Currency, decimals: format::Decim
     container
 }
 
-/// Market data card, or `None` when the API published none.
 pub(super) fn stats_card(
     quote: &Quote,
     currency: &Currency,

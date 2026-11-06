@@ -1,20 +1,19 @@
+use std::fs;
+use std::fs::File;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use gtk4::prelude::*;
 use gtk4::{Box as GtkBox, Button};
 
-use crate::model::{Quote, Range};
-use crate::numeric::to_f64;
-
 use super::chart::{CHART_HEIGHT, CHART_WIDTH, draw_series};
 use super::error::PopupError;
 use super::model::Ctx;
 use super::status::root_cause;
+use crate::model::{Quote, Range};
+use crate::numeric::to_f64;
 use crate::paths;
-use std::fs;
-use std::fs::File;
-use std::io;
 
 impl Ctx {
     pub(super) fn export_buttons(

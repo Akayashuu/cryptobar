@@ -1,9 +1,9 @@
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 
-use crate::model::CoinId;
-
 use super::error::OnchainError;
-use std::str::FromStr;
+use crate::model::CoinId;
 
 /// A watched chain. The list is short on purpose: every entry needs a public,
 /// key-free endpoint and a clean balance decoder.

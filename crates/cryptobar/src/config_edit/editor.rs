@@ -1,14 +1,13 @@
+use std::fs;
+use std::fs::File;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 use toml_edit::DocumentMut;
 
+use super::error::EditError;
 use crate::config::{Config, DEFAULT_CONFIG};
 use crate::paths;
-
-use super::error::EditError;
-use std::fs;
-use std::fs::File;
 
 /// Editor bound to a configuration file.
 #[derive(Debug, Clone)]

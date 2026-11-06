@@ -1,8 +1,5 @@
 use crate::model::{CoinId, Currency};
 
-/// Safe file name derived from a logical key. The key only holds already
-/// validated characters, but it is filtered again so that no path can escape
-/// the cache directory.
 pub(super) fn sanitize(key: &str) -> String {
     key.chars()
         .map(|character| {

@@ -1,8 +1,3 @@
-/// Base stylesheet.
-///
-/// Every shade is derived from `@theme_bg_color` and `@theme_fg_color` through
-/// the GTK colour functions: the window matches the desktop theme, light or
-/// dark, without freezing or reading it.
 pub(super) const CSS: &str = "
 window { background-color: @theme_bg_color; }
 

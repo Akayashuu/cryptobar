@@ -100,12 +100,16 @@ serves the data for as long as it is fresh.
 ### Hyprland
 
 Without a window rule, Hyprland tiles the window like any other one. The rules
-ship for both config providers (`hyprctl systeminfo | grep configProvider`):
+ship in one file per config provider, and each provider reads only its own.
+Check which one you run with `hyprctl systeminfo | grep configProvider`:
 
-| Provider | File | Line to add |
-|---|---|---|
-| Lua (`hyprland.lua`) | `~/.config/hypr/cryptobar.lua` | `require("cryptobar")` |
-| legacy (`hyprland.conf`) | `~/.config/hypr/cryptobar.conf` | `source = ~/.config/hypr/cryptobar.conf` |
+- The Lua provider (`hyprland.lua`) reads `~/.config/hypr/cryptobar.lua`. Add
+  `require("cryptobar")` to `hyprland.lua`.
+- The legacy provider (`hyprland.conf`) reads `~/.config/hypr/cryptobar.conf`.
+  Add `source = ~/.config/hypr/cryptobar.conf` to `hyprland.conf`.
+
+Both files set the same four rules: the window floats, is 640 by 940, is
+centred and uses the `popin` animation.
 
 Launching `cryptobar popup` while the window is open brings it to the front,
 or closes it when it already has the focus: the same click opens and closes it.

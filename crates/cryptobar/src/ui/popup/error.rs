@@ -1,7 +1,7 @@
+use std::io;
 use std::path::PathBuf;
 
 use crate::paths::PathsError;
-use std::io;
 
 /// Failures of the graphical window.
 #[derive(Debug, thiserror::Error)]

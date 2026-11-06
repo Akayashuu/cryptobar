@@ -2,8 +2,6 @@ use crate::render::sparkline;
 
 const SERIES_POINTS: usize = 48;
 
-/// Brings a series into [0, 1]. A flat series sits in the middle rather than
-/// dividing by a zero amplitude.
 pub(super) fn normalize(points: &[f64]) -> Vec<f64> {
     let finite: Vec<f64> = points
         .iter()

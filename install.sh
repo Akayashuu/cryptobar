@@ -41,9 +41,10 @@ Installation complete. What is left to wire up, depending on your setup:
        @import "cryptobar.css";
 
   2. Hyprland, so the window opens floating and centred instead of tiled.
-     With the Lua config (hyprland.lua, `hyprctl systeminfo | grep configProvider`):
+     Check your provider with `hyprctl systeminfo | grep configProvider`, then:
+     Lua provider (hyprland.lua reads ~/.config/hypr/cryptobar.lua), add:
        require("cryptobar")
-     With the legacy config, in ~/.config/hypr/hyprland.conf:
+     Legacy provider (hyprland.conf reads ~/.config/hypr/cryptobar.conf), add:
        source = ~/.config/hypr/cryptobar.conf
 
 Make sure ~/.local/bin is in your PATH, then:

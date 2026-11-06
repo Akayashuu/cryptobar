@@ -11,7 +11,6 @@ pub enum Markup {
 }
 
 impl Markup {
-    /// Applies the escaping matching untrusted data.
     pub(super) fn escape(self, raw: &str) -> String {
         match self {
             Self::Pango => escape_pango(raw),
@@ -28,7 +27,6 @@ impl Markup {
         }
     }
 
-    /// Opens and closes a bold run, or nothing at all.
     pub(super) fn bold(self, raw: &str) -> String {
         match self {
             Self::Pango => format!("<b>{raw}</b>"),
@@ -36,7 +34,6 @@ impl Markup {
         }
     }
 
-    /// Formats a quiet note.
     pub(super) fn italic(self, raw: &str) -> String {
         match self {
             Self::Pango => format!("<i>{raw}</i>"),

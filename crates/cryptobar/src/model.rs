@@ -67,9 +67,6 @@ impl CoinId {
         &self.0
     }
 
-    /// Id hard-coded in the source, therefore already valid. Reserved for the
-    /// program's own constants: anything coming from outside goes through
-    /// [`CoinId::parse`].
     #[must_use]
     pub(crate) fn trusted(raw: &'static str) -> Self {
         Self(raw.to_owned())

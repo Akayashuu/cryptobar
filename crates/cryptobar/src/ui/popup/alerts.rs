@@ -12,7 +12,6 @@ use super::widgets::clear;
 use crate::config::Alert;
 
 impl Ctx {
-    /// Alerts card: those already set, and what it takes to add one.
     pub(super) fn draw_alerts(self: &Rc<Self>, currency: &Currency, decimals: format::Decimals) {
         clear(&self.widgets.alerts);
         let model = self.model.borrow();

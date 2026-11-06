@@ -1,15 +1,15 @@
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::channel;
 
+use gtk4::gdk::Display;
+use gtk4::gdk::Key;
 use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4::{Align, Application, ApplicationWindow, Box as GtkBox, Button, Label, Orientation};
-
-use crate::app::App;
-use crate::model::{Quote, Range};
 
 use super::error::PopupError;
 use super::model::{Ctx, Model, Msg, Widgets};
@@ -18,10 +18,9 @@ use super::settings::{settings_panel, wire_settings};
 use super::status::root_cause;
 use super::style::CSS;
 use super::worker::drain;
+use crate::app::App;
 use crate::commands::nav;
-use gtk4::gdk::Display;
-use gtk4::gdk::Key;
-use std::collections::BTreeMap;
+use crate::model::{Quote, Range};
 
 const APP_ID: &str = "dev.akayashuu.cryptobar";
 

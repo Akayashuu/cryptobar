@@ -5,14 +5,14 @@
 //! coin id. The sizes are modest (about ten kilobytes) and the download happens
 //! only once.
 
+use std::fs;
+use std::fs::File;
+use std::io;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::model::Quote;
-use std::fs;
-use std::fs::File;
-use std::io;
 
 const IMAGE_HOST: &str = "https://coin-images.coingecko.com/";
 

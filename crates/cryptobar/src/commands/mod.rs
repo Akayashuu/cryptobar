@@ -1,6 +1,7 @@
 //! Subcommand implementations.
 
 use std::error::Error;
+use std::fmt::Display;
 use std::io::{self, Write};
 
 use crate::app::AppError;
@@ -15,7 +16,6 @@ use crate::state::StateError;
 #[cfg(feature = "popup")]
 use crate::ui::popup::PopupError;
 use crate::waybar_signal::SignalError;
-use std::fmt::Display;
 
 pub mod bar;
 pub mod chart;

@@ -96,8 +96,9 @@ mod support {
     }
 }
 
-use assert_cmd::assert::OutputAssertExt;
 use std::fs;
+
+use assert_cmd::assert::OutputAssertExt;
 use support::{bar_json, cryptobar, run, seed_cache, setup};
 
 #[test]

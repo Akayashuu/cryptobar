@@ -19,6 +19,10 @@ semantic versioning.
   instead of blaming the network.
 - Hyprland rules for the Lua config provider (`hypr/cryptobar.lua`): with
   `hyprland.lua`, `cryptobar.conf` is never read and the window opened tiled.
+- `cryptobar bar` with an empty cache and no network prints one
+  `cryptobar: ...` line on stderr with the reason, then renders the module
+  with the tooltip `stale data: network unavailable`, instead of failing
+  without a word.
 
 ### Changed
 

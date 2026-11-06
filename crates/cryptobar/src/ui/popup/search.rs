@@ -1,18 +1,17 @@
 use std::rc::Rc;
+use std::thread;
 use std::time::Duration;
 
 use gtk4::glib;
+use gtk4::pango::EllipsizeMode;
 use gtk4::prelude::*;
 use gtk4::{Align, Box as GtkBox, Button, Label, ListBox, Orientation};
-
-use crate::model::CoinId;
-use crate::source::SearchHit;
 
 use super::identity::identity_of;
 use super::model::{Ctx, Msg, send_unless_closed};
 use super::widgets::clear;
-use gtk4::pango::EllipsizeMode;
-use std::thread;
+use crate::model::CoinId;
+use crate::source::SearchHit;
 
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(350);
 

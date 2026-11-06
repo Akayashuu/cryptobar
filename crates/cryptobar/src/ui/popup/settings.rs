@@ -1,20 +1,17 @@
+use std::iter;
 use std::rc::Rc;
 
 use gtk4::glib;
+use gtk4::pango::EllipsizeMode;
 use gtk4::prelude::*;
 use gtk4::{Align, Box as GtkBox, Label, Orientation};
 
+use super::model::Ctx;
 use crate::config::{Config, MIN_REFRESH_INTERVAL};
 use crate::model::Currency;
 use crate::numeric::to_f64;
 use crate::render::format;
 
-use super::model::Ctx;
-use gtk4::pango::EllipsizeMode;
-use std::iter;
-
-/// Settings controls, built once then never rebuilt: their values are those of
-/// the file at opening time.
 pub(super) struct Settings {
     pub(super) panel: GtkBox,
     pub(super) currency: gtk4::DropDown,

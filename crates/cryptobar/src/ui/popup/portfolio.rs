@@ -1,26 +1,24 @@
+use std::f64::consts::FRAC_PI_2;
+use std::f64::consts::TAU;
 use std::rc::Rc;
 
 use gtk4::prelude::*;
 use gtk4::{Align, Box as GtkBox, Button, Label, Orientation};
-
-use crate::model::{Currency, Quote};
-use crate::portfolio::{self, Portfolio};
-use crate::render::format;
 
 use super::chart::report_frame;
 use super::identity::css_key;
 use super::model::Ctx;
 use super::parse::rgb;
 use super::widgets::{clear, trend_class};
+use crate::model::{Currency, Quote};
 use crate::onchain;
 use crate::onchain::Balance;
 use crate::onchain::Chain;
 use crate::onchain::Wallet;
-use std::f64::consts::FRAC_PI_2;
-use std::f64::consts::TAU;
+use crate::portfolio::{self, Portfolio};
+use crate::render::format;
 
 impl Ctx {
-    /// Portfolio card: total, split, positions and watched addresses.
     pub(super) fn draw_wallet(self: &Rc<Self>, currency: &Currency, decimals: format::Decimals) {
         clear(&self.widgets.wallet);
         let model = self.model.borrow();

@@ -3,8 +3,6 @@ use serde::Deserialize;
 use super::error::OnchainError;
 use crate::numeric::to_f64;
 
-/// Bitcoin balance: what came in minus what went out, confirmed as well as
-/// pending, converted from satoshis to BTC.
 pub(super) fn decode_bitcoin(body: &str) -> Result<f64, OnchainError> {
     #[derive(Deserialize, Default)]
     struct Stats {
@@ -30,7 +28,6 @@ pub(super) fn decode_bitcoin(body: &str) -> Result<f64, OnchainError> {
     Ok(units(to_f64(sats), 100_000_000.0))
 }
 
-/// Ethereum balance: a hexadecimal integer in wei.
 pub(super) fn decode_ethereum(body: &str) -> Result<f64, OnchainError> {
     #[derive(Deserialize)]
     struct Reply {
@@ -44,7 +41,6 @@ pub(super) fn decode_ethereum(body: &str) -> Result<f64, OnchainError> {
     Ok(units(to_f64(wei), 1e18))
 }
 
-/// Solana balance: an integer number of lamports.
 pub(super) fn decode_solana(body: &str) -> Result<f64, OnchainError> {
     #[derive(Deserialize)]
     struct Value {

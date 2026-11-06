@@ -12,14 +12,14 @@
 //! only notifies once.
 
 use std::collections::BTreeSet;
-
-use crate::config::{Alert, Config};
-use crate::model::{Currency, Quote};
-use crate::render::format::{self, Decimals};
 use std::io;
 use std::io::ErrorKind;
 use std::process::Command;
 use std::process::Stdio;
+
+use crate::config::{Alert, Config};
+use crate::model::{Currency, Quote};
+use crate::render::format::{self, Decimals};
 
 /// A crossed condition, in a form comparable from one tick to the next.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

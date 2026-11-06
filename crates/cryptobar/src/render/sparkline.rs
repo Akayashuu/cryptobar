@@ -1,13 +1,12 @@
 //! Sparkline made of Unicode blocks. Pure function, no I/O.
 
-use crate::numeric::{saturating_index, to_f64};
 use std::iter;
+
+use crate::numeric::{saturating_index, to_f64};
 
 const LEVELS: &[char] = &['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 const FLAT_LEVEL: char = '▄';
 
-/// Reduces the series to at most `width` points by averaging contiguous slices.
-/// Averaging rather than sampling keeps a lone spike from vanishing or taking over.
 pub(crate) fn downsample(points: &[f64], width: usize) -> Vec<f64> {
     if points.len() <= width {
         return points.to_vec();

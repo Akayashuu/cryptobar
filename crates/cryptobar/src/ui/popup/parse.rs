@@ -1,9 +1,7 @@
-use gtk4::prelude::*;
 use std::ops::Range;
 
-/// Splits a `#rrggbb` colour into `0.0..=1.0` components.
-///
-/// An unexpected string yields a neutral grey: the ring stays readable.
+use gtk4::prelude::*;
+
 pub(super) fn rgb(color: &str) -> (f64, f64, f64) {
     let parse = |range: Range<usize>| {
         color
@@ -31,7 +29,6 @@ fn parse_number(text: &str) -> Option<f64> {
         .filter(|value| value.is_finite())
 }
 
-/// Numeric content of a field, or `None` when it is empty or unreadable.
 pub(super) fn field(entry: &gtk4::Entry) -> Option<f64> {
     let text = entry.text().to_string();
     if text.trim().is_empty() {

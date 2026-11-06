@@ -9,7 +9,6 @@ use crate::render::format;
 
 use super::chart::Hover;
 
-/// Index of the sample sitting at the given relative abscissa.
 pub(super) fn sample_at(len: usize, ratio: f64) -> usize {
     let last = len.saturating_sub(1);
     saturating_index((ratio.clamp(0.0, 1.0) * to_f64(last)).round(), last)
@@ -33,7 +32,6 @@ fn age_at(range: Range, len: usize, index: usize) -> String {
     }
 }
 
-/// Wires the hover readout onto the drawing area.
 pub(super) fn attach_hover(
     area: &gtk4::DrawingArea,
     readout: &Label,

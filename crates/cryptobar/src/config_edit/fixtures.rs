@@ -1,5 +1,6 @@
-use super::Editor;
 use std::fs;
+
+use super::Editor;
 
 pub(super) fn editor() -> (tempfile::TempDir, Editor) {
     let dir = tempfile::tempdir().unwrap();

@@ -3,8 +3,9 @@
 //! The goal: whatever the number of Waybar ticks, the API is called only once
 //! per interval, and two concurrent processes never fire a duplicate request.
 
-use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde::{Deserialize, Serialize};
 
 mod key;
 mod refresh;

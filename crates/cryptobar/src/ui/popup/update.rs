@@ -15,8 +15,6 @@ use super::status::root_cause;
 use super::widgets::clear;
 
 impl Ctx {
-    /// Takes a rewritten configuration into account: new context, reloaded
-    /// data, bar woken up.
     pub(super) fn adopt(self: &Rc<Self>, written: Result<Config, EditError>, message: &str) {
         match written {
             Ok(_) => {
@@ -97,7 +95,6 @@ impl Ctx {
         self.draw_results();
     }
 
-    /// Changes the range displayed under the curve.
     pub(super) fn set_range(self: &Rc<Self>, range: Range) {
         if self.model.borrow().range == range {
             return;

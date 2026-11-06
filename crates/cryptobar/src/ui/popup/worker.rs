@@ -1,17 +1,16 @@
 use std::error::Error;
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, TryRecvError};
+use std::thread;
 use std::time::Duration;
 
 use gtk4::glib;
 
-use crate::model::{Quote, Range};
-
 use super::model::{Ctx, Msg, send_unless_closed};
 use super::prices::series_key;
 use super::status::root_cause;
+use crate::model::{Quote, Range};
 use crate::onchain;
-use std::thread;
 
 const DRAIN: Duration = Duration::from_millis(120);
 
