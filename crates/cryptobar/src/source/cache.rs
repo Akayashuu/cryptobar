@@ -88,6 +88,10 @@ impl<S: PriceSource> CachedSource<S> {
         &self.source
     }
 
+    fn is_fresh(&self, fetched_at: u64, now_secs: u64) -> bool {
+        now_secs.saturating_sub(fetched_at) < self.ttl.as_secs()
+    }
+
     fn path(&self, key: &str) -> PathBuf {
         self.dir.join(format!("{}.json", sanitize(key)))
     }
@@ -167,15 +171,14 @@ impl<S: PriceSource> CachedSource<S> {
         let existing = self.read::<T>(key);
         let now_secs = now();
 
-        if let Some(entry) = &existing {
-            let age = now_secs.saturating_sub(entry.fetched_at);
-            if age < self.ttl.as_secs() {
-                return Ok(Cached {
-                    value: entry.value.clone(),
-                    fetched_at: entry.fetched_at,
-                    stale: false,
-                });
-            }
+        if let Some(entry) = &existing
+            && self.is_fresh(entry.fetched_at, now_secs)
+        {
+            return Ok(Cached {
+                value: entry.value.clone(),
+                fetched_at: entry.fetched_at,
+                stale: false,
+            });
         }
 
         let blocked = now_secs < self.backoff().retry_after;
@@ -260,11 +263,11 @@ impl<S: PriceSource> CachedSource<S> {
     #[must_use]
     pub fn markets_stored(&self, ids: &[CoinId], vs: &Currency) -> Option<Cached<Vec<Quote>>> {
         let entry = self.read::<Vec<Quote>>(&markets_key(ids, vs))?;
-        let age = now().saturating_sub(entry.fetched_at);
+        let stale = !self.is_fresh(entry.fetched_at, now());
         Some(Cached {
             value: entry.value,
             fetched_at: entry.fetched_at,
-            stale: age >= self.ttl.as_secs(),
+            stale,
         })
     }
 

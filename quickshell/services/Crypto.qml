@@ -91,27 +91,25 @@ Singleton {
         root.series = active?.series ?? [];
     }
 
-    /// Short subcommands waiting for the one running to exit. A scroll of
-    /// three notches is three moves, never one.
+    readonly property int pendingLimit: 8
     property var pending: []
+    property bool acting: false
 
-    /// Runs a short subcommand (`next`, `refresh`…) then reads the current
-    /// value back, for immediate feedback without waiting for the interval.
     function run(argv) {
-        if (actionProc.running) {
-            root.pending = root.pending.concat([argv]);
+        if (root.acting) {
+            if (root.pending.length < root.pendingLimit)
+                root.pending = root.pending.concat([argv]);
             return;
         }
         root.start(argv);
     }
 
     function start(argv) {
+        root.acting = true;
         actionProc.command = [root.binary].concat(argv);
         actionProc.running = true;
     }
 
-    /// Windows live as long as the user keeps them open: they leave on a
-    /// process of their own, or they would hold the action queue for as long.
     function launch(argv) {
         Quickshell.execDetached([root.binary].concat(argv));
     }
@@ -166,6 +164,7 @@ Singleton {
                 root.start(next);
                 return;
             }
+            root.acting = false;
             readProc.running = true;
         }
     }

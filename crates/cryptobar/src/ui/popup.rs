@@ -195,8 +195,6 @@ enum Msg {
     Search(u64, Result<Vec<SearchHit>, String>),
     /// Freshly loaded quotes, with the "served from cache" flag.
     Quotes(Vec<Quote>, bool),
-    /// The quotes could not be loaded, from the network nor from the cache:
-    /// the ones on screen stay, flagged as stale.
     QuotesUnavailable,
     /// Series of a range other than 7 days, keyed by its cache key.
     Series(String, Vec<f64>),
@@ -247,8 +245,6 @@ pub fn show(app: App, quotes: Vec<Quote>, stale: bool) -> anyhow::Result<()> {
     }
 }
 
-/// Second launch while the window is open: a click on the bar closes the
-/// window it opened, and brings it back when it hid behind another one.
 fn toggle(window: &gtk4::Window) {
     if window.is_active() {
         window.close();
@@ -262,8 +258,6 @@ struct Model {
     app: Arc<App>,
     quotes: Vec<Quote>,
     stale: bool,
-    /// `false` until the first worker answers about the quotes: an empty list
-    /// before that is a load in progress, not a network failure.
     answered: bool,
     hits: Vec<SearchHit>,
     /// Range displayed under the curve.
@@ -386,7 +380,7 @@ impl Ctx {
             .cloned();
         let stale = model.stale && !model.quotes.is_empty();
         let empty_caption = if model.answered {
-            "No data — check the network connection"
+            "No data: check the network connection"
         } else {
             "Loading prices…"
         };
