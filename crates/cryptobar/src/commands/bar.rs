@@ -1,7 +1,9 @@
 //! `bar` subcommand: emission of the Waybar module.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::{self, ErrorKind, Write};
+use std::mem::{self, Discriminant};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
@@ -13,6 +15,7 @@ use crate::model::Quote;
 use crate::onchain;
 use crate::output::Output;
 use crate::render::waybar::{self, Markup};
+use crate::source::SourceError;
 use crate::state::{LoadedState, Occurrence, State, StateError};
 
 const POLL: Duration = Duration::from_millis(400);
@@ -32,7 +35,7 @@ pub fn run<Out: Write, Err: Write>(
     if watch {
         watch_loop(app, markup, output)
     } else {
-        emit(&app, markup, false, &mut Ongoing::default(), output)
+        emit(&app, markup, false, &mut Session::default(), output)
     }
 }
 
@@ -43,10 +46,10 @@ fn watch_loop<Out: Write, Err: Write>(
 ) -> Result<(), CommandError> {
     let mut config_watch = Watched::start(app.config_path().to_path_buf(), output)?;
     let mut state_watch = Watched::start(State::default_path()?, output)?;
-    let mut state_failures = Ongoing::default();
+    let mut session = Session::default();
 
     loop {
-        emit(&app, markup, true, &mut state_failures, output)?;
+        emit(&app, markup, true, &mut session, output)?;
 
         let deadline =
             Instant::now().checked_add(Duration::from_secs(app.config.refresh_interval.max(1)));
@@ -71,6 +74,24 @@ fn watch_loop<Out: Write, Err: Write>(
                 Err(failure) => warn(output, &failure)?,
             }
         }
+    }
+}
+
+#[derive(Debug, Default)]
+struct Session {
+    state_reads: Ongoing<Occurrence>,
+    state_writes: Ongoing<Occurrence>,
+    source: Ongoing<Discriminant<SourceError>>,
+    fired: Option<BTreeSet<String>>,
+}
+
+impl Session {
+    fn source_failed(&mut self, failure: &SourceError) -> bool {
+        self.source.begin(mem::discriminant(failure))
+    }
+
+    fn source_recovered(&mut self) {
+        self.source.settle(&[]);
     }
 }
 
@@ -114,7 +135,11 @@ impl Watched {
                 Ok(stamp)
             }
             Err(source) => {
-                if self.failures.begin((self.path.clone(), source.kind())) {
+                let occurrence = Occurrence {
+                    path: self.path.clone(),
+                    kind: source.kind(),
+                };
+                if self.failures.begin(occurrence) {
                     warn(
                         output,
                         &CommandError::Watch {
@@ -141,45 +166,68 @@ fn dispatch_alerts<Out: Write, Err: Write>(
     app: &App,
     quotes: &[Quote],
     loaded: &mut LoadedState,
+    session: &mut Session,
     output: &mut Output<Out, Err>,
 ) -> Result<(), CommandError> {
     if app.config.alerts.is_empty() || !loaded.is_writable() {
         return Ok(());
     }
+    let remembered = session
+        .fired
+        .get_or_insert_with(|| loaded.state.fired.clone());
     let triggers = alerts::evaluate(&app.config, quotes);
-    let (fresh, current) = alerts::diff(&triggers, &loaded.state.fired);
+    let (fresh, current) = alerts::diff(&triggers, remembered);
     for trigger in &fresh {
         if let Err(failure) = alerts::notify(trigger) {
             warn(output, &failure)?;
         }
     }
-    if current != loaded.state.fired {
-        loaded.state.fired = current;
-        if let Err(failure) = app.save_state(&loaded.state) {
-            warn(output, &failure)?;
+    if current != *remembered {
+        loaded.state.fired.clone_from(&current);
+        *remembered = current;
+        match app.save_state(&loaded.state) {
+            Ok(()) => session.state_writes.settle(&[]),
+            Err(failure) => loaded.notices.push(failure),
         }
     }
     Ok(())
+}
+
+fn repaired_cleanly(loaded: &LoadedState) -> bool {
+    let repaired = loaded
+        .notices
+        .iter()
+        .any(|notice| matches!(notice, StateError::Corrupt { .. }));
+    repaired && !loaded.notices.iter().any(StateError::is_write)
 }
 
 fn report_state<Out: Write, Err: Write>(
     app: &App,
     loaded: &LoadedState,
     live: bool,
-    failures: &mut Ongoing<Occurrence>,
+    session: &mut Session,
     output: &mut Output<Out, Err>,
 ) -> Result<(), CommandError> {
-    let present: Vec<Occurrence> = loaded
+    let reads: Vec<Occurrence> = loaded
         .notices
         .iter()
+        .filter(|notice| !notice.is_write())
         .filter_map(StateError::occurrence)
         .collect();
-    failures.settle(&present);
+    session.state_reads.settle(&reads);
+    if repaired_cleanly(loaded) {
+        session.state_writes.settle(&[]);
+    }
     let mut fresh = false;
     for notice in &loaded.notices {
+        let failures = if notice.is_write() {
+            &mut session.state_writes
+        } else {
+            &mut session.state_reads
+        };
         if notice
             .occurrence()
-            .is_none_or(|failure| failures.begin(failure))
+            .is_none_or(|occurrence| failures.begin(occurrence))
         {
             fresh = true;
             warn(output, notice)?;
@@ -196,34 +244,48 @@ fn report_state<Out: Write, Err: Write>(
     Ok(())
 }
 
+fn report_source<Out: Write, Err: Write>(
+    session: &mut Session,
+    failure: &SourceError,
+    output: &mut Output<Out, Err>,
+) -> Result<(), CommandError> {
+    if session.source_failed(failure) {
+        warn(output, failure)?;
+    }
+    Ok(())
+}
+
 fn emit<Out: Write, Err: Write>(
     app: &App,
     markup: Markup,
     live: bool,
-    failures: &mut Ongoing<Occurrence>,
+    session: &mut Session,
     output: &mut Output<Out, Err>,
 ) -> Result<(), CommandError> {
     let (mut quotes, stale) = match app
         .source
         .markets_cached(&app.config.coins, &app.config.currency)
     {
-        Ok(cached) => (cached.value, cached.stale),
+        Ok(cached) => {
+            session.source_recovered();
+            (cached.value, cached.stale)
+        }
         Err(failure) => {
-            warn(output, &failure)?;
+            report_source(session, &failure, output)?;
             (Vec::new(), true)
         }
     };
     if let Some(notice) = app.source.take_notice() {
-        warn(output, &notice)?;
+        report_source(session, &notice, output)?;
     }
     let mut loaded = app.state();
-    report_state(app, &loaded, live, failures, output)?;
     if live {
         warn_each(output, &app.fetch_icons(&mut quotes))?;
-        dispatch_alerts(app, &quotes, &mut loaded, output)?;
+        dispatch_alerts(app, &quotes, &mut loaded, session, output)?;
     } else {
         app.attach_icons(&mut quotes);
     }
+    report_state(app, &loaded, live, session, output)?;
     let watcher = app.watcher();
     let refresh = if live {
         watcher.refresh(&app.config.wallets)
@@ -262,5 +324,15 @@ mod tests {
             stamp(&file.join("child")),
             Err(failure) if failure.kind() != ErrorKind::NotFound
         ));
+    }
+
+    #[test]
+    fn a_source_failure_is_new_until_a_success_settles_it() {
+        let mut session = Session::default();
+        assert!(session.source_failed(&SourceError::Backoff));
+        assert!(!session.source_failed(&SourceError::Backoff));
+        assert!(session.source_failed(&SourceError::Payload(String::new())));
+        session.source_recovered();
+        assert!(session.source_failed(&SourceError::Backoff));
     }
 }

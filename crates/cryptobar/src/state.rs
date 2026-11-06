@@ -62,19 +62,35 @@ pub enum StateError {
 }
 
 /// Identifies a failure on a file: the path and the kind of the error.
-pub type Occurrence = (PathBuf, ErrorKind);
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Occurrence {
+    /// File the failure concerns.
+    pub path: PathBuf,
+    /// Kind of the operating system error, `InvalidData` for a corrupt file.
+    pub kind: ErrorKind,
+}
 
 impl StateError {
     /// The file and the error kind of this failure, when it concerns the state file.
     #[must_use]
     pub fn occurrence(&self) -> Option<Occurrence> {
         match self {
-            Self::Read { path, source } | Self::Write { path, source } => {
-                Some((path.clone(), source.kind()))
-            }
-            Self::Corrupt { path, .. } => Some((path.clone(), ErrorKind::InvalidData)),
+            Self::Read { path, source } | Self::Write { path, source } => Some(Occurrence {
+                path: path.clone(),
+                kind: source.kind(),
+            }),
+            Self::Corrupt { path, .. } => Some(Occurrence {
+                path: path.clone(),
+                kind: ErrorKind::InvalidData,
+            }),
             Self::Paths(_) | Self::Directory { .. } | Self::Encode(_) => None,
         }
+    }
+
+    /// Whether this failure is a state file that could not be written.
+    #[must_use]
+    pub fn is_write(&self) -> bool {
+        matches!(self, Self::Write { .. })
     }
 }
 

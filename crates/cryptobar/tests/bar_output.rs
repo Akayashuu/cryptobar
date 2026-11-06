@@ -5,11 +5,14 @@
 
 #[cfg(test)]
 mod support {
+    use std::env::var;
     use std::fs;
+    use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
-    use std::process::{Command, Output};
-    use std::time::SystemTime;
+    use std::process::{Command, Output, Stdio};
+    use std::thread;
     use std::time::UNIX_EPOCH;
+    use std::time::{Duration, SystemTime};
 
     use assert_cmd::prelude::*;
     use serde_json::{Value, json};
@@ -104,6 +107,51 @@ mod support {
         assert_eq!(stdout.lines().count(), 1, "Waybar expects exactly one line");
         serde_json::from_str(stdout.trim()).unwrap()
     }
+
+    pub(crate) fn fake_notifier(env: &Env) -> (PathBuf, PathBuf) {
+        let bin = env.config.with_file_name("bin");
+        fs::create_dir(&bin).unwrap();
+        let sent = env.config.with_file_name("notified.log");
+        let script = bin.join("notify-send");
+        fs::write(
+            &script,
+            format!("#!/bin/sh\necho notified >> '{}'\n", sent.display()),
+        )
+        .unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        (bin, sent)
+    }
+
+    pub(crate) fn path_with(bin: &Path) -> String {
+        format!("{}:{}", bin.display(), var("PATH").unwrap_or_default())
+    }
+
+    pub(crate) fn watch_stderr(env: &Env, path: Option<String>, ticks: u32) -> String {
+        let log = env.config.with_file_name("watch.log");
+        let state = env.runtime.join("state.json");
+        let mut cmd = cryptobar(env);
+        cmd.args(["bar", "--watch"])
+            .stdout(Stdio::null())
+            .stderr(fs::File::create(&log).unwrap());
+        if let Some(path) = path {
+            cmd.env("PATH", path);
+        }
+        let mut child = cmd.spawn().unwrap();
+        thread::sleep(Duration::from_millis(1000));
+        for elapsed in 1..ticks {
+            let touched = SystemTime::now()
+                .checked_add(Duration::from_secs(u64::from(elapsed)))
+                .unwrap();
+            fs::File::open(&state)
+                .unwrap()
+                .set_modified(touched)
+                .unwrap();
+            thread::sleep(Duration::from_millis(1000));
+        }
+        child.kill().unwrap();
+        child.wait().unwrap();
+        fs::read_to_string(&log).unwrap()
+    }
 }
 
 use std::fs::{self, File};
@@ -113,7 +161,13 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 
 use assert_cmd::assert::OutputAssertExt;
-use support::{bar_json, cryptobar, run, seed_cache, setup};
+use support::{
+    bar_json, cryptobar, fake_notifier, path_with, run, seed_cache, setup, watch_stderr,
+};
+
+fn lines_with(text: &str, needle: &str) -> usize {
+    text.lines().filter(|line| line.contains(needle)).count()
+}
 
 #[test]
 fn bar_emits_valid_waybar_json_from_the_cache() {
@@ -336,4 +390,45 @@ fn bar_watch_reports_an_unreadable_state_once_per_failure() {
         2,
         "stderr: {stderr}"
     );
+}
+
+#[test]
+fn bar_watch_reports_a_failed_repair_and_alert_save_once_and_fires_once() {
+    let env = setup();
+    seed_cache(&env.cache);
+    fs::write(
+        &env.config,
+        "coins = [\"bitcoin\", \"ethereum\"]\ncurrency = \"eur\"\nrefresh_interval = 15\n\n[[alerts]]\ncoin = \"bitcoin\"\nabove = 1\n",
+    )
+    .unwrap();
+    fs::write(env.runtime.join("state.json"), b"garbage").unwrap();
+    fs::create_dir(env.runtime.join("state.json.tmp")).unwrap();
+    let (bin, sent) = fake_notifier(&env);
+
+    let stderr = watch_stderr(&env, Some(path_with(&bin)), 3);
+
+    assert_eq!(lines_with(&stderr, "is corrupt"), 1, "stderr: {stderr}");
+    assert_eq!(
+        lines_with(&stderr, "could not write the state file"),
+        1,
+        "stderr: {stderr}"
+    );
+    let notified = fs::read_to_string(&sent).unwrap_or_default();
+    assert_eq!(notified.lines().count(), 1, "notifications: {notified}");
+}
+
+#[test]
+fn bar_watch_reports_an_offline_backoff_once() {
+    let env = setup();
+    fs::write(
+        &env.config,
+        "coins = [\"bitcoin\", \"ethereum\"]\ncurrency = \"eur\"\nrefresh_interval = 15\n",
+    )
+    .unwrap();
+    fs::write(env.runtime.join("state.json"), b"{}").unwrap();
+
+    let stderr = watch_stderr(&env, None, 3);
+
+    assert_eq!(lines_with(&stderr, "backoff active"), 1, "stderr: {stderr}");
+    assert_eq!(stderr.lines().count(), 2, "stderr: {stderr}");
 }
