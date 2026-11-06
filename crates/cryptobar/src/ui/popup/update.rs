@@ -40,10 +40,18 @@ impl Ctx {
     pub(super) fn redraw(self: &Rc<Self>) {
         let model = self.model.borrow();
         self.palette.load_from_data(&badge_css(&model.quotes));
-        let active = model.app.active_index().unwrap_or_else(|failure| {
-            self.note(&root_cause(&failure), true);
-            0
-        });
+        let active = match model.app.state() {
+            Ok(loaded) => {
+                if let Some(reset) = &loaded.reset {
+                    self.note(&root_cause(reset), false);
+                }
+                model.app.index_of(&loaded.state)
+            }
+            Err(failure) => {
+                self.note(&root_cause(&failure), true);
+                0
+            }
+        };
         let currency = model.app.config.currency.clone();
         let decimals = model.app.config.decimals();
         let range = model.range;

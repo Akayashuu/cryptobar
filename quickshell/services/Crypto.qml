@@ -91,17 +91,25 @@ Singleton {
         root.series = active?.series ?? [];
     }
 
-    readonly property int pendingLimit: 8
+    readonly property var idempotentActions: ["refresh", "select"]
     property var pending: []
     property bool acting: false
 
+    function sameAction(left, right) {
+        return left.length === right.length && left.every((word, position) => word === right[position]);
+    }
+
+    function queue(argv) {
+        const last = root.pending[root.pending.length - 1];
+        const repeatsLast = last !== undefined && root.sameAction(last, argv);
+        if (repeatsLast && root.idempotentActions.includes(argv[0]))
+            return root.pending;
+        return root.pending.concat([argv]);
+    }
+
     function run(argv) {
         if (root.acting) {
-            if (root.pending.length < root.pendingLimit) {
-                root.pending = root.pending.concat([argv]);
-            } else {
-                console.warn(`cryptobar: dropped "${argv.join(" ")}", more than ${root.pendingLimit} actions are queued`);
-            }
+            root.pending = root.queue(argv);
             return;
         }
         root.start(argv);

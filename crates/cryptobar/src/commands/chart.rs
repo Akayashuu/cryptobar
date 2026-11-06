@@ -4,7 +4,7 @@ use std::env;
 use std::io::Write;
 use std::process::Command;
 
-use super::{CommandError, print_text};
+use super::{CommandError, load_state, print_text, warn};
 use crate::app::App;
 use crate::config::Config;
 use crate::model::{CoinId, Range, Series};
@@ -34,7 +34,7 @@ pub fn run<Out: Write, Err: Write>(
         None => app
             .config
             .coins
-            .get(app.active_index()?)
+            .get(app.index_of(&load_state(app, output)?))
             .or_else(|| app.config.coins.first())
             .cloned()
             .ok_or(CommandError::NoCoin)?,
@@ -47,6 +47,9 @@ pub fn run<Out: Write, Err: Write>(
             id: id.as_str().to_owned(),
             source,
         })?;
+    if let Some(notice) = app.source.take_notice() {
+        warn(output, &notice)?;
+    }
 
     let (cols, rows) = viewport();
     print_text(

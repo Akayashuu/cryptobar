@@ -36,13 +36,12 @@ pub enum StateError {
         /// The operating system error.
         source: io::Error,
     },
-    /// The state file exists but is not a valid state. It is left untouched on disk.
-    #[error("the state file {} is corrupt", path.display())]
+    /// The state file exists but does not parse. Commands report it once, then
+    /// replace the file with the default state: the state is a volatile cache.
+    #[error("the state file {} is corrupt, starting from the default state", path.display())]
     Corrupt {
         /// State file that does not parse.
         path: PathBuf,
-        /// The JSON error.
-        source: serde_json::Error,
     },
     /// The state file could not be written.
     #[error("could not write the state file {}", path.display())]
@@ -55,6 +54,15 @@ pub enum StateError {
     /// The state could not be encoded as JSON.
     #[error("could not encode the state")]
     Encode(#[from] serde_json::Error),
+}
+
+/// A state read from disk, with the corruption repaired on the way, if any.
+#[derive(Debug)]
+pub struct LoadedState {
+    /// The state to use: the stored one, or the default after a repair.
+    pub state: State,
+    /// The corruption that the default state replaced, to report once.
+    pub reset: Option<StateError>,
 }
 
 /// Minimal persistent state.
@@ -84,14 +92,16 @@ impl State {
     ///
     /// # Errors
     /// Fails with [`StateError::Corrupt`] when the file does not parse, so the
-    /// caller decides whether to fall back to the default, and with
-    /// [`StateError::Read`] when the file cannot be read.
+    /// caller decides how to recover, and with [`StateError::Read`] when the
+    /// file cannot be read.
     pub fn load(path: &Path) -> Result<Self, StateError> {
         match fs::read_to_string(path) {
-            Ok(raw) => serde_json::from_str(&raw).map_err(|source| StateError::Corrupt {
-                path: path.to_path_buf(),
-                source,
-            }),
+            Ok(raw) => match serde_json::from_str(&raw) {
+                Ok(state) => Ok(state),
+                Err(_unparsable) => Err(StateError::Corrupt {
+                    path: path.to_path_buf(),
+                }),
+            },
             Err(absent) if absent.kind() == ErrorKind::NotFound => Ok(Self::default()),
             Err(failure) => Err(StateError::Read {
                 path: path.to_path_buf(),
@@ -287,7 +297,7 @@ mod tests {
     }
 
     #[test]
-    fn a_corrupt_state_is_reported_and_left_on_disk() {
+    fn a_corrupt_state_is_an_error_and_left_on_disk() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("state.json");
         fs::write(&path, b"garbage").unwrap();

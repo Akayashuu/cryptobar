@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::io;
 use std::rc::Rc;
 
 use gtk4::pango::EllipsizeMode;
@@ -13,6 +14,7 @@ use super::status::root_cause;
 use super::widgets::{clear, trend_class};
 use crate::commands::nav;
 use crate::model::{Currency, Quote, Range};
+use crate::output::Output;
 use crate::render::braille;
 use crate::render::format;
 
@@ -221,7 +223,8 @@ impl Ctx {
         list.connect_row_activated(move |_, row| {
             let index = usize::try_from(row.index()).unwrap_or(0);
             let app = ctx.app();
-            if let Err(error) = nav::select(&app, index) {
+            let mut output = Output::new(io::sink(), io::stderr());
+            if let Err(error) = nav::select(&app, &mut output, index) {
                 ctx.note(&root_cause(&error), true);
                 return;
             }

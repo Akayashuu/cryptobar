@@ -4,7 +4,6 @@
 //! I/O, which keeps the rest of the code testable without a network.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use crate::alerts::AlertError;
@@ -16,7 +15,7 @@ use crate::paths::{self, PathsError};
 use crate::source::cache::CachedSource;
 use crate::source::coingecko::CoinGecko;
 use crate::source::icons::{self, IconError};
-use crate::state::{State, StateError};
+use crate::state::{LoadedState, State, StateError};
 use crate::waybar_signal::{self, SignalError};
 
 const MANUAL_HOLD: u64 = 300;
@@ -54,7 +53,6 @@ pub struct App {
     config_path: PathBuf,
     cache_dir: PathBuf,
     state_path: PathBuf,
-    corrupt_state_reported: AtomicBool,
 }
 
 impl App {
@@ -83,7 +81,6 @@ impl App {
             config_path,
             cache_dir,
             state_path: State::default_path()?,
-            corrupt_state_reported: AtomicBool::new(false),
         })
     }
 
@@ -143,17 +140,26 @@ impl App {
         icons::fetch_missing(&self.cache_dir, quotes)
     }
 
+    /// Reads the state. A corrupt file is replaced by the default state right
+    /// away, so the next command starts clean; the corruption is returned in
+    /// [`LoadedState::reset`] for the caller to report.
+    ///
     /// # Errors
-    /// Fails with [`StateError::Corrupt`] when the state file does not parse, and
-    /// with [`StateError::Read`] when it cannot be read.
-    pub fn state(&self) -> Result<State, StateError> {
-        State::load(&self.state_path)
-    }
-
-    /// Returns `true` the first time it is called, so a corrupt state is reported once.
-    #[must_use]
-    pub fn claim_corrupt_state_report(&self) -> bool {
-        !self.corrupt_state_reported.swap(true, Ordering::Relaxed)
+    /// Fails with [`StateError::Read`] when the file cannot be read, and with
+    /// [`StateError::Write`] when a corrupt file cannot be replaced.
+    pub fn state(&self) -> Result<LoadedState, StateError> {
+        match State::load(&self.state_path) {
+            Ok(state) => Ok(LoadedState { state, reset: None }),
+            Err(corrupt @ StateError::Corrupt { .. }) => {
+                let state = State::default();
+                self.save_state(&state)?;
+                Ok(LoadedState {
+                    state,
+                    reset: Some(corrupt),
+                })
+            }
+            Err(failure) => Err(failure),
+        }
     }
 
     /// Persists the cycling state.
@@ -162,14 +168,6 @@ impl App {
     /// Propagates the write errors.
     pub fn save_state(&self, state: &State) -> Result<(), StateError> {
         state.save(&self.state_path)
-    }
-
-    /// Index of the cryptocurrency to display right now.
-    ///
-    /// # Errors
-    /// See [`App::state`].
-    pub fn active_index(&self) -> Result<usize, StateError> {
-        Ok(self.index_of(&self.state()?))
     }
 
     /// Index of the cryptocurrency to display for the given state.

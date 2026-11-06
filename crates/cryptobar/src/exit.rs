@@ -56,6 +56,7 @@ impl From<&CommandError> for Exit {
             CommandError::App(inner) => Self::from(inner),
             CommandError::State(_)
             | CommandError::Write(_)
+            | CommandError::Watch { .. }
             | CommandError::Executable(_)
             | CommandError::Signal(_) => Self::IoError,
             CommandError::Paths(_) | CommandError::Config(_) | CommandError::Edit(_) => {

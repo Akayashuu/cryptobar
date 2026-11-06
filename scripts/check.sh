@@ -13,6 +13,7 @@ run() {
 
 run cargo fmt --all --check
 ./scripts/check-file-size.sh
+python3 -I scripts/check-no-comments.py --self-test
 ./scripts/check-no-comments.sh
 ./scripts/check-no-dashes.sh
 run cargo clippy --locked --workspace --all-targets --all-features -- -D warnings

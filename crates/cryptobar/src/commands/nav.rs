@@ -1,16 +1,24 @@
 //! Navigation subcommands: `next`, `prev` and `refresh`.
 
-use super::CommandError;
+use std::io::Write;
+
+use super::{CommandError, load_state};
 use crate::app::App;
+use crate::output::Output;
 
 /// Moves the selection by `delta` positions then wakes Waybar up.
 ///
 /// # Errors
 /// Fails when the state cannot be read or written, or Waybar cannot be signalled.
-pub fn step(app: &App, delta: isize) -> Result<(), CommandError> {
-    let mut state = app.state()?;
-    state.select(app.active_index()?, app.config.coins.len());
-    state.step(delta, app.config.coins.len());
+pub fn step<Out: Write, Err: Write>(
+    app: &App,
+    output: &mut Output<Out, Err>,
+    delta: isize,
+) -> Result<(), CommandError> {
+    let mut state = load_state(app, output)?;
+    let len = app.config.coins.len();
+    state.select(app.index_of(&state), len);
+    state.step(delta, len);
     app.save_state(&state)?;
     app.notify()?;
     Ok(())
@@ -20,8 +28,12 @@ pub fn step(app: &App, delta: isize) -> Result<(), CommandError> {
 ///
 /// # Errors
 /// Fails when the state cannot be read or written, or Waybar cannot be signalled.
-pub fn select(app: &App, index: usize) -> Result<(), CommandError> {
-    let mut state = app.state()?;
+pub fn select<Out: Write, Err: Write>(
+    app: &App,
+    output: &mut Output<Out, Err>,
+    index: usize,
+) -> Result<(), CommandError> {
+    let mut state = load_state(app, output)?;
     state.select(index, app.config.coins.len());
     app.save_state(&state)?;
     app.notify()?;

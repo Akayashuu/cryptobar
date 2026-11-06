@@ -50,9 +50,9 @@ fn run(cli: Cli, output: &mut ProcessOutput) -> Result<(), Failure> {
     match command {
         Command::Config { action } => config_cmd::run(&action, config, output)?,
         Command::Bar { watch, markup } => bar::run(App::new(config)?, watch, markup, output)?,
-        Command::Next => nav::step(&App::new(config)?, 1)?,
-        Command::Prev => nav::step(&App::new(config)?, -1)?,
-        Command::Select { index } => nav::select(&App::new(config)?, index)?,
+        Command::Next => nav::step(&App::new(config)?, output, 1)?,
+        Command::Prev => nav::step(&App::new(config)?, output, -1)?,
+        Command::Select { index } => nav::select(&App::new(config)?, output, index)?,
         Command::Refresh => nav::refresh(&App::new(config)?)?,
         Command::Chart {
             coin,

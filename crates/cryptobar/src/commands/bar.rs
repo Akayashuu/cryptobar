@@ -1,19 +1,19 @@
 //! `bar` subcommand: emission of the Waybar module.
 
 use std::fs;
-use std::io::{ErrorKind, Write};
-use std::path::Path;
+use std::io::{self, ErrorKind, Write};
+use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
-use super::{CommandError, print, warn, warn_each};
+use super::{CommandError, load_state, print, warn, warn_each};
 use crate::alerts;
 use crate::app::App;
 use crate::model::Quote;
 use crate::onchain;
 use crate::output::Output;
 use crate::render::waybar::{self, Markup};
-use crate::state::{State, StateError};
+use crate::state::State;
 
 const POLL: Duration = Duration::from_millis(400);
 
@@ -41,9 +41,8 @@ fn watch_loop<Out: Write, Err: Write>(
     markup: Markup,
     output: &mut Output<Out, Err>,
 ) -> Result<(), CommandError> {
-    let state_path = State::default_path()?;
-    let mut config_stamp = stamp(app.config_path());
-    let mut state_stamp = stamp(&state_path);
+    let mut config_watch = Watched::start(app.config_path().to_path_buf(), output)?;
+    let mut state_watch = Watched::start(State::default_path()?, output)?;
 
     loop {
         emit(&app, markup, true, output)?;
@@ -53,15 +52,11 @@ fn watch_loop<Out: Write, Err: Write>(
         let mut config_changed = false;
         loop {
             thread::sleep(POLL);
-            let now_config = stamp(app.config_path());
-            let now_state = stamp(&state_path);
-            if now_config != config_stamp {
-                config_stamp = now_config;
+            if config_watch.changed(output)? {
                 config_changed = true;
                 break;
             }
-            if now_state != state_stamp {
-                state_stamp = now_state;
+            if state_watch.changed(output)? {
                 break;
             }
             if deadline.is_none_or(|deadline| Instant::now() >= deadline) {
@@ -78,27 +73,64 @@ fn watch_loop<Out: Write, Err: Write>(
     }
 }
 
-fn stamp(path: &Path) -> Option<SystemTime> {
-    match fs::metadata(path).and_then(|meta| meta.modified()) {
-        Ok(modified) => Some(modified),
-        Err(absent) if absent.kind() == ErrorKind::NotFound => None,
-        Err(_unavailable) => None,
+struct Watched {
+    path: PathBuf,
+    stamp: Option<SystemTime>,
+    failure_reported: bool,
+}
+
+impl Watched {
+    fn start<Out: Write, Err: Write>(
+        path: PathBuf,
+        output: &mut Output<Out, Err>,
+    ) -> Result<Self, CommandError> {
+        let mut watched = Self {
+            path,
+            stamp: None,
+            failure_reported: false,
+        };
+        watched.stamp = watched.sample(output)?;
+        Ok(watched)
+    }
+
+    fn changed<Out: Write, Err: Write>(
+        &mut self,
+        output: &mut Output<Out, Err>,
+    ) -> Result<bool, CommandError> {
+        let stamp = self.sample(output)?;
+        let changed = stamp != self.stamp;
+        self.stamp = stamp;
+        Ok(changed)
+    }
+
+    fn sample<Out: Write, Err: Write>(
+        &mut self,
+        output: &mut Output<Out, Err>,
+    ) -> Result<Option<SystemTime>, CommandError> {
+        match stamp(&self.path) {
+            Ok(stamp) => Ok(stamp),
+            Err(source) => {
+                if !self.failure_reported {
+                    self.failure_reported = true;
+                    warn(
+                        output,
+                        &CommandError::Watch {
+                            path: self.path.clone(),
+                            source,
+                        },
+                    )?;
+                }
+                Ok(None)
+            }
+        }
     }
 }
 
-fn state_or_default<Out: Write, Err: Write>(
-    app: &App,
-    output: &mut Output<Out, Err>,
-) -> Result<State, CommandError> {
-    match app.state() {
-        Ok(state) => Ok(state),
-        Err(failure @ StateError::Corrupt { .. }) => {
-            if app.claim_corrupt_state_report() {
-                warn(output, &failure)?;
-            }
-            Ok(State::default())
-        }
-        Err(failure) => Err(failure.into()),
+fn stamp(path: &Path) -> io::Result<Option<SystemTime>> {
+    match fs::metadata(path).and_then(|meta| meta.modified()) {
+        Ok(modified) => Ok(Some(modified)),
+        Err(absent) if absent.kind() == ErrorKind::NotFound => Ok(None),
+        Err(failure) => Err(failure),
     }
 }
 
@@ -111,7 +143,7 @@ fn dispatch_alerts<Out: Write, Err: Write>(
         return Ok(());
     }
     let triggers = alerts::evaluate(&app.config, quotes);
-    let mut state = state_or_default(app, output)?;
+    let mut state = load_state(app, output)?;
     let (fresh, current) = alerts::diff(&triggers, &state.fired);
     for trigger in &fresh {
         if let Err(failure) = alerts::notify(trigger) {
@@ -143,6 +175,9 @@ fn emit<Out: Write, Err: Write>(
             (Vec::new(), true)
         }
     };
+    if let Some(notice) = app.source.take_notice() {
+        warn(output, &notice)?;
+    }
     if live {
         warn_each(output, &app.fetch_icons(&mut quotes))?;
         dispatch_alerts(app, &quotes, output)?;
@@ -159,11 +194,33 @@ fn emit<Out: Write, Err: Write>(
     let onchain = onchain::totals(&refresh.balances);
     let module = waybar::render(
         &quotes,
-        app.index_of(&state_or_default(app, output)?),
+        app.index_of(&load_state(app, output)?),
         &app.config,
         stale,
         markup,
         &onchain,
     );
     print(output, module.to_line()?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_missing_file_has_no_stamp() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(stamp(&dir.path().join("absent")).unwrap(), None);
+    }
+
+    #[test]
+    fn an_unreadable_path_is_an_error_not_an_absence() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("plain");
+        fs::write(&file, b"not a directory").unwrap();
+        assert!(matches!(
+            stamp(&file.join("child")),
+            Err(failure) if failure.kind() != ErrorKind::NotFound
+        ));
+    }
 }

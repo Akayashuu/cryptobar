@@ -43,10 +43,11 @@ wires anything twice. It backs up every upstream file it modifies as
 After an action the widget reads the current value back immediately instead of
 waiting for the next interval.
 
-Actions run one at a time, in the order they were sent. Up to 8 actions can wait
-behind the running one: a burst past 8 queued actions is dropped, and each drop
-is logged as a warning on the Quickshell output (`qs -c ii log`), naming the
-action.
+Actions run one at a time, in the order they were sent, and none is ever
+dropped: a burst of scrolls runs every step, in order. The queue only grows with
+the clicks and scrolls you make. An action identical to the last queued one is
+merged into it when it is idempotent (`refresh`, `select`), so three refreshes
+queued while one runs execute once; steps (`next`, `prev`) are never merged.
 
 ## Options
 

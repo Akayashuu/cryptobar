@@ -97,6 +97,7 @@ mod support {
 }
 
 use std::fs;
+use std::path::Path;
 
 use assert_cmd::assert::OutputAssertExt;
 use support::{bar_json, cryptobar, run, seed_cache, setup};
@@ -154,4 +155,51 @@ fn config_init_refuses_to_overwrite_without_force() {
         .args(["config", "init", "--force"])
         .assert()
         .success();
+}
+
+fn corrupt_state_warning(state: &Path) -> String {
+    format!(
+        "cryptobar: the state file {} is corrupt, starting from the default state\n",
+        state.display()
+    )
+}
+
+#[test]
+fn a_corrupt_state_is_reported_once_and_next_repairs_it() {
+    let env = setup();
+    seed_cache(&env.cache);
+    let state = env.runtime.join("state.json");
+    fs::write(&state, b"garbage").unwrap();
+
+    let first = run(&env, &["next"]);
+    assert!(first.status.success());
+    assert_eq!(
+        String::from_utf8(first.stderr).unwrap(),
+        corrupt_state_warning(&state)
+    );
+    serde_json::from_slice::<serde_json::Value>(&fs::read(&state).unwrap()).unwrap();
+
+    let second = run(&env, &["next"]);
+    assert!(second.status.success());
+    assert_eq!(String::from_utf8(second.stderr).unwrap(), "");
+}
+
+#[test]
+fn bar_repairs_a_corrupt_state_and_stays_quiet_afterwards() {
+    let env = setup();
+    seed_cache(&env.cache);
+    let state = env.runtime.join("state.json");
+    fs::write(&state, b"garbage").unwrap();
+
+    let first = run(&env, &["bar"]);
+    assert!(first.status.success());
+    assert_eq!(
+        String::from_utf8(first.stderr).unwrap(),
+        corrupt_state_warning(&state)
+    );
+
+    let second = run(&env, &["bar"]);
+    assert!(second.status.success());
+    assert_eq!(String::from_utf8(second.stderr).unwrap(), "");
+    serde_json::from_slice::<serde_json::Value>(&fs::read(&state).unwrap()).unwrap();
 }

@@ -3,8 +3,9 @@
 use std::error::Error;
 use std::fmt::Display;
 use std::io::{self, Write};
+use std::path::PathBuf;
 
-use crate::app::AppError;
+use crate::app::{App, AppError};
 use crate::config::ConfigError;
 use crate::config_edit::EditError;
 use crate::model::ModelError;
@@ -12,7 +13,7 @@ use crate::output::Output;
 use crate::paths::PathsError;
 use crate::report::Report;
 use crate::source::SourceError;
-use crate::state::StateError;
+use crate::state::{State, StateError};
 #[cfg(feature = "popup")]
 use crate::ui::popup::PopupError;
 use crate::waybar_signal::SignalError;
@@ -70,6 +71,15 @@ pub enum CommandError {
     /// The output could not be written.
     #[error("could not write the output")]
     Write(#[source] io::Error),
+    /// A watched file could not be inspected.
+    #[error("could not watch {}", path.display())]
+    Watch {
+        /// File that could not be inspected.
+        path: PathBuf,
+        /// The operating system error.
+        #[source]
+        source: io::Error,
+    },
     /// The running executable could not be located.
     #[error("could not locate the running executable")]
     Executable(#[source] io::Error),
@@ -118,6 +128,23 @@ pub fn print_text<Out: Write, Err: Write>(
     text: impl Display,
 ) -> Result<(), CommandError> {
     output.text(text).map_err(CommandError::Write)
+}
+
+/// Loads the state, reporting once on stderr when a corrupt file was replaced
+/// by the default state.
+///
+/// # Errors
+/// Fails when the state cannot be read or a corrupt file cannot be replaced,
+/// or when stderr cannot be written.
+pub fn load_state<Out: Write, Err: Write>(
+    app: &App,
+    output: &mut Output<Out, Err>,
+) -> Result<State, CommandError> {
+    let loaded = app.state()?;
+    if let Some(reset) = &loaded.reset {
+        warn(output, reset)?;
+    }
+    Ok(loaded.state)
 }
 
 /// Writes one failure to stderr, as `cryptobar: outer: cause: root`.

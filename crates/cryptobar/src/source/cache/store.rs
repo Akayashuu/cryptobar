@@ -2,6 +2,7 @@ use std::fs;
 use std::fs::File;
 use std::io::{self, Write as _};
 use std::path::PathBuf;
+use std::sync::{Mutex, PoisonError};
 use std::time::Duration;
 
 use rustix::fs::{FlockOperation, flock};
@@ -24,12 +25,29 @@ pub struct CachedSource<S: PriceSource> {
     pub(super) source: S,
     pub(super) dir: PathBuf,
     pub(super) ttl: Duration,
+    notice: Mutex<Option<SourceError>>,
 }
 
 impl<S: PriceSource> CachedSource<S> {
     /// Cache around `source`, stored in `dir` and valid for `ttl`.
     pub fn new(source: S, dir: PathBuf, ttl: Duration) -> Self {
-        Self { source, dir, ttl }
+        Self {
+            source,
+            dir,
+            ttl,
+            notice: Mutex::new(None),
+        }
+    }
+
+    /// The failure of a side read that did not stop the value from being
+    /// served, such as an unreadable backoff file. Taken once, so the caller
+    /// reports it once.
+    #[must_use]
+    pub fn take_notice(&self) -> Option<SourceError> {
+        self.notice
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
     }
 
     /// The wrapped source.
@@ -82,10 +100,26 @@ impl<S: PriceSource> CachedSource<S> {
     }
 
     pub(super) fn backoff(&self) -> Backoff {
-        match fs::read_to_string(self.backoff_path()) {
-            Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
-            Err(_missing_or_unreadable) => Backoff::default(),
+        match self.read_backoff() {
+            Ok(backoff) => backoff,
+            Err(failure) => {
+                self.note(failure);
+                Backoff::default()
+            }
         }
+    }
+
+    fn read_backoff(&self) -> io::Result<Backoff> {
+        match fs::read_to_string(self.backoff_path()) {
+            Ok(raw) => Ok(serde_json::from_str(&raw).unwrap_or_default()),
+            Err(absent) if absent.kind() == io::ErrorKind::NotFound => Ok(Backoff::default()),
+            Err(failure) => Err(failure),
+        }
+    }
+
+    fn note(&self, failure: io::Error) {
+        *self.notice.lock().unwrap_or_else(PoisonError::into_inner) =
+            Some(SourceError::Cache(failure));
     }
 
     pub(super) fn record_failure(&self, retry_after: Option<u64>) -> Result<(), SourceError> {

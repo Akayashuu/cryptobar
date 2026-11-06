@@ -1,5 +1,6 @@
 use std::cell::Cell;
 use std::fs;
+use std::io::ErrorKind;
 use std::time::Duration;
 
 use super::*;
@@ -218,4 +219,31 @@ fn the_series_are_cached_per_range() {
     assert_eq!(cached.source().calls.get(), 1);
     cached.series_cached(&id, Range::H24, &vs).unwrap();
     assert_eq!(cached.source().calls.get(), 2);
+}
+
+#[test]
+fn an_unreadable_backoff_file_is_noted_for_the_caller() {
+    let (_dir, cache) = setup(Duration::from_secs(3600), false);
+    fs::create_dir(cache.backoff_path()).unwrap();
+    assert_eq!(cache.backoff().retry_after, 0);
+    assert!(matches!(
+        cache.take_notice(),
+        Some(SourceError::Cache(failure)) if failure.kind() != ErrorKind::NotFound
+    ));
+}
+
+#[test]
+fn a_missing_backoff_file_is_not_noted() {
+    let (_dir, cache) = setup(Duration::from_secs(3600), false);
+    assert_eq!(cache.backoff().retry_after, 0);
+    assert!(cache.take_notice().is_none());
+}
+
+#[test]
+fn a_taken_notice_is_not_reported_twice() {
+    let (_dir, cache) = setup(Duration::from_secs(3600), false);
+    fs::create_dir(cache.backoff_path()).unwrap();
+    cache.backoff();
+    assert!(cache.take_notice().is_some());
+    assert!(cache.take_notice().is_none());
 }
