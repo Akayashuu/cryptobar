@@ -12,15 +12,17 @@ use rustix_libc_wrappers::process::SignalExt as _;
 /// Signal delivery errors.
 #[derive(Debug, thiserror::Error)]
 pub enum SignalError {
+    /// No Waybar process is running.
     #[error("no waybar process found")]
     NotFound,
+    /// The signal number is outside `1..=30`.
     #[error("invalid signal number: SIGRTMIN+{0}")]
     InvalidSignal(u8),
+    /// The process table could not be read.
     #[error("could not read /proc: {0}")]
     Proc(#[from] io::Error),
 }
 
-/// Lists the PIDs of the processes whose `comm` equals `name`.
 fn pids_by_name(name: &str) -> io::Result<Vec<i32>> {
     let mut found = Vec::new();
     for entry in std::fs::read_dir("/proc")?.flatten() {

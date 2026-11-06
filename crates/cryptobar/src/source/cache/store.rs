@@ -24,10 +24,12 @@ pub struct CachedSource<S: PriceSource> {
 }
 
 impl<S: PriceSource> CachedSource<S> {
+    /// Cache around `source`, stored in `dir` and valid for `ttl`.
     pub fn new(source: S, dir: PathBuf, ttl: Duration) -> Self {
         Self { source, dir, ttl }
     }
 
+    /// The wrapped source.
     #[must_use]
     pub fn source(&self) -> &S {
         &self.source

@@ -1,8 +1,5 @@
 use crate::render::sparkline;
 
-/// Number of points kept in the series handed to rich bars: enough to draw a
-/// readable curve, few enough for the JSON line to stay short at every
-/// interval.
 const SERIES_POINTS: usize = 48;
 
 /// Brings a series into [0, 1]. A flat series sits in the middle rather than

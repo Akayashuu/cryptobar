@@ -103,7 +103,6 @@ pub(super) fn settings_panel(config: &Config, config_path: &str) -> Settings {
     }
 }
 
-/// Fills the settings panel in, group by group.
 #[allow(clippy::too_many_arguments)]
 fn settings_groups(
     grid: &GtkBox,
@@ -188,8 +187,6 @@ fn settings_groups(
     }
 }
 
-/// One settings row: label, one-line explanation, and the control aligned to
-/// the right. The explanation saves guessing what a bare number like "8" does.
 fn setting_row(label: &str, hint: &str, control: &gtk4::Widget) -> GtkBox {
     let row = GtkBox::new(Orientation::Horizontal, 10);
     row.set_margin_top(4);
@@ -222,7 +219,6 @@ fn spin(min: f64, max: f64, step: f64, value: f64) -> gtk4::SpinButton {
     spin
 }
 
-/// Lossless conversion for the ranges handled here (seconds, widths).
 fn as_f64_u64(value: u64) -> f64 {
     as_f64(usize::try_from(value).unwrap_or(usize::MAX))
 }
@@ -281,9 +277,6 @@ pub(super) fn wire_settings(ctx: &Rc<Ctx>, settings: &Settings) {
     });
 }
 
-/// Decimal places of a dropdown position: position 0 is automatic and position
-/// `n` is `n - 1` decimals. A position beyond `u8` cannot come from the dropdown
-/// and reads as automatic.
 fn decimals_at(selected: u32) -> Option<u8> {
     selected
         .checked_sub(1)

@@ -12,14 +12,10 @@ use super::identity::identity_of;
 use super::model::{Ctx, Msg, send_unless_closed};
 use super::widgets::clear;
 
-/// Delay left to typing before querying the API: below it, every letter would
-/// fire a request.
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(350);
 
-/// Minimum length of a usable search term.
 const SEARCH_MIN_LEN: usize = 2;
 
-/// Number of results displayed under the search bar.
 const SEARCH_LIMIT: usize = 8;
 
 impl Ctx {
@@ -93,7 +89,6 @@ impl Ctx {
         }
     }
 
-    /// Fires a network search on a dedicated thread.
     fn search(&self, term: String) {
         let generation = {
             let mut model = self.model.borrow_mut();

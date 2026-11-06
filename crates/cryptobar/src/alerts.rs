@@ -20,12 +20,16 @@ use crate::render::format::{self, Decimals};
 /// A crossed condition, in a form comparable from one tick to the next.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
+    /// The price reached the `above` ceiling of the alert.
     Above,
+    /// The price fell under the `below` floor of the alert.
     Below,
+    /// The 24 h change reached the absolute `change_pct` of the alert.
     Change,
 }
 
 impl Kind {
+    /// Stable lowercase name of the condition, used in the memorised key.
     #[must_use]
     pub fn slug(self) -> &'static str {
         match self {
@@ -42,15 +46,16 @@ pub struct Trigger {
     /// Stable identity of the condition, independent of the current price: it
     /// is what gets memorised so the same thing is not notified twice.
     pub key: String,
+    /// Ticker symbol of the watched cryptocurrency.
     pub symbol: String,
+    /// Condition that was crossed.
     pub kind: Kind,
     /// Notification title, short and readable in a corner of the screen.
     pub title: String,
+    /// Notification body, with the price and the threshold.
     pub body: String,
 }
 
-/// Key of a condition. The threshold is part of it: changing the threshold in
-/// the configuration naturally re-arms the alert.
 fn key(coin: &str, kind: Kind, threshold: f64) -> String {
     format!("{coin}:{}:{threshold}", kind.slug())
 }
@@ -152,8 +157,10 @@ pub fn diff(triggers: &[Trigger], fired: &BTreeSet<String>) -> (Vec<Trigger>, BT
 /// Failures to run `notify-send`.
 #[derive(Debug, thiserror::Error)]
 pub enum AlertError {
+    /// `notify-send` could not be started.
     #[error("could not run notify-send")]
     Spawn(#[source] std::io::Error),
+    /// `notify-send` could not be waited for.
     #[error("could not wait for notify-send")]
     Wait(#[source] std::io::Error),
 }

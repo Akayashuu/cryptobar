@@ -19,7 +19,6 @@ use super::status::root_cause;
 use super::style::CSS;
 use super::worker::drain;
 
-/// Application id, required by GTK.
 const APP_ID: &str = "dev.akayashuu.cryptobar";
 
 /// Opens the window and returns when it closes.
@@ -175,8 +174,6 @@ fn build_window(gtk_app: &Application, app: Arc<App>, quotes: Vec<Quote>, stale:
     widgets.search.grab_focus();
 }
 
-/// One tab page: its sections stacked inside a scrollable area, so that long
-/// content never pushes the tabs out of the window.
 fn page(sections: &[&GtkBox]) -> gtk4::ScrolledWindow {
     let column = GtkBox::new(Orientation::Vertical, 14);
     for section in sections {

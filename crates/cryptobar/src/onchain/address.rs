@@ -51,7 +51,6 @@ pub(super) fn validate_solana(address: &str) -> Result<(), OnchainError> {
     ok.then_some(()).ok_or(OnchainError::UnrecognisedSolana)
 }
 
-/// Base58 alphabet: no zero, no O, no I, no l, too easy to confuse.
 fn is_base58(c: char) -> bool {
     c.is_ascii_alphanumeric() && !matches!(c, '0' | 'O' | 'I' | 'l')
 }

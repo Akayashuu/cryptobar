@@ -16,18 +16,26 @@ use crate::paths::{self, PathsError};
 /// Failures of the runtime state file.
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
+    /// The XDG directories could not be resolved.
     #[error("could not locate the runtime directory")]
     Paths(#[from] PathsError),
+    /// The state directory could not be created.
     #[error("could not create the state directory {}", path.display())]
     Directory {
+        /// Directory that could not be created.
         path: PathBuf,
+        /// The operating system error.
         source: std::io::Error,
     },
+    /// The state file could not be written.
     #[error("could not write the state file {}", path.display())]
     Write {
+        /// State file that could not be written.
         path: PathBuf,
+        /// The operating system error.
         source: std::io::Error,
     },
+    /// The state could not be encoded as JSON.
     #[error("could not encode the state")]
     Encode(#[from] serde_json::Error),
 }

@@ -42,7 +42,7 @@ pub(super) fn tooltip(
     }
     if stale {
         lines.push(String::new());
-        lines.push(markup.italic("stale data — network unavailable"));
+        lines.push(markup.italic("stale data: network unavailable"));
     }
     lines.join("\n")
 }

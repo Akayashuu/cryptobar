@@ -79,7 +79,6 @@ impl Ctx {
         self.widgets.alerts.append(&card);
     }
 
-    /// Form to add an alert.
     fn alert_form(self: &Rc<Self>, ids: &[CoinId], quotes: &[Quote]) -> GtkBox {
         let ids = ids.to_vec();
         let form = GtkBox::new(Orientation::Horizontal, 8);
@@ -137,7 +136,6 @@ impl Ctx {
     }
 }
 
-/// Readable description of an alert.
 fn alert_caption(
     alert: &crate::config::Alert,
     currency: &Currency,

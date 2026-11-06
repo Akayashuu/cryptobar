@@ -39,7 +39,6 @@ fn setup() -> Env {
     }
 }
 
-/// Writes a cache entry matching the key `markets_cached` expects.
 fn seed_cache(cache: &Path) {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

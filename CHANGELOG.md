@@ -25,11 +25,11 @@ semantic versioning.
 - A second `cryptobar popup` closes the window when it has the focus, and
   brings it to the front otherwise.
 
-## [0.2.1] — 2026-08-22
+## [0.2.1] - 2026-08-22
 
 ### Changed
 
-- The window is navigated through tabs — Prices, Portfolio, Alerts, Settings —
+- The window is navigated through tabs (Prices, Portfolio, Alerts, Settings)
   instead of a single column where the portfolio and the settings fell below
   the fold, with nothing to say they had to be scrolled to.
 
@@ -38,7 +38,7 @@ semantic versioning.
 - The window stylesheet is loaded above `~/.config/gtk-4.0/gtk.css`: a desktop
   theme that repaints every button no longer decides how the tabs look.
 
-## [0.2.0] — 2026-08-22
+## [0.2.0] - 2026-08-22
 
 ### Added
 
@@ -54,7 +54,7 @@ semantic versioning.
 - `cryptobar select <N>` command, to display a given cryptocurrency.
 - Complete GTK4 window: cryptocurrency search with logos, curve over five
   ranges, PNG and CSV export, list of the watched cryptocurrencies, portfolio,
-  alerts and grouped settings — the whole configuration is editable from the
+  alerts and grouped settings: the whole configuration is editable from the
   window, preserving the comments and the ordering of the TOML file.
 - Official cryptocurrency logos, cached on disk, in the window as well as in
   the Quickshell widgets.
@@ -74,7 +74,7 @@ semantic versioning.
   instead of a monospace text block. The vertical bar is reduced to the logo,
   the price and the change.
 
-## [0.1.0] — 2026-08-21
+## [0.1.0] - 2026-08-21
 
 First release.
 

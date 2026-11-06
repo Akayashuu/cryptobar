@@ -31,10 +31,10 @@ cat <<'MSG'
 
 Installation complete. What is left to wire up, depending on your setup:
 
-  0. Quickshell (dots-hyprland "ii") — if that is your bar:
+  0. Quickshell (dots-hyprland "ii"), if that is your bar:
        ./quickshell/install.sh && qs -c ii kill && qs -c ii -d
 
-  1. Waybar — in ~/.config/waybar/config.jsonc, copy the "custom/crypto"
+  1. Waybar: in ~/.config/waybar/config.jsonc, copy the "custom/crypto"
      block from ~/.config/waybar/cryptobar.jsonc and add "custom/crypto" to
      modules-right (or left/center).
      Then in ~/.config/waybar/style.css:

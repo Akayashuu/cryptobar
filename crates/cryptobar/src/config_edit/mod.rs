@@ -5,7 +5,7 @@
 //! and its ordering; the TOML document is therefore edited in place with
 //! `toml_edit`, which only touches the targeted value.
 //!
-//! Every change is validated by [`Config::parse`] **before** it reaches the
+//! Every change is validated by [`crate::config::Config::parse`] **before** it reaches the
 //! disk: a rejected setting leaves the file untouched.
 
 mod alerts;

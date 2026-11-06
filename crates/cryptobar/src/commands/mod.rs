@@ -25,49 +25,71 @@ pub mod wallet;
 /// Failures of the subcommands.
 #[derive(Debug, thiserror::Error)]
 pub enum CommandError {
+    /// The application context could not be built.
     #[error("could not build the context")]
     App(#[from] AppError),
+    /// The runtime state could not be read or written.
     #[error("could not access the runtime state")]
     State(#[from] StateError),
+    /// The XDG directories could not be resolved.
     #[error("could not resolve the directories")]
     Paths(#[from] PathsError),
+    /// The configuration file could not be loaded.
     #[error("could not load the configuration")]
     Config(#[from] ConfigError),
+    /// The configuration file could not be changed.
     #[error("could not change the configuration")]
     Edit(#[from] EditError),
+    /// The cryptocurrency source failed.
     #[error("the cryptocurrency source failed")]
     Source(#[from] SourceError),
+    /// The price series of a cryptocurrency could not be fetched.
     #[error("could not fetch the series of {id}")]
     Series {
+        /// Cryptocurrency whose series was requested.
         id: String,
+        /// The underlying source failure.
         #[source]
         source: SourceError,
     },
+    /// The cryptocurrency search failed.
     #[error("could not search the cryptocurrencies")]
     Search(#[source] SourceError),
+    /// Waybar could not be signalled.
     #[error("could not notify Waybar")]
     Signal(#[from] SignalError),
+    /// A command argument is invalid.
     #[error("the arguments are invalid")]
     Input(#[from] ModelError),
+    /// A module payload could not be encoded as JSON.
     #[error("could not render the module")]
     Render(#[from] serde_json::Error),
+    /// The output could not be written.
     #[error("could not write the output")]
     Write(#[source] std::io::Error),
+    /// The running executable could not be located.
     #[error("could not locate the running executable")]
     Executable(#[source] std::io::Error),
+    /// A program could not be started.
     #[error("could not start {program}")]
     Launch {
+        /// Program that could not be started.
         program: String,
+        /// The operating system error.
         #[source]
         source: std::io::Error,
     },
+    /// No cryptocurrency is configured.
     #[error("no cryptocurrency is configured")]
     NoCoin,
+    /// No terminal emulator is configured.
     #[error("no terminal emulator is configured")]
     NoTerminal,
+    /// The graphical window failed.
     #[cfg(feature = "popup")]
     #[error("the popup window failed")]
     Popup(#[from] crate::ui::popup::PopupError),
+    /// The binary was built without the `popup` feature.
     #[cfg(not(feature = "popup"))]
     #[error("this binary was compiled without the `popup` feature")]
     PopupUnavailable,

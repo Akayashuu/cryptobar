@@ -1,8 +1,6 @@
 //! Sparkline made of Unicode blocks. Pure function, no I/O.
 
-/// The eight fill levels, from lowest to highest.
 const LEVELS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-/// Level used when every point is equal: the middle of the scale.
 const FLAT_LEVEL: char = '▄';
 
 /// Reduces the series to at most `width` points by averaging contiguous slices.

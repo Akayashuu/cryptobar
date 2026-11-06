@@ -75,8 +75,6 @@ fn watch_loop<Out: Write, Err: Write>(
     }
 }
 
-/// Modification time of a watched file. `None` when the file is absent or its
-/// time is unreadable: the watch then reacts only to a change it can see.
 fn stamp(path: &Path) -> Option<SystemTime> {
     std::fs::metadata(path)
         .ok()

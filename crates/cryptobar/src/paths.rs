@@ -10,6 +10,7 @@ const APP: &str = "cryptobar";
 /// Failures to locate the directories of the user.
 #[derive(Debug, thiserror::Error)]
 pub enum PathsError {
+    /// The home directory is unknown.
     #[error("could not resolve the XDG directories")]
     Home(#[from] etcetera::HomeDirError),
 }

@@ -4,14 +4,17 @@
 use std::fmt::Display;
 use std::io::{self, Stderr, StderrLock, Stdout, StdoutLock, Write};
 
+/// Writer pair: stdout for the results, stderr for the warnings.
 pub struct Output<Out, Err> {
     stdout: Out,
     stderr: Err,
 }
 
+/// [`Output`] bound to the standard streams of the process.
 pub type ProcessOutput = Output<StdoutLock<'static>, StderrLock<'static>>;
 
 impl ProcessOutput {
+    /// Output bound to the locked standard streams of this process.
     #[must_use]
     pub fn process() -> Self {
         Output::new(Stdout::lock(&io::stdout()), Stderr::lock(&io::stderr()))
@@ -19,6 +22,7 @@ impl ProcessOutput {
 }
 
 impl<Out: Write, Err: Write> Output<Out, Err> {
+    /// Output writing to the given streams.
     #[must_use]
     pub fn new(stdout: Out, stderr: Err) -> Self {
         Self { stdout, stderr }

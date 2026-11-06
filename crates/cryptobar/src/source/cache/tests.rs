@@ -5,7 +5,6 @@ use std::time::Duration;
 use super::*;
 use std::cell::Cell;
 
-/// Test source: counts calls and can be forced to fail.
 struct FakeSource {
     calls: Cell<usize>,
     fail: bool,

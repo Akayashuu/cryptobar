@@ -13,10 +13,12 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "FILE")]
     pub config: Option<std::path::PathBuf>,
 
+    /// Subcommand to run, or the bar when absent.
     #[command(subcommand)]
     pub command: Option<Command>,
 }
 
+/// Subcommands of `cryptobar`.
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Emit a JSON line for a Waybar module (default behaviour).
@@ -62,11 +64,13 @@ pub enum Command {
     },
     /// Manage the configuration file.
     Config {
+        /// Action on the configuration file.
         #[command(subcommand)]
         action: ConfigAction,
     },
 }
 
+/// Actions available under `cryptobar config`.
 #[derive(Debug, Subcommand)]
 pub enum ConfigAction {
     /// Write a commented configuration file if none exists.

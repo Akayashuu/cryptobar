@@ -16,10 +16,6 @@ pub(super) fn rgb(color: &str) -> (f64, f64, f64) {
     }
 }
 
-/// Reads a number typed the English way as well as the French way.
-///
-/// A lone comma is a decimal point; a comma next to a point is a thousands
-/// separator and is dropped.
 fn parse_number(text: &str) -> Option<f64> {
     let compact = text.replace(['\u{202f}', '\u{a0}', ' '], "");
     let normalised = if compact.contains('.') {

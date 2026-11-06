@@ -11,7 +11,6 @@ use super::hover::sample_at;
 pub(super) const CHART_WIDTH: i32 = 540;
 pub(super) const CHART_HEIGHT: i32 = 230;
 
-/// Number of horizontal guide lines under the curve.
 const GRID_LINES: i32 = 4;
 
 /// Hovered abscissa, within `0.0..=1.0`, shared between the mouse controller

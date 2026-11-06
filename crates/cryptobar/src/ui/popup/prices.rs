@@ -14,7 +14,6 @@ use super::model::{Ctx, Model};
 use super::status::root_cause;
 use super::widgets::{clear, trend_class};
 
-/// Thumbnail drawn on every row of the list.
 const SPARK_WIDTH: i32 = 72;
 const SPARK_HEIGHT: i32 = 26;
 

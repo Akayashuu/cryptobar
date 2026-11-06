@@ -9,8 +9,11 @@ use super::error::OnchainError;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Chain {
+    /// The Bitcoin network.
     Bitcoin,
+    /// The Ethereum network.
     Ethereum,
+    /// The Solana network.
     Solana,
 }
 
@@ -18,6 +21,7 @@ impl Chain {
     /// Every chain, in display order.
     pub const ALL: [Self; 3] = [Self::Bitcoin, Self::Ethereum, Self::Solana];
 
+    /// Lowercase name of the chain, as written in the configuration.
     #[must_use]
     pub fn slug(self) -> &'static str {
         match self {

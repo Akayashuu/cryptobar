@@ -61,8 +61,6 @@ impl Ctx {
         self.widgets.wallet.append(&card);
     }
 
-    /// Watched addresses section: one row per address, and the form to add
-    /// another one.
     fn wallets_section(
         self: &Rc<Self>,
         wallets: &[crate::onchain::Wallet],
@@ -154,7 +152,6 @@ impl Ctx {
         section
     }
 
-    /// Sample address for a chain, shown as a placeholder in the field.
     fn address_placeholder(chain: crate::onchain::Chain) -> &'static str {
         match chain {
             crate::onchain::Chain::Bitcoin => "bc1… or 1… or 3…",
@@ -163,7 +160,6 @@ impl Ctx {
         }
     }
 
-    /// Form to add a watched address.
     fn wallet_form(self: &Rc<Self>) -> GtkBox {
         let form = GtkBox::new(Orientation::Horizontal, 8);
 
@@ -224,7 +220,6 @@ impl Ctx {
     }
 }
 
-/// Portfolio banner: split ring, total and subtitle.
 fn wallet_hero(
     wallet: Option<&Portfolio>,
     watched: usize,
@@ -282,7 +277,6 @@ fn wallet_hero(
     hero
 }
 
-/// One position row: brand badge, symbol, quantity, value, share.
 fn position_row(
     position: &portfolio::Position,
     currency: &Currency,
@@ -320,7 +314,6 @@ fn position_row(
     row
 }
 
-/// Split ring of the portfolio, one slice per position.
 fn donut(wallet: Option<&Portfolio>) -> gtk4::DrawingArea {
     const SIZE: i32 = 86;
     let slices: Vec<(f64, String)> = wallet

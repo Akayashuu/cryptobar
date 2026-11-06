@@ -66,7 +66,6 @@ impl Editor {
     }
 }
 
-/// The `[[wallets]]` array of tables, created when needed.
 fn wallets_array(document: &mut DocumentMut) -> Result<&mut toml_edit::ArrayOfTables, EditError> {
     if !document
         .get("wallets")

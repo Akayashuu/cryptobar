@@ -14,28 +14,36 @@ use crate::source::icons::IconError;
 use crate::state::{State, StateError};
 use crate::waybar_signal::{self, SignalError};
 
-/// How long a manual selection suspends the rotation.
 const MANUAL_HOLD: u64 = 300;
 
 /// Failures of the application context.
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
+    /// The XDG directories could not be resolved.
     #[error("could not resolve the directories")]
     Paths(#[from] PathsError),
+    /// The configuration file could not be loaded.
     #[error("could not load the configuration")]
     Config(#[from] ConfigError),
+    /// The runtime state could not be read or written.
     #[error("could not access the runtime state")]
     State(#[from] StateError),
+    /// A cryptocurrency logo could not be downloaded.
     #[error("could not download a logo")]
     Icon(#[from] IconError),
+    /// Waybar could not be signalled.
     #[error("could not signal Waybar")]
     Signal(#[from] SignalError),
+    /// The desktop notification could not be sent.
     #[error("could not send the desktop notification")]
     Alert(#[from] crate::alerts::AlertError),
 }
 
+/// Runtime context shared by every command.
 pub struct App {
+    /// The configuration as loaded at start-up.
     pub config: Config,
+    /// The market data source, behind the disk cache.
     pub source: CachedSource<CoinGecko>,
     config_path: PathBuf,
     cache_dir: PathBuf,

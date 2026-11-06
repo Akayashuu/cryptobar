@@ -11,19 +11,13 @@ use std::time::Duration;
 
 use crate::model::Quote;
 
-/// Allowed host for the images. A URL coming from anywhere else is ignored:
-/// the API response is not reason enough to go fetch a file just anywhere.
 const IMAGE_HOST: &str = "https://coin-images.coingecko.com/";
 
-/// Download ceiling. The logos weigh about ten kilobytes; past that margin, we
-/// refuse.
 const MAX_ICON_BYTES: u64 = 256 * 1024;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 const TOTAL_TIMEOUT: Duration = Duration::from_secs(6);
 
-/// Signature of a PNG file: the content is checked before being written, so
-/// that a cache path can never point at anything else.
 const PNG_MAGIC: &[u8] = &[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
 
 /// Logo directory inside the cache.
@@ -76,12 +70,28 @@ pub fn fetch_missing(cache_dir: &Path, quotes: &mut [Quote]) -> Vec<IconError> {
 /// Failures to download a cryptocurrency logo.
 #[derive(Debug, thiserror::Error)]
 pub enum IconError {
+    /// The logo could not be downloaded.
     #[error("could not download the logo of {id}")]
-    Transport { id: String, source: ureq::Error },
+    Transport {
+        /// Cryptocurrency whose logo was requested.
+        id: String,
+        /// The HTTP failure.
+        source: ureq::Error,
+    },
+    /// The downloaded file does not start with the PNG signature.
     #[error("the logo of {id} is not a PNG file")]
-    NotPng { id: String },
+    NotPng {
+        /// Cryptocurrency whose logo was requested.
+        id: String,
+    },
+    /// The logo could not be written to the cache.
     #[error("could not store the logo of {id}")]
-    Store { id: String, source: std::io::Error },
+    Store {
+        /// Cryptocurrency whose logo was requested.
+        id: String,
+        /// The I/O failure.
+        source: std::io::Error,
+    },
 }
 
 /// Path of a cryptocurrency logo, downloaded when needed. `Ok(None)` when the
@@ -120,8 +130,6 @@ fn build_agent() -> ureq::Agent {
         .into()
 }
 
-/// Fetches an image and writes it atomically to its final place. The write goes
-/// through a temporary file, so a partial file can never be served.
 fn download(agent: &ureq::Agent, id: &str, url: &str, destination: &Path) -> Result<(), IconError> {
     let bytes = fetch_bytes(agent, id, url)?;
     if !bytes.starts_with(PNG_MAGIC) {

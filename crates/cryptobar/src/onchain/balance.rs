@@ -9,7 +9,9 @@ use super::chain::Chain;
 /// Balance read from the chain, in the unit of the native asset.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Balance {
+    /// Chain the address belongs to.
     pub chain: Chain,
+    /// Public address that was read.
     pub address: String,
     /// Quantity, in BTC, ETH or SOL depending on the chain.
     pub amount: f64,

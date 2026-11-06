@@ -8,12 +8,14 @@ use super::error::OnchainError;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Wallet {
+    /// Chain the address belongs to.
     pub chain: Chain,
     /// Public address. See [`Wallet::validate`]: nothing else is accepted.
     pub address: String,
     /// Display name; otherwise the shortened address will do.
     #[serde(default)]
     pub label: Option<String>,
+    /// Whether the wallet counts in the portfolio. Defaults to `true`.
     #[serde(default = "crate::config::default_true")]
     pub enabled: bool,
 }

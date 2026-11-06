@@ -2,22 +2,19 @@
 
 use crate::model::Currency;
 
-/// Thousands separator: narrow no-break space, readable in a narrow bar.
 const THIN_SPACE: char = '\u{202f}';
-/// Marker for unavailable or non-finite values.
 const MISSING: &str = "—";
-/// Decimals ceiling: beyond it the display stops being readable.
 const MAX_DECIMALS: u8 = 12;
 
+/// How many decimals a number is displayed with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Decimals {
     /// Number of decimals derived from the order of magnitude.
     Auto,
+    /// Exactly this many decimals.
     Fixed(u8),
 }
 
-/// Number of decimals used in automatic mode, so that an asset at €0.00004
-/// stays as readable as one at €108,420.
 fn auto_decimals(value: f64) -> u8 {
     let magnitude = value.abs();
     if magnitude >= 1_000.0 {
@@ -35,8 +32,6 @@ fn auto_decimals(value: f64) -> u8 {
     }
 }
 
-/// Inserts the thousands separator into the integer part of an already
-/// formatted number.
 fn group_thousands(rendered: &str) -> String {
     let (int_part, rest) = match rendered.split_once('.') {
         Some((head, tail)) => (head, Some(tail)),

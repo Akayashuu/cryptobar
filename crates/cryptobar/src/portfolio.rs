@@ -17,11 +17,15 @@ use crate::render::badge;
 /// One line of the portfolio.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Position {
+    /// Ticker symbol of the position.
     pub symbol: String,
     /// Cryptocurrency id, so the interface can find the line again.
     pub id: CoinId,
+    /// Human name of the cryptocurrency.
     pub name: String,
+    /// Quantity held, in units of the cryptocurrency.
     pub quantity: f64,
+    /// Current price per unit, in the quote currency.
     pub price: f64,
     /// Quantity × price, in the quote currency.
     pub value: f64,
@@ -39,6 +43,7 @@ pub struct Portfolio {
     /// Positions sorted by decreasing value: the eye goes to the heavyweight
     /// first, in the table as in the ring.
     pub positions: Vec<Position>,
+    /// Total value, in the quote currency.
     pub total: f64,
     /// Gain or loss over 24 h, in the quote currency.
     pub change_24h: Option<f64>,
@@ -104,8 +109,6 @@ pub fn compute(quotes: &[Quote], onchain: &BTreeMap<CoinId, f64>) -> Option<Port
     })
 }
 
-/// Gain over 24 h for one unit, from the current price and the change in
-/// percent.
 fn gain_24h(price: f64, change_pct: Option<f64>) -> Option<f64> {
     let change = change_pct.filter(|change| change.is_finite())?;
     let factor = 1.0 + change / 100.0;

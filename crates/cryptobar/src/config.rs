@@ -13,70 +13,114 @@ use crate::render::format::Decimals;
 /// Failures to read, write or validate the configuration file.
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
+    /// The XDG directories could not be resolved.
     #[error(transparent)]
     Paths(#[from] PathsError),
+    /// The configuration file could not be read.
     #[error("reading the configuration {}", .path.display())]
     Read {
+        /// File that could not be read.
         path: PathBuf,
+        /// The operating system error.
         #[source]
         source: io::Error,
     },
+    /// The configuration file could not be written.
     #[error("writing {}", .path.display())]
     Write {
+        /// File that could not be written.
         path: PathBuf,
+        /// The operating system error.
         #[source]
         source: io::Error,
     },
+    /// The directory of the configuration file could not be created.
     #[error("creating {}", .path.display())]
     Directory {
+        /// Directory that could not be created.
         path: PathBuf,
+        /// The operating system error.
         #[source]
         source: io::Error,
     },
+    /// The configuration file already exists and `--force` was not given.
     #[error("{} already exists, use --force to overwrite it", .path.display())]
-    Exists { path: PathBuf },
+    Exists {
+        /// File that already exists.
+        path: PathBuf,
+    },
+    /// The file is not valid TOML.
     #[error("malformed TOML")]
     Toml(#[from] toml::de::Error),
+    /// The configuration file is invalid.
     #[error("invalid configuration {}", .path.display())]
     File {
+        /// File that failed validation.
         path: PathBuf,
+        /// The validation failure that made the file invalid.
         #[source]
         source: Box<Self>,
     },
+    /// `coins` is empty.
     #[error("`coins` must hold at least one cryptocurrency")]
     NoCoin,
+    /// `coins` lists the same cryptocurrency twice.
     #[error("`coins` holds a duplicate: {0}")]
     DuplicateCoin(CoinId),
+    /// `refresh_interval` is below the minimum.
     #[error(
         "`refresh_interval` = {value} is too short; {min} s minimum to stay within the public \
          CoinGecko API quota"
     )]
-    RefreshTooShort { value: u64, min: u64 },
+    RefreshTooShort {
+        /// Value written in the file, in seconds.
+        value: u64,
+        /// Floor the value must reach, in seconds.
+        min: u64,
+    },
+    /// `waybar_signal` is outside `1..=30`.
     #[error("`waybar_signal` = {0} is out of range; expected 1..=30 (SIGRTMIN+n)")]
     SignalOutOfRange(u8),
+    /// `sparkline_width` is outside `1..=64`.
     #[error("`sparkline_width` = {0} is out of range; expected 1..=64")]
     SparklineOutOfRange(usize),
+    /// A watched wallet address was rejected.
     #[error("`wallets.address` = {address:?}")]
     Wallet {
+        /// The address as written in the configuration.
         address: String,
+        /// Why the address was rejected.
         #[source]
         reason: OnchainError,
     },
+    /// An alert watches a cryptocurrency missing from `coins`.
     #[error("the alert watches `{0}`, which is not in `coins`: add it there first")]
     AlertUnknownCoin(CoinId),
+    /// An alert threshold is not strictly positive.
     #[error("`alerts.{field}` = {value} must be a strictly positive number")]
-    AlertNotPositive { field: &'static str, value: f64 },
+    AlertNotPositive {
+        /// Name of the offending field in the `[[alerts]]` block.
+        field: &'static str,
+        /// Rejected value.
+        value: f64,
+    },
+    /// An alert defines no condition for its cryptocurrency.
     #[error("the alert on `{0}` defines no condition: set `above`, `below` or `change_pct`")]
     AlertNoCondition(CoinId),
+    /// An alert has a floor above its ceiling.
     #[error(
         "the alert on `{coin}` has `below` = {below} above `above` = {above}: it would fire \
          permanently"
     )]
     AlertInverted {
+        /// Cryptocurrency watched by the alert.
         coin: CoinId,
+        /// Floor of the alert, in the quote currency.
         below: f64,
+        /// Ceiling of the alert, in the quote currency.
         above: f64,
     },
+    /// `decimals` is neither `auto` nor an integer.
     #[error("`decimals` must be \"auto\" or an integer, not {0:?}")]
     Decimals(String),
 }
@@ -132,10 +176,13 @@ waybar_signal = 8
 # change_pct = 5
 "#;
 
+/// How many decimals the prices are displayed with.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum DecimalsSetting {
+    /// Decimals pinned to this count.
     Fixed(u8),
+    /// Automatic decimals, written as the string `auto` in the file.
     Auto(String),
 }
 
@@ -152,35 +199,50 @@ impl Default for DecimalsSetting {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Alert {
+    /// Cryptocurrency watched by the alert.
     pub coin: CoinId,
+    /// Ceiling in the quote currency: the alert fires when the price rises above it.
     #[serde(default)]
     pub above: Option<f64>,
+    /// Floor in the quote currency: the alert fires when the price falls below it.
     #[serde(default)]
     pub below: Option<f64>,
+    /// Absolute 24 h change, in percent, beyond which the alert fires.
     #[serde(default)]
     pub change_pct: Option<f64>,
+    /// Whether the alert is evaluated. Defaults to `true`.
     #[serde(default = "default_true")]
     pub enabled: bool,
 }
 
+/// The configuration file, as parsed and validated.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
+    /// CoinGecko ids of the watched cryptocurrencies, in display order.
     pub coins: Vec<CoinId>,
+    /// Quote currency of every price.
     #[serde(default)]
     pub currency: Currency,
+    /// Seconds between two network refreshes, at least [`MIN_REFRESH_INTERVAL`].
     #[serde(default = "default_refresh")]
     pub refresh_interval: u64,
+    /// Seconds between two automatic rotations of the displayed coin, `0` for manual only.
     #[serde(default)]
     pub cycle_interval: u64,
+    /// Whether the bar draws a sparkline.
     #[serde(default = "default_true")]
     pub sparkline: bool,
+    /// Width of the sparkline in cells, between 1 and 64.
     #[serde(default = "default_sparkline_width")]
     pub sparkline_width: usize,
+    /// Decimal places of the displayed prices.
     #[serde(default)]
     pub decimals: DecimalsSetting,
+    /// Terminal emulator opened by a right click.
     #[serde(default = "default_terminal")]
     pub terminal: String,
+    /// Real-time signal number, between 1 and 30, that refreshes Waybar.
     #[serde(default = "default_signal")]
     pub waybar_signal: u8,
     /// Wallets watched read-only, by public address.
@@ -358,92 +420,4 @@ impl Config {
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
-mod tests {
-    use super::*;
-    use crate::report::Report;
-
-    #[test]
-    fn a_minimal_config_uses_the_defaults() {
-        let cfg = Config::parse(r#"coins = ["bitcoin"]"#).unwrap();
-        assert_eq!(cfg.currency.as_str(), "eur");
-        assert_eq!(cfg.refresh_interval, 60);
-        assert_eq!(cfg.cycle_interval, 0);
-        assert!(cfg.sparkline);
-        assert_eq!(cfg.sparkline_width, 8);
-        assert_eq!(cfg.waybar_signal, 8);
-    }
-
-    #[test]
-    fn an_empty_coin_list_is_rejected() {
-        let err = Config::parse("coins = []").unwrap_err().to_string();
-        assert!(err.contains("at least one"), "unclear message: {err}");
-    }
-
-    #[test]
-    fn a_duplicate_coin_is_rejected() {
-        let err = Config::parse(r#"coins = ["bitcoin", "Bitcoin"]"#)
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("bitcoin"), "unclear message: {err}");
-    }
-
-    #[test]
-    fn too_short_an_interval_is_rejected_to_protect_the_quota() {
-        let err = Config::parse("coins = [\"bitcoin\"]\nrefresh_interval = 5")
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("15"), "unclear message: {err}");
-    }
-
-    #[test]
-    fn an_out_of_range_signal_is_rejected() {
-        assert!(Config::parse("coins = [\"bitcoin\"]\nwaybar_signal = 0").is_err());
-        assert!(Config::parse("coins = [\"bitcoin\"]\nwaybar_signal = 31").is_err());
-        assert!(Config::parse("coins = [\"bitcoin\"]\nwaybar_signal = 30").is_ok());
-    }
-
-    #[test]
-    fn an_invalid_currency_is_rejected_naming_the_field() {
-        let failure = Config::parse("coins = [\"bitcoin\"]\ncurrency = \"xyz\"").unwrap_err();
-        let err = Report(&failure).to_string();
-        assert!(err.contains("currency"), "unclear message: {err}");
-    }
-
-    #[test]
-    fn decimals_are_auto_or_fixed() {
-        assert_eq!(
-            Config::parse("coins = [\"bitcoin\"]").unwrap().decimals(),
-            Decimals::Auto
-        );
-        assert_eq!(
-            Config::parse("coins = [\"bitcoin\"]\ndecimals = 3")
-                .unwrap()
-                .decimals(),
-            Decimals::Fixed(3)
-        );
-    }
-
-    #[test]
-    fn an_unknown_field_is_rejected_to_catch_typos() {
-        let failure = Config::parse("coins = [\"bitcoin\"]\nrefresh_intervall = 60").unwrap_err();
-        let err = Report(&failure).to_string();
-        assert!(err.contains("refresh_intervall"), "unclear message: {err}");
-    }
-
-    #[test]
-    fn the_default_config_written_then_reread_is_valid() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("config.toml");
-        Config::write_default(&path, false).unwrap();
-        let cfg = Config::load_from(&path).unwrap();
-        assert_ne!(cfg.coins.len(), 0);
-    }
-
-    #[test]
-    fn write_default_refuses_to_overwrite() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("config.toml");
-        Config::write_default(&path, false).unwrap();
-        assert!(Config::write_default(&path, false).is_err());
-    }
-}
+mod tests;

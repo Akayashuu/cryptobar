@@ -15,10 +15,9 @@ const USER_AGENT: &str = concat!(
 );
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const TOTAL_TIMEOUT: Duration = Duration::from_secs(10);
-/// Read ceiling for a response: beyond it, we refuse rather than let memory
-/// grow on an abnormal response.
 const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 
+/// Client of the public CoinGecko API.
 pub struct CoinGecko {
     base_url: String,
     agent: ureq::Agent,
@@ -41,6 +40,7 @@ impl CoinGecko {
         }
     }
 
+    /// Client that targets the given API root instead of the public one.
     #[must_use]
     pub fn with_base_url(base_url: &str) -> Self {
         let config = ureq::Agent::config_builder()
@@ -90,7 +90,6 @@ impl CoinGecko {
         format!("{}/search?query={encoded}", self.base_url)
     }
 
-    /// Runs a GET request and returns the body as text, capped in size.
     fn get(&self, url: &str) -> Result<String, SourceError> {
         match self.agent.get(url).call() {
             Ok(mut response) => response
@@ -235,16 +234,12 @@ struct RawSearchCoin {
     symbol: String,
     #[serde(default)]
     name: String,
-    /// 25×25 thumbnail: exactly the size shown in the result list, no need to
-    /// pull the full-size logo.
     #[serde(default)]
     thumb: Option<String>,
     #[serde(default)]
     large: Option<String>,
 }
 
-/// Converts a search response. Hits whose id is not a valid [`CoinId`] are
-/// skipped, the same as in [`parse_markets`].
 fn parse_search(raw: &str) -> Result<Vec<SearchHit>, SourceError> {
     let parsed: RawSearch = serde_json::from_str(raw)?;
     Ok(parsed

@@ -4,16 +4,12 @@
 //! the pattern. As a cell offers eight dots, the vertical resolution is four
 //! times that of block characters.
 
-/// Mapping (column, row) → bit of the braille pattern.
-/// Column 0 = dots 1,2,3,7; column 1 = dots 4,5,6,8.
 const DOTS: [[u8; 4]; 2] = [[0x01, 0x02, 0x04, 0x40], [0x08, 0x10, 0x20, 0x80]];
 
 /// Braille dot canvas, addressable in pixels.
 pub struct Canvas {
-    /// Width and height in cells.
     cols: usize,
     rows: usize,
-    /// One pattern per cell, indexed `row * cols + col`.
     cells: Vec<u8>,
 }
 
@@ -84,7 +80,6 @@ pub fn as_f64(value: usize) -> f64 {
     value.min(1 << 52) as f64
 }
 
-/// `f64` → `usize` conversion of a value already clamped to `0..=max`.
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn as_usize(value: f64, max: usize) -> usize {
     if !value.is_finite() || value <= 0.0 {
@@ -148,7 +143,6 @@ pub fn plot(points: &[f64], cols: usize, rows: usize) -> Vec<String> {
     canvas.to_lines()
 }
 
-/// Vertically joins two consecutive dots to avoid a dotted curve.
 fn connect(canvas: &mut Canvas, _prev_x: usize, prev_y: usize, x: usize, y: usize) {
     let (low, high) = if prev_y <= y {
         (prev_y, y)

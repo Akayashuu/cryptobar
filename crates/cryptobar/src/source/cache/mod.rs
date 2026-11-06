@@ -15,15 +15,15 @@ mod tests;
 
 pub use store::CachedSource;
 
-/// First backoff delay after a network failure.
 const BACKOFF_MIN: u64 = 60;
-/// Backoff ceiling: beyond it, spacing further out is pointless.
 const BACKOFF_MAX: u64 = 1800;
 
 /// Value coming from the cache, with the time of the last network success.
 #[derive(Debug, Clone)]
 pub struct Cached<T> {
+    /// The cached value.
     pub value: T,
+    /// Unix time, in seconds, of the last successful fetch.
     pub fetched_at: u64,
     /// `true` when the served value could not be refreshed.
     pub stale: bool,
@@ -37,9 +37,7 @@ struct Entry<T> {
 
 #[derive(Serialize, Deserialize, Default)]
 struct Backoff {
-    /// Unix timestamp before which no request must be attempted.
     retry_after: u64,
-    /// Current delay, doubled on every consecutive failure.
     delay: u64,
 }
 

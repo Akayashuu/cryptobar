@@ -50,7 +50,6 @@ impl Editor {
     }
 }
 
-/// The `coins` array, created when missing.
 fn coins_array(document: &mut DocumentMut) -> Result<&mut Array, EditError> {
     if !document.get("coins").is_some_and(Item::is_array) {
         document.insert("coins", Item::Value(Value::Array(Array::new())));

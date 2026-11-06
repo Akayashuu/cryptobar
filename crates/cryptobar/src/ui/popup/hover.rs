@@ -18,10 +18,6 @@ pub(super) fn sample_at(len: usize, ratio: f64) -> usize {
     index.min(last)
 }
 
-/// Age of the sample at the given index, spelled out.
-///
-/// The series carry no timestamp: the position in the curve is enough, since
-/// the points of a range are evenly spaced.
 fn age_at(range: Range, len: usize, index: usize) -> String {
     let last = len.saturating_sub(1);
     if last == 0 {

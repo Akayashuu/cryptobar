@@ -15,17 +15,18 @@ pub struct Editor {
 }
 
 impl Editor {
+    /// Editor for the configuration file at `path`.
     #[must_use]
     pub fn new(path: PathBuf) -> Self {
         Self { path }
     }
 
+    /// Path of the configuration file being edited.
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    /// Current document, or the default template when the file is missing.
     fn document(&self) -> Result<DocumentMut, EditError> {
         let raw = match std::fs::read_to_string(&self.path) {
             Ok(raw) => raw,
@@ -62,8 +63,6 @@ impl Editor {
         Ok(config)
     }
 
-    /// Atomic write: the file is never observed half-written, even if the
-    /// machine stops at the wrong moment.
     fn write(&self, contents: &str) -> Result<(), EditError> {
         if let Some(parent) = self.path.parent() {
             paths::ensure_dir(parent).map_err(|source| EditError::Directory {

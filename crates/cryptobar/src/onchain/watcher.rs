@@ -16,12 +16,7 @@ const USER_AGENT: &str = concat!(
 );
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const TOTAL_TIMEOUT: Duration = Duration::from_secs(10);
-/// The expected responses are a few hundred bytes; this ceiling guards against
-/// a server going haywire without ever getting in the way of normal use.
 const MAX_RESPONSE_BYTES: u64 = 64 * 1024;
-/// How long a cached balance stays valid. A chain settles in minutes, not in
-/// seconds: querying more often would only load the public servers that do us a
-/// favour for free.
 const TTL: Duration = Duration::from_secs(300);
 
 fn endpoint(chain: Chain) -> String {
@@ -42,7 +37,9 @@ fn endpoint(chain: Chain) -> String {
 /// failure is listed so that the caller can tell the user, never swallowed.
 #[derive(Debug, Default)]
 pub struct Refresh {
+    /// Balances read successfully, one per wallet.
     pub balances: Vec<Balance>,
+    /// Reads that failed, with their cause.
     pub failures: Vec<OnchainError>,
 }
 
@@ -53,6 +50,7 @@ pub struct Watcher {
 }
 
 impl Watcher {
+    /// Watcher whose balance cache lives in `cache_dir`.
     #[must_use]
     pub fn new(cache_dir: &Path) -> Self {
         let config = ureq::Agent::config_builder()

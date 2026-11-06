@@ -21,8 +21,8 @@ BTC 66 040 € ▁▁▁▂▂▃▅█ +6.0 %
 |---|---|
 | **Bar** | One cryptocurrency at a time, curve included, scroll to move to the next. Quickshell draws a real curve; Waybar shows a Unicode sparkline. |
 | **Panel** | Every watched cryptocurrency, aligned, with the 1 h / 24 h / 7 d changes and the active row highlighted. |
-| **Terminal** | `cryptobar chart` — full-resolution braille curve, sized to the actual terminal. |
-| **Window** | `cryptobar popup` — GTK4: search, curve over five ranges, watched cryptocurrencies, portfolio, alerts and settings, all editable without opening the configuration file. |
+| **Terminal** | `cryptobar chart`: full-resolution braille curve, sized to the actual terminal. |
+| **Window** | `cryptobar popup`: GTK4: search, curve over five ranges, watched cryptocurrencies, portfolio, alerts and settings, all editable without opening the configuration file. |
 
 ```
 BITCOIN  66 346 €   +22.1 %  (7d)
@@ -114,7 +114,7 @@ or closes it when it already has the focus: the same click opens and closes it.
 
 `cryptobar bar --markup none` produces the same line without Pango markup. On
 top of the already formatted text come separate fields, which Waybar ignores
-and which a constrained layout needs — among them `coins`, carrying every
+and which a constrained layout needs, among them `coins`, carrying every
 watched cryptocurrency with its series normalised within `[0, 1]`, ready to
 plot:
 
@@ -162,7 +162,7 @@ up without recomputing anything. `portfolio` is `null` until a watched address
 has a balance.
 
 With `--watch`, the process stays in the foreground and re-emits a line on
-every interval — a subscription rather than a poll.
+every interval, a subscription rather than a poll.
 
 ## Configuration
 
@@ -194,7 +194,7 @@ terminal = "kitty"
 # Real-time signal used to refresh Waybar: SIGRTMIN+<n>, 1..=30.
 waybar_signal = 8
 
-# Wallets watched read-only — PUBLIC ADDRESSES only.
+# Wallets watched read-only: PUBLIC ADDRESSES only.
 [[wallets]]
 chain = "bitcoin"      # bitcoin, ethereum or solana
 address = "bc1q…"
@@ -234,8 +234,8 @@ Ranges accepted by `--range`: `1h`, `24h`, `7d`, `30d`, `1y`.
 ## Portfolio, read-only
 
 cryptobar can value what you hold without ever being able to touch it. You give
-it a **public address** — the one you hand out to *receive* funds, "Receive" in
-Ledger Live — and it reads the balance from the chain.
+it a **public address**, the one you hand out to *receive* funds, "Receive" in
+Ledger Live, and it reads the balance from the chain.
 
 > **cryptobar never asks for, and never accepts, a private key or a recovery
 > phrase.** An input containing whitespace (hence a recovery phrase) or
@@ -246,7 +246,7 @@ Ledger Live — and it reads the balance from the chain.
 Balances are read from public endpoints, with no API key:
 [mempool.space](https://mempool.space) for Bitcoin,
 `ethereum-rpc.publicnode.com` for Ethereum, `api.mainnet-beta.solana.com` for
-Solana. The addresses and the amounts never leave the machine — no account, no
+Solana. The addresses and the amounts never leave the machine, no account, no
 exchange, no telemetry.
 
 ```
@@ -278,19 +278,19 @@ alerts also appear in the JSON line and in the window.
 The module runs on every tick of the bar, so it cannot afford to be heavy.
 
 - **3 to 5 ms per tick**, measured in release on a warm cache.
-- **No daemon** — nothing runs between two ticks. The `--watch` mode exists but
+- **No daemon**: nothing runs between two ticks. The `--watch` mode exists but
   is not required.
-- **No async runtime** — a synchronous HTTP client (`ureq` + `rustls`) is
+- **No async runtime**: a synchronous HTTP client (`ureq` + `rustls`) is
   enough for one request every 60 seconds and avoids pulling in `tokio`.
 - **One request for every cryptocurrency**, 7-day sparklines included.
 - **Advisory lock** on the cache: two simultaneous ticks never turn into a
   duplicate request.
 - **Atomic writes** for the cache and the state: an interruption has never left
   a half-written file behind.
-- **Graceful degradation** — on a network outage the last known data is served
+- **Graceful degradation**: on a network outage the last known data is served
   with the `stale` class rather than leaving a hole in the bar. An exponential
   backoff (60 s → 30 min) avoids hammering the API.
-- **Pre-reduced series** — the curve is downsampled and normalised on the
+- **Pre-reduced series**: the curve is downsampled and normalised on the
   binary side, rounded to three decimals: the bar only has to plot it.
 
 On the safety side: `unsafe` is forbidden at compile time

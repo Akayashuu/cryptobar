@@ -63,7 +63,6 @@ pub(super) fn decode_solana(body: &str) -> Result<f64, OnchainError> {
     Ok(units(lamports_to_f64(lamports), 1e9))
 }
 
-/// Conversion from a base unit to the displayed unit.
 fn units(base: f64, divisor: f64) -> f64 {
     if divisor.abs() < f64::EPSILON {
         return 0.0;

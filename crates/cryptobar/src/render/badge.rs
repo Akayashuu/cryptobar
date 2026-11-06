@@ -17,8 +17,6 @@ pub struct Badge {
     pub foreground: String,
 }
 
-/// Known symbols: a currency glyph when one exists, a geometric shape close to
-/// the logo otherwise, plus the official brand colour.
 const KNOWN: &[(&str, &str, &str)] = &[
     ("BTC", "₿", "#f7931a"),
     ("ETH", "Ξ", "#627eea"),
@@ -50,7 +48,6 @@ const KNOWN: &[(&str, &str, &str)] = &[
     ("SUI", "◍", "#4da2ff"),
 ];
 
-/// Fallback palette, picked to stay readable on light and dark backgrounds alike.
 const FALLBACK: &[&str] = &[
     "#e07a5f", "#3d8ac0", "#81b29a", "#c9a227", "#9b5de5", "#f15bb5", "#00b4a6", "#8d99ae",
 ];
@@ -76,7 +73,6 @@ pub fn of(symbol: &str) -> Badge {
     }
 }
 
-/// First letter of the symbol, or a filled disc when it is empty.
 fn initial(upper: &str) -> String {
     upper
         .chars()
@@ -84,9 +80,6 @@ fn initial(upper: &str) -> String {
         .map_or_else(|| "●".to_owned(), String::from)
 }
 
-/// Stable colour derived from the symbol: the same symbol always yields the
-/// same hue, across machines too, FNV-1a is specified, whereas the standard
-/// library hash guarantees nothing between two runs.
 fn fallback_color(upper: &str) -> &'static str {
     const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
     const PRIME: u64 = 0x0000_0100_0000_01b3;
@@ -98,10 +91,6 @@ fn fallback_color(upper: &str) -> &'static str {
     FALLBACK.get(index).copied().unwrap_or("#8d99ae")
 }
 
-/// Black or white, whichever contrasts best with the given colour.
-///
-/// The relative luminance follows the ITU-R BT.601 weighting, good enough here
-/// and far cheaper than a full linear sRGB conversion.
 fn readable_over(hex: &str) -> &'static str {
     let Some((red, green, blue)) = components(hex) else {
         return "#ffffff";
@@ -117,7 +106,6 @@ fn readable_over(hex: &str) -> &'static str {
     }
 }
 
-/// Splits `#rrggbb` into three bytes.
 fn components(hex: &str) -> Option<(u8, u8, u8)> {
     let digits = hex.strip_prefix('#')?;
     if digits.len() != 6 {

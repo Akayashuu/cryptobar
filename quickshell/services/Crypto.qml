@@ -49,7 +49,7 @@ Singleton {
     /// foreground }.
     property var coins: []
     /// Thresholds crossed right now: { symbol, kind, title, body }. Empty most
-    /// of the time — this is what lights up the badge in the bar.
+    /// of the time: this is what lights up the badge in the bar.
     property var alerts: []
     /// Valued portfolio, or `null` when no public address is watched:
     /// { total, change_24h, change_24h_pct, positive, positions }.
