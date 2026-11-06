@@ -1,0 +1,116 @@
+use anyhow::{Context as _, Result, bail};
+use toml_edit::{DocumentMut, Item, Value};
+
+use crate::config::Config;
+use crate::model::CoinId;
+
+use super::editor::Editor;
+
+impl Editor {
+    /// Adds an alert on a cryptocurrency.
+    ///
+    /// # Errors
+    /// Fails when no condition is provided, or for the reasons of
+    /// [`Self::apply`].
+    pub fn add_alert(
+        &self,
+        id: &CoinId,
+        above: Option<f64>,
+        below: Option<f64>,
+        change_pct: Option<f64>,
+    ) -> Result<Config> {
+        if above.is_none() && below.is_none() && change_pct.is_none() {
+            bail!("an alert has to define at least one condition");
+        }
+        let key = id.as_str().to_owned();
+        self.apply(move |document| {
+            let array = alerts_array(document)?;
+            let mut entry = toml_edit::Table::new();
+            entry.insert("coin", Item::Value(Value::from(key)));
+            for (field, value) in [
+                ("above", above),
+                ("below", below),
+                ("change_pct", change_pct),
+            ] {
+                if let Some(value) = value {
+                    entry.insert(field, Item::Value(Value::from(value)));
+                }
+            }
+            array.push(entry);
+            Ok(())
+        })
+    }
+
+    /// Removes the alert at the given index.
+    ///
+    /// # Errors
+    /// Fails when the index is out of the list, or for the reasons of
+    /// [`Self::apply`].
+    pub fn remove_alert(&self, index: usize) -> Result<Config> {
+        self.apply(move |document| {
+            let array = alerts_array(document)?;
+            if index >= array.len() {
+                bail!("no alert at index {index}");
+            }
+            array.remove(index);
+            Ok(())
+        })
+    }
+}
+
+fn alerts_array(document: &mut DocumentMut) -> Result<&mut toml_edit::ArrayOfTables> {
+    if !document.get("alerts").is_some_and(Item::is_array_of_tables) {
+        document.insert(
+            "alerts",
+            Item::ArrayOfTables(toml_edit::ArrayOfTables::new()),
+        );
+    }
+    document
+        .get_mut("alerts")
+        .and_then(Item::as_array_of_tables_mut)
+        .context("`alerts` is not an array of tables")
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::config_edit::fixtures::{editor, seed};
+
+    #[test]
+    fn an_alert_is_added_then_removed() {
+        let (_guard, editor) = editor();
+        seed(&editor, "coins = [\"bitcoin\"]\n");
+        let id = CoinId::parse("bitcoin").unwrap();
+        let config = editor.add_alert(&id, Some(100.0), None, None).unwrap();
+        assert_eq!(config.alerts.len(), 1);
+        assert_eq!(config.alerts.first().unwrap().above, Some(100.0));
+        let config = editor.remove_alert(0).unwrap();
+        assert_eq!(config.alerts.len(), 0);
+    }
+
+    #[test]
+    fn an_alert_without_a_condition_is_rejected() {
+        let (_guard, editor) = editor();
+        seed(&editor, "coins = [\"bitcoin\"]\n");
+        let id = CoinId::parse("bitcoin").unwrap();
+        assert!(editor.add_alert(&id, None, None, None).is_err());
+    }
+
+    #[test]
+    fn an_alert_on_an_unwatched_coin_leaves_the_file_untouched() {
+        let (_guard, editor) = editor();
+        let original = "coins = [\"bitcoin\"]\n";
+        seed(&editor, original);
+        let id = CoinId::parse("solana").unwrap();
+        assert!(editor.add_alert(&id, Some(1.0), None, None).is_err());
+        assert_eq!(std::fs::read_to_string(editor.path()).unwrap(), original);
+    }
+
+    #[test]
+    fn removing_a_missing_alert_is_rejected() {
+        let (_guard, editor) = editor();
+        seed(&editor, "coins = [\"bitcoin\"]\n");
+        assert!(editor.remove_alert(0).is_err());
+    }
+}
