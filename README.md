@@ -53,7 +53,7 @@ you exactly what is left.
 For a binary with no GTK dependency at all:
 
 ```bash
-cargo install --path . --no-default-features
+cargo install --path crates/cryptobar --no-default-features
 ```
 
 ## Wiring a bar
@@ -309,8 +309,8 @@ around 10 to 30 requests per minute depending on the load; the minimum
 ## Development
 
 ```bash
-cargo test --all-features
-cargo clippy --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
 The tests never touch the network: `CRYPTOBAR_API_BASE` redirects the client and

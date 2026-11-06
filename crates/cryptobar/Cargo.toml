@@ -1,0 +1,41 @@
+[package]
+name = "cryptobar"
+version = "0.2.1"
+edition.workspace = true
+rust-version.workspace = true
+description = "Cours de cryptomonnaies dans Waybar, avec sparkline, courbe terminal et popup GTK4"
+repository.workspace = true
+license.workspace = true
+readme = "../../README.md"
+keywords = ["waybar", "crypto", "hyprland", "wayland", "cli"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+etcetera.workspace = true
+rustix.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+terminal_size.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+toml_edit.workspace = true
+ureq.workspace = true
+gtk4 = { workspace = true, optional = true }
+cairo-rs = { workspace = true, optional = true }
+rustix-libc-wrappers.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true
+proptest.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+
+[features]
+default = ["popup"]
+popup = ["dep:gtk4", "dep:cairo-rs"]
+
+[lints]
+workspace = true

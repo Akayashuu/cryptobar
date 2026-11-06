@@ -1,16 +1,14 @@
-[package]
-name = "cryptobar"
-version = "0.2.1"
-edition = "2024"
-rust-version = "1.88"
-description = "Cours de cryptomonnaies dans Waybar, avec sparkline, courbe terminal et popup GTK4"
-repository = "https://github.com/Akayashuu/cryptobar"
-license = "MIT"
-readme = "README.md"
-keywords = ["waybar", "crypto", "hyprland", "wayland", "cli"]
-categories = ["command-line-utilities"]
+[workspace]
+members = ["crates/*"]
+resolver = "3"
 
-[dependencies]
+[workspace.package]
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+repository = "https://github.com/Akayashuu/cryptobar"
+
+[workspace.dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive", "wrap_help"] }
 etcetera = "0.10"
@@ -22,23 +20,16 @@ thiserror = "2"
 toml = "0.9"
 toml_edit = "0.25"
 ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "json"] }
-gtk4 = { version = "0.9", optional = true }
+gtk4 = { version = "0.9" }
 # The PNG encoding of Cairo is not enabled by gtk4: the window needs it to
 # export the curve. Same version as the one gtk4 pulls in, so a single copy of
 # the library.
-cairo-rs = { version = "0.20", features = ["png"], optional = true }
+cairo-rs = { version = "0.20", features = ["png"] }
 rustix-libc-wrappers = { version = "0.1.1", features = ["process"] }
-
-[dev-dependencies]
 assert_cmd = "2"
 predicates = "3"
 proptest = "1"
-serde_json = "1"
 tempfile = "3"
-
-[features]
-default = ["popup"]
-popup = ["dep:gtk4", "dep:cairo-rs"]
 
 [profile.release]
 opt-level = 3
@@ -47,10 +38,10 @@ codegen-units = 1
 panic = "abort"
 strip = "symbols"
 
-[lints.rust]
+[workspace.lints.rust]
 unsafe_code = "forbid"
 
-[lints.clippy]
+[workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 unwrap_used = "deny"
 expect_used = "deny"
