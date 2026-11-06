@@ -31,6 +31,9 @@ semantic versioning.
 
 - A second `cryptobar popup` closes the window when it has the focus, and
   brings it to the front otherwise.
+- The popup status line grades its messages by severity: a repaired corrupt
+  state file is info, a state file that cannot be read or written is a warning
+  in amber, and other failures stay red.
 
 ## [0.2.1] - 2026-08-22
 
