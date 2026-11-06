@@ -1,0 +1,166 @@
+use std::cell::Cell;
+use std::rc::Rc;
+
+use gtk4::prelude::*;
+
+use crate::render::braille::as_f64;
+
+use super::hover::sample_at;
+
+/// Geometry of the plot inside the drawing area.
+pub(super) const CHART_WIDTH: i32 = 540;
+pub(super) const CHART_HEIGHT: i32 = 230;
+
+/// Number of horizontal guide lines under the curve.
+const GRID_LINES: i32 = 4;
+
+/// Hovered abscissa, within `0.0..=1.0`, shared between the mouse controller
+/// and the drawing function. `None` when the pointer is elsewhere.
+pub(super) type Hover = Rc<Cell<Option<f64>>>;
+
+pub(super) fn chart(
+    points: &[f64],
+    positive: bool,
+    width: i32,
+    height: i32,
+    detailed: bool,
+    hover: Option<Hover>,
+) -> gtk4::DrawingArea {
+    let area = gtk4::DrawingArea::new();
+    area.set_content_width(width);
+    area.set_content_height(height);
+    let points = points.to_vec();
+
+    area.set_draw_func(move |_, ctx, width, height| {
+        draw_series(
+            ctx,
+            &points,
+            positive,
+            f64::from(width),
+            f64::from(height),
+            detailed,
+            hover.as_ref().and_then(|hover| hover.get()),
+        );
+    });
+    area
+}
+
+/// Draws the curve into any Cairo context.
+///
+/// The function does not depend on the widget: it is the one drawing on screen
+/// and filling the image surface of the PNG export, which guarantees the
+/// exported file is exactly what one sees.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn draw_series(
+    ctx: &gtk4::cairo::Context,
+    points: &[f64],
+    positive: bool,
+    area_width: f64,
+    area_height: f64,
+    detailed: bool,
+    hover: Option<f64>,
+) {
+    let usable: Vec<f64> = points.iter().copied().filter(|v| v.is_finite()).collect();
+    if usable.len() < 2 {
+        return;
+    }
+    let (min, max) = crate::render::braille::bounds(&usable);
+    let span = max - min;
+    // The stroke must not be clipped by the edges of the area.
+    let inset = 3.0;
+    let plot_height = (area_height - inset * 2.0).max(1.0);
+    let last = usable.len().saturating_sub(1);
+    let step = if last == 0 {
+        area_width
+    } else {
+        area_width / as_f64(last)
+    };
+
+    // Guide lines: a neutral grey at low opacity shows on a light background
+    // as well as on a dark one, without competing with the curve.
+    if detailed {
+        ctx.set_source_rgba(0.5, 0.5, 0.5, 0.18);
+        ctx.set_line_width(1.0);
+        for line in 0..=GRID_LINES {
+            let ratio = f64::from(line) / f64::from(GRID_LINES);
+            let y = (inset + ratio * plot_height).round() + 0.5;
+            ctx.move_to(0.0, y);
+            ctx.line_to(area_width, y);
+        }
+        let _ = ctx.stroke();
+    }
+
+    // The polyline is computed once then reused for the area, the stroke and
+    // the end point.
+    let polyline: Vec<(f64, f64)> = usable
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let x = as_f64(index) * step;
+            let ratio = ((value - min) / span).clamp(0.0, 1.0);
+            (x, inset + (1.0 - ratio) * plot_height)
+        })
+        .collect();
+
+    let (red, green, blue) = if positive {
+        (0.18, 0.75, 0.44)
+    } else {
+        (0.90, 0.28, 0.30)
+    };
+
+    // Area under the curve: a gradient fading downwards, to give volume
+    // without hiding the guide lines.
+    ctx.move_to(0.0, area_height);
+    for (x, y) in &polyline {
+        ctx.line_to(*x, *y);
+    }
+    ctx.line_to(area_width, area_height);
+    ctx.close_path();
+    let gradient = gtk4::cairo::LinearGradient::new(0.0, 0.0, 0.0, area_height);
+    gradient.add_color_stop_rgba(0.0, red, green, blue, 0.32);
+    gradient.add_color_stop_rgba(1.0, red, green, blue, 0.0);
+    if ctx.set_source(&gradient).is_ok() {
+        let _ = ctx.fill();
+    }
+
+    for (index, (x, y)) in polyline.iter().enumerate() {
+        if index == 0 {
+            ctx.move_to(*x, *y);
+        } else {
+            ctx.line_to(*x, *y);
+        }
+    }
+    ctx.set_source_rgb(red, green, blue);
+    ctx.set_line_width(if detailed { 2.0 } else { 1.4 });
+    ctx.set_line_join(gtk4::cairo::LineJoin::Round);
+    ctx.set_line_cap(gtk4::cairo::LineCap::Round);
+    let _ = ctx.stroke();
+
+    // Hover marker: a vertical stroke and a dot on the curve, at the sample
+    // closest to the pointer.
+    if let Some((x, y)) = hover
+        .map(|ratio| sample_at(usable.len(), ratio))
+        .and_then(|index| polyline.get(index))
+        .filter(|_| detailed)
+    {
+        ctx.set_source_rgba(0.6, 0.6, 0.6, 0.45);
+        ctx.set_line_width(1.0);
+        ctx.move_to(x.round() + 0.5, 0.0);
+        ctx.line_to(x.round() + 0.5, area_height);
+        let _ = ctx.stroke();
+        ctx.set_source_rgb(red, green, blue);
+        ctx.arc(*x, *y, 3.4, 0.0, std::f64::consts::TAU);
+        let _ = ctx.fill();
+    }
+
+    // End point: the eye finds the current price immediately.
+    if let Some((x, y)) = polyline.last().filter(|_| detailed) {
+        let x = x.min(area_width - 4.0);
+        ctx.set_source_rgba(red, green, blue, 0.25);
+        ctx.arc(x, *y, 6.0, 0.0, std::f64::consts::TAU);
+        let _ = ctx.fill();
+        ctx.set_source_rgb(red, green, blue);
+        ctx.arc(x, *y, 2.6, 0.0, std::f64::consts::TAU);
+        let _ = ctx.fill();
+    }
+}
