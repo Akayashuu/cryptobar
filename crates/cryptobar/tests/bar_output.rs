@@ -106,8 +106,11 @@ mod support {
     }
 }
 
-use std::fs;
+use std::fs::{self, File};
 use std::path::Path;
+use std::process::Stdio;
+use std::thread;
+use std::time::{Duration, SystemTime};
 
 use assert_cmd::assert::OutputAssertExt;
 use support::{bar_json, cryptobar, run, seed_cache, setup};
@@ -257,4 +260,80 @@ fn bar_repairs_a_corrupt_state_and_stays_quiet_afterwards() {
     assert!(second.status.success());
     assert_eq!(String::from_utf8(second.stderr).unwrap(), "");
     serde_json::from_slice::<serde_json::Value>(&fs::read(&state).unwrap()).unwrap();
+}
+
+#[test]
+fn a_failed_repair_is_reported_once_by_the_save_that_follows() {
+    let env = setup();
+    seed_cache(&env.cache);
+    let state = env.runtime.join("state.json");
+    fs::write(&state, b"garbage").unwrap();
+    fs::create_dir(env.runtime.join("state.json.tmp")).unwrap();
+
+    let output = run(&env, &["next"]);
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(stderr.lines().count(), 2, "stderr: {stderr}");
+    assert!(stderr.starts_with(&corrupt_state_warning(&state)));
+    assert_eq!(
+        stderr
+            .lines()
+            .filter(|line| line.contains("could not write the state file"))
+            .count(),
+        1
+    );
+    assert_eq!(output.status.code(), Some(74));
+    assert_eq!(fs::read(&state).unwrap(), b"garbage");
+}
+
+#[test]
+fn bar_watch_reports_an_unreadable_state_once_per_failure() {
+    let env = setup();
+    seed_cache(&env.cache);
+    fs::write(
+        &env.config,
+        "coins = [\"bitcoin\", \"ethereum\"]\ncurrency = \"eur\"\nrefresh_interval = 15\n\n[[alerts]]\ncoin = \"bitcoin\"\nabove = 1e15\n",
+    )
+    .unwrap();
+    let state = env.runtime.join("state.json");
+    fs::create_dir(&state).unwrap();
+    let log = env.config.with_file_name("watch.log");
+
+    let mut child = cryptobar(&env)
+        .args(["bar", "--watch"])
+        .stdout(Stdio::null())
+        .stderr(File::create(&log).unwrap())
+        .spawn()
+        .unwrap();
+    thread::sleep(Duration::from_millis(1000));
+    for elapsed in 1..=2 {
+        let touched = SystemTime::now() + Duration::from_secs(elapsed);
+        File::open(&state).unwrap().set_modified(touched).unwrap();
+        thread::sleep(Duration::from_millis(1000));
+    }
+    fs::remove_dir(&state).unwrap();
+    fs::write(&state, b"{}").unwrap();
+    thread::sleep(Duration::from_millis(1000));
+    fs::remove_file(&state).unwrap();
+    fs::create_dir(&state).unwrap();
+    thread::sleep(Duration::from_millis(1000));
+    child.kill().unwrap();
+    child.wait().unwrap();
+
+    let stderr = fs::read_to_string(&log).unwrap();
+    assert_eq!(
+        stderr
+            .lines()
+            .filter(|line| line.contains("could not read the state file"))
+            .count(),
+        2,
+        "stderr: {stderr}"
+    );
+    assert_eq!(
+        stderr
+            .lines()
+            .filter(|line| line.contains("alerts are paused until the state file"))
+            .count(),
+        2,
+        "stderr: {stderr}"
+    );
 }

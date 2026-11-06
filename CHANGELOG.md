@@ -23,6 +23,9 @@ semantic versioning.
   `cryptobar: ...` line on stderr with the reason, then renders the module
   with the tooltip `stale data: network unavailable`, instead of failing
   without a word.
+- `cryptobar bar --watch` says when alerts are paused: while the state file
+  cannot be read, the alerts are not checked, and the watch says so once next
+  to the state warning.
 
 ### Changed
 

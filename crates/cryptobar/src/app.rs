@@ -84,6 +84,12 @@ impl App {
         })
     }
 
+    /// Path of the runtime state file.
+    #[must_use]
+    pub fn state_path(&self) -> &Path {
+        &self.state_path
+    }
+
     /// Path of the configuration file actually in use.
     #[must_use]
     pub fn config_path(&self) -> &Path {

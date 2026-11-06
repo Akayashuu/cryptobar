@@ -61,6 +61,23 @@ pub enum StateError {
     Encode(#[from] serde_json::Error),
 }
 
+/// Identifies a failure on a file: the path and the kind of the error.
+pub type Occurrence = (PathBuf, ErrorKind);
+
+impl StateError {
+    /// The file and the error kind of this failure, when it concerns the state file.
+    #[must_use]
+    pub fn occurrence(&self) -> Option<Occurrence> {
+        match self {
+            Self::Read { path, source } | Self::Write { path, source } => {
+                Some((path.clone(), source.kind()))
+            }
+            Self::Corrupt { path, .. } => Some((path.clone(), ErrorKind::InvalidData)),
+            Self::Paths(_) | Self::Directory { .. } | Self::Encode(_) => None,
+        }
+    }
+}
+
 /// A state read from disk, with the failures met on the way.
 #[derive(Debug)]
 pub struct LoadedState {

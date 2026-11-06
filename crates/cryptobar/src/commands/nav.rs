@@ -2,10 +2,10 @@
 
 use std::io::Write;
 
-use super::{CommandError, load_state};
+use super::{CommandError, warn_each};
 use crate::app::App;
 use crate::output::Output;
-use crate::state::LoadedState;
+use crate::state::{LoadedState, StateError};
 
 /// Moves the selection by `delta` positions then wakes Waybar up. An unreadable
 /// state file is never overwritten, so the step is then not kept.
@@ -17,7 +17,7 @@ pub fn step<Out: Write, Err: Write>(
     output: &mut Output<Out, Err>,
     delta: isize,
 ) -> Result<(), CommandError> {
-    let mut loaded = load_state(app, output)?;
+    let mut loaded = load_for_save(app, output)?;
     let len = app.config.coins.len();
     loaded.state.select(app.index_of(&loaded.state), len);
     loaded.state.step(delta, len);
@@ -35,11 +35,23 @@ pub fn select<Out: Write, Err: Write>(
     output: &mut Output<Out, Err>,
     index: usize,
 ) -> Result<(), CommandError> {
-    let mut loaded = load_state(app, output)?;
+    let mut loaded = load_for_save(app, output)?;
     loaded.state.select(index, app.config.coins.len());
     persist(app, &loaded)?;
     app.notify()?;
     Ok(())
+}
+
+fn load_for_save<Out: Write, Err: Write>(
+    app: &App,
+    output: &mut Output<Out, Err>,
+) -> Result<LoadedState, CommandError> {
+    let mut loaded = app.state();
+    loaded
+        .notices
+        .retain(|notice| !matches!(notice, StateError::Write { .. }));
+    warn_each(output, &loaded.notices)?;
+    Ok(loaded)
 }
 
 fn persist(app: &App, loaded: &LoadedState) -> Result<(), CommandError> {

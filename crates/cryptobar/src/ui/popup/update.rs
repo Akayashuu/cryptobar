@@ -7,12 +7,11 @@ use gtk4::{Align, Label};
 use crate::config::Config;
 use crate::config_edit::EditError;
 use crate::model::Range;
-use crate::report::Report;
 
 use super::identity::badge_css;
 use super::model::Ctx;
 use super::prices::{header, series_of, stats_card};
-use super::status::root_cause;
+use super::status::{Notice, Severity, compose};
 use super::widgets::clear;
 
 impl Ctx {
@@ -23,28 +22,31 @@ impl Ctx {
                 match reloaded {
                     Ok(app) => {
                         let app = Arc::new(app);
+                        let mut notices = Vec::new();
                         if let Err(failure) = app.notify() {
-                            self.note(&root_cause(&failure), true);
+                            notices.push(Notice::failure(&failure));
                         }
                         self.model.borrow_mut().app = app;
-                        self.note(message, false);
+                        notices.push(Notice::new(message, Severity::Info));
                         self.reload_quotes();
-                        self.redraw();
+                        self.redraw_with(notices);
                     }
-                    Err(failure) => self.note(&root_cause(&failure), true),
+                    Err(failure) => self.show_notice(&Notice::failure(&failure)),
                 }
             }
-            Err(failure) => self.note(&root_cause(&failure), true),
+            Err(failure) => self.show_notice(&Notice::failure(&failure)),
         }
     }
 
     pub(super) fn redraw(self: &Rc<Self>) {
+        self.redraw_with(Vec::new());
+    }
+
+    fn redraw_with(self: &Rc<Self>, mut notices: Vec<Notice>) {
         let model = self.model.borrow();
         self.palette.load_from_data(&badge_css(&model.quotes));
         let loaded = model.app.state();
-        for notice in &loaded.notices {
-            self.note(&Report(notice).to_string(), true);
-        }
+        notices.extend(loaded.notices.iter().map(Notice::of_state));
         let active = model.app.index_of(&loaded.state);
         let currency = model.app.config.currency.clone();
         let decimals = model.app.config.decimals();
@@ -65,6 +67,10 @@ impl Ctx {
             .map(|quote| series_of(&model, quote, range))
             .unwrap_or_default();
         drop(model);
+
+        if let Some(notice) = compose(&notices) {
+            self.show_notice(&notice);
+        }
 
         clear(&self.widgets.detail);
         if let Some(quote) = selected {

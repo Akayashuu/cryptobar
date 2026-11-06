@@ -83,6 +83,7 @@ expander title { font-size: 13px; opacity: 0.6; }
 .down { color: #e5484d; }
 .flat { opacity: 0.6; }
 .muted { opacity: 0.5; font-size: 13px; }
+.warning { color: #e0a526; font-size: 13px; }
 .error { color: #e5484d; font-size: 13px; }
 
 /* Time range pills. */

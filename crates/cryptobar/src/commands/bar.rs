@@ -6,14 +6,14 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
-use super::{CommandError, load_state, print, warn, warn_each};
+use super::{CommandError, Ongoing, print, warn, warn_each};
 use crate::alerts;
 use crate::app::App;
 use crate::model::Quote;
 use crate::onchain;
 use crate::output::Output;
 use crate::render::waybar::{self, Markup};
-use crate::state::{LoadedState, State};
+use crate::state::{LoadedState, Occurrence, State, StateError};
 
 const POLL: Duration = Duration::from_millis(400);
 
@@ -32,7 +32,7 @@ pub fn run<Out: Write, Err: Write>(
     if watch {
         watch_loop(app, markup, output)
     } else {
-        emit(&app, markup, false, output)
+        emit(&app, markup, false, &mut Ongoing::default(), output)
     }
 }
 
@@ -43,9 +43,10 @@ fn watch_loop<Out: Write, Err: Write>(
 ) -> Result<(), CommandError> {
     let mut config_watch = Watched::start(app.config_path().to_path_buf(), output)?;
     let mut state_watch = Watched::start(State::default_path()?, output)?;
+    let mut state_failures = Ongoing::default();
 
     loop {
-        emit(&app, markup, true, output)?;
+        emit(&app, markup, true, &mut state_failures, output)?;
 
         let deadline =
             Instant::now().checked_add(Duration::from_secs(app.config.refresh_interval.max(1)));
@@ -76,7 +77,7 @@ fn watch_loop<Out: Write, Err: Write>(
 struct Watched {
     path: PathBuf,
     stamp: Option<SystemTime>,
-    failure_reported: bool,
+    failures: Ongoing<Occurrence>,
 }
 
 impl Watched {
@@ -87,7 +88,7 @@ impl Watched {
         let mut watched = Self {
             path,
             stamp: None,
-            failure_reported: false,
+            failures: Ongoing::default(),
         };
         watched.stamp = watched.sample(output)?;
         Ok(watched)
@@ -108,10 +109,12 @@ impl Watched {
         output: &mut Output<Out, Err>,
     ) -> Result<Option<SystemTime>, CommandError> {
         match stamp(&self.path) {
-            Ok(stamp) => Ok(stamp),
+            Ok(stamp) => {
+                self.failures.settle(&[]);
+                Ok(stamp)
+            }
             Err(source) => {
-                if !self.failure_reported {
-                    self.failure_reported = true;
+                if self.failures.begin((self.path.clone(), source.kind())) {
                     warn(
                         output,
                         &CommandError::Watch {
@@ -159,10 +162,45 @@ fn dispatch_alerts<Out: Write, Err: Write>(
     Ok(())
 }
 
+fn report_state<Out: Write, Err: Write>(
+    app: &App,
+    loaded: &LoadedState,
+    live: bool,
+    failures: &mut Ongoing<Occurrence>,
+    output: &mut Output<Out, Err>,
+) -> Result<(), CommandError> {
+    let present: Vec<Occurrence> = loaded
+        .notices
+        .iter()
+        .filter_map(StateError::occurrence)
+        .collect();
+    failures.settle(&present);
+    let mut fresh = false;
+    for notice in &loaded.notices {
+        if notice
+            .occurrence()
+            .is_none_or(|failure| failures.begin(failure))
+        {
+            fresh = true;
+            warn(output, notice)?;
+        }
+    }
+    if fresh && live && !loaded.is_writable() && !app.config.alerts.is_empty() {
+        output
+            .warning(format_args!(
+                "cryptobar: alerts are paused until the state file {} is readable",
+                app.state_path().display()
+            ))
+            .map_err(CommandError::Write)?;
+    }
+    Ok(())
+}
+
 fn emit<Out: Write, Err: Write>(
     app: &App,
     markup: Markup,
     live: bool,
+    failures: &mut Ongoing<Occurrence>,
     output: &mut Output<Out, Err>,
 ) -> Result<(), CommandError> {
     let (mut quotes, stale) = match app
@@ -178,7 +216,8 @@ fn emit<Out: Write, Err: Write>(
     if let Some(notice) = app.source.take_notice() {
         warn(output, &notice)?;
     }
-    let mut loaded = load_state(app, output)?;
+    let mut loaded = app.state();
+    report_state(app, &loaded, live, failures, output)?;
     if live {
         warn_each(output, &app.fetch_icons(&mut quotes))?;
         dispatch_alerts(app, &quotes, &mut loaded, output)?;

@@ -1,7 +1,9 @@
 //! Subcommand implementations.
 
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::Display;
+use std::hash::Hash;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
@@ -108,6 +110,37 @@ pub enum CommandError {
     PopupUnavailable,
 }
 
+/// Failures met on the previous ticks of a long-running command. A failure is
+/// reported when it first appears, stays silent while it lasts, and is reported
+/// again once it has recovered and comes back.
+#[derive(Debug)]
+pub struct Ongoing<Key> {
+    active: HashSet<Key>,
+}
+
+impl<Key> Default for Ongoing<Key> {
+    fn default() -> Self {
+        Self {
+            active: HashSet::new(),
+        }
+    }
+}
+
+impl<Key: Eq + Hash> Ongoing<Key> {
+    /// Records a failure seen on this tick. Returns whether it is new, that is,
+    /// whether it must be reported.
+    #[must_use]
+    pub fn begin(&mut self, failure: Key) -> bool {
+        self.active.insert(failure)
+    }
+
+    /// Forgets every failure absent from `present`, so that each one that
+    /// recovers is reported again when it comes back.
+    pub fn settle(&mut self, present: &[Key]) {
+        self.active.retain(|failure| present.contains(failure));
+    }
+}
+
 /// Writes one line of result to stdout.
 ///
 /// # Errors
@@ -168,4 +201,34 @@ pub fn warn_each<Out: Write, Err: Write, E: Error>(
     failures
         .iter()
         .try_for_each(|failure| warn(output, failure))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_lasting_failure_is_new_only_once() {
+        let mut ongoing = Ongoing::default();
+        assert!(ongoing.begin("state"));
+        assert!(!ongoing.begin("state"));
+    }
+
+    #[test]
+    fn a_failure_is_new_again_after_it_recovered() {
+        let mut ongoing = Ongoing::default();
+        assert!(ongoing.begin("state"));
+        ongoing.settle(&[]);
+        assert!(ongoing.begin("state"));
+    }
+
+    #[test]
+    fn distinct_failures_recover_apart() {
+        let mut ongoing = Ongoing::default();
+        assert!(ongoing.begin("read"));
+        assert!(ongoing.begin("write"));
+        ongoing.settle(&["read"]);
+        assert!(!ongoing.begin("read"));
+        assert!(ongoing.begin("write"));
+    }
 }
