@@ -61,6 +61,9 @@ fn watch_loop<Out: Write, Err: Write>(
                 break;
             }
             if state_watch.changed(output)? {
+                if state_watch.is_present() {
+                    session.state_rewritten();
+                }
                 break;
             }
             if deadline.is_none_or(|deadline| Instant::now() >= deadline) {
@@ -77,21 +80,34 @@ fn watch_loop<Out: Write, Err: Write>(
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct SourceOccurrence {
+    kind: Discriminant<SourceError>,
+    message: String,
+}
+
 #[derive(Debug, Default)]
 struct Session {
     state_reads: Ongoing<Occurrence>,
     state_writes: Ongoing<Occurrence>,
-    source: Ongoing<Discriminant<SourceError>>,
+    source: Ongoing<SourceOccurrence>,
     fired: Option<BTreeSet<String>>,
 }
 
 impl Session {
     fn source_failed(&mut self, failure: &SourceError) -> bool {
-        self.source.begin(mem::discriminant(failure))
+        self.source.begin(SourceOccurrence {
+            kind: mem::discriminant(failure),
+            message: failure.to_string(),
+        })
     }
 
     fn source_recovered(&mut self) {
         self.source.settle(&[]);
+    }
+
+    fn state_rewritten(&mut self) {
+        self.state_writes.settle(&[]);
     }
 }
 
@@ -123,6 +139,10 @@ impl Watched {
         let changed = stamp != self.stamp;
         self.stamp = stamp;
         Ok(changed)
+    }
+
+    fn is_present(&self) -> bool {
+        self.stamp.is_some()
     }
 
     fn sample<Out: Write, Err: Write>(
@@ -334,5 +354,25 @@ mod tests {
         assert!(session.source_failed(&SourceError::Payload(String::new())));
         session.source_recovered();
         assert!(session.source_failed(&SourceError::Backoff));
+    }
+
+    #[test]
+    fn a_source_failure_of_the_same_kind_but_another_message_is_new() {
+        let mut session = Session::default();
+        assert!(session.source_failed(&SourceError::Http("status 500".to_owned())));
+        assert!(session.source_failed(&SourceError::Http("connection reset".to_owned())));
+        assert!(!session.source_failed(&SourceError::Http("connection reset".to_owned())));
+    }
+
+    #[test]
+    fn a_state_rewrite_settles_a_failed_write() {
+        let mut session = Session::default();
+        let occurrence = Occurrence {
+            path: PathBuf::from("state.json.tmp"),
+            kind: ErrorKind::IsADirectory,
+        };
+        assert!(session.state_writes.begin(occurrence.clone()));
+        session.state_rewritten();
+        assert!(session.state_writes.begin(occurrence));
     }
 }
