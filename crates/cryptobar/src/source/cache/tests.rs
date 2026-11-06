@@ -104,8 +104,8 @@ fn a_network_outage_serves_the_cache_marked_stale() {
             dir.path().to_path_buf(),
             Duration::from_secs(0),
         );
-        ok.markets_cached(&ids(), &vs).unwrap();
-    }
+        ok.markets_cached(&ids(), &vs).unwrap()
+    };
     let broken = CachedSource::new(
         FakeSource::new(true),
         dir.path().to_path_buf(),
@@ -140,7 +140,9 @@ fn stored_quotes_past_the_ttl_are_flagged_stale() {
 #[test]
 fn an_outage_without_a_cache_bubbles_the_error_up() {
     let (_dir, cached) = setup(Duration::from_secs(60), true);
-    assert!(cached.markets_cached(&ids(), &Currency::default()).is_err());
+    cached
+        .markets_cached(&ids(), &Currency::default())
+        .unwrap_err();
 }
 
 #[test]
@@ -153,8 +155,8 @@ fn the_backoff_keeps_the_api_from_being_hammered_after_a_failure() {
             dir.path().to_path_buf(),
             Duration::from_secs(0),
         );
-        ok.markets_cached(&ids(), &vs).unwrap();
-    }
+        ok.markets_cached(&ids(), &vs).unwrap()
+    };
     let broken = CachedSource::new(
         FakeSource::new(true),
         dir.path().to_path_buf(),

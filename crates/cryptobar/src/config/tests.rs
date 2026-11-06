@@ -36,9 +36,9 @@ fn too_short_an_interval_is_rejected_to_protect_the_quota() {
 
 #[test]
 fn an_out_of_range_signal_is_rejected() {
-    assert!(Config::parse("coins = [\"bitcoin\"]\nwaybar_signal = 0").is_err());
-    assert!(Config::parse("coins = [\"bitcoin\"]\nwaybar_signal = 31").is_err());
-    assert!(Config::parse("coins = [\"bitcoin\"]\nwaybar_signal = 30").is_ok());
+    Config::parse("coins = [\"bitcoin\"]\nwaybar_signal = 0").unwrap_err();
+    Config::parse("coins = [\"bitcoin\"]\nwaybar_signal = 31").unwrap_err();
+    Config::parse("coins = [\"bitcoin\"]\nwaybar_signal = 30").unwrap();
 }
 
 #[test]

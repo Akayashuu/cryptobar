@@ -71,16 +71,12 @@ mod tests {
 
     #[test]
     fn a_valid_bitcoin_address_is_accepted() {
-        assert!(
-            wallet(Chain::Bitcoin, "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
-                .validate()
-                .is_ok()
-        );
-        assert!(
-            wallet(Chain::Bitcoin, "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")
-                .validate()
-                .is_ok()
-        );
+        wallet(Chain::Bitcoin, "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq")
+            .validate()
+            .unwrap();
+        wallet(Chain::Bitcoin, "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa")
+            .validate()
+            .unwrap();
     }
 
     #[test]
@@ -91,27 +87,23 @@ mod tests {
 
     #[test]
     fn an_ethereum_address_must_be_forty_hex_digits() {
-        assert!(
-            wallet(
-                Chain::Ethereum,
-                "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
-            )
-            .validate()
-            .is_ok()
-        );
+        wallet(
+            Chain::Ethereum,
+            "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+        )
+        .validate()
+        .unwrap();
         assert!(wallet(Chain::Ethereum, "0x1234").validate().is_err());
     }
 
     #[test]
     fn a_solana_address_is_base58() {
-        assert!(
-            wallet(
-                Chain::Solana,
-                "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
-            )
-            .validate()
-            .is_ok()
-        );
+        wallet(
+            Chain::Solana,
+            "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+        )
+        .validate()
+        .unwrap();
         assert!(wallet(Chain::Solana, "0OIl").validate().is_err());
     }
 

@@ -108,15 +108,13 @@ mod tests {
         let (_guard, editor) = editor();
         let original = "coins = [\"bitcoin\"]\n";
         seed(&editor, original);
-        assert!(
-            editor
-                .add_wallet(
-                    crate::onchain::Chain::Bitcoin,
-                    "abandon abandon abandon ability",
-                    None,
-                )
-                .is_err()
-        );
+        editor
+            .add_wallet(
+                crate::onchain::Chain::Bitcoin,
+                "abandon abandon abandon ability",
+                None,
+            )
+            .unwrap_err();
         assert_eq!(std::fs::read_to_string(editor.path()).unwrap(), original);
     }
 
@@ -128,17 +126,15 @@ mod tests {
         editor
             .add_wallet(crate::onchain::Chain::Ethereum, address, None)
             .unwrap();
-        assert!(
-            editor
-                .add_wallet(crate::onchain::Chain::Ethereum, address, None)
-                .is_err()
-        );
+        editor
+            .add_wallet(crate::onchain::Chain::Ethereum, address, None)
+            .unwrap_err();
     }
 
     #[test]
     fn removing_a_missing_wallet_is_an_error() {
         let (_guard, editor) = editor();
         seed(&editor, "coins = [\"bitcoin\"]\n");
-        assert!(editor.remove_wallet(0).is_err());
+        editor.remove_wallet(0).unwrap_err();
     }
 }

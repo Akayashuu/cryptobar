@@ -84,7 +84,7 @@ mod tests {
         let (_guard, editor) = editor();
         let original = "coins = [\"bitcoin\"]\nrefresh_interval = 60\n";
         seed(&editor, original);
-        assert!(editor.set_integer("refresh_interval", 1).is_err());
+        editor.set_integer("refresh_interval", 1).unwrap_err();
         assert_eq!(std::fs::read_to_string(editor.path()).unwrap(), original);
     }
 

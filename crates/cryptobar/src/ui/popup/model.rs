@@ -42,7 +42,7 @@ pub(super) struct Model {
     /// Balances read from the watched addresses, summed per cryptocurrency.
     pub(super) onchain: std::collections::BTreeMap<CoinId, f64>,
     /// Per-address detail, for the list of watched wallets.
-    pub(super) balances: Vec<crate::onchain::Balance>,
+    pub(super) balances: Vec<Balance>,
     /// Number of the last search fired: late answers, whose term the user has
     /// already changed, are dropped.
     pub(super) generation: u64,

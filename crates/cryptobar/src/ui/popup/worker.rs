@@ -78,7 +78,7 @@ pub(super) fn drain(ctx: &Rc<Ctx>, rx: Receiver<Msg>) {
                         model.quotes = quotes;
                         model.stale = stale;
                         model.answered = true;
-                    }
+                    };
                     report_first(&ctx, &icon_failures);
                     ctx.redraw();
                 }
@@ -87,7 +87,7 @@ pub(super) fn drain(ctx: &Rc<Ctx>, rx: Receiver<Msg>) {
                         let mut model = ctx.model.borrow_mut();
                         model.stale = true;
                         model.answered = true;
-                    }
+                    };
                     ctx.note(&root_cause(&failure), true);
                     ctx.redraw();
                 }
@@ -96,7 +96,7 @@ pub(super) fn drain(ctx: &Rc<Ctx>, rx: Receiver<Msg>) {
                         let mut model = ctx.model.borrow_mut();
                         model.onchain = crate::onchain::totals(&balances);
                         model.balances = balances;
-                    }
+                    };
                     report_first(&ctx, &failures);
                     ctx.redraw();
                 }

@@ -112,7 +112,7 @@ mod tests {
     #[test]
     fn an_ethereum_response_without_a_result_is_an_error() {
         let body = r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000}}"#;
-        assert!(decode_ethereum(body).is_err());
+        decode_ethereum(body).unwrap_err();
     }
 
     #[test]

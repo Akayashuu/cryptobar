@@ -298,7 +298,7 @@ mod tests {
         let btc = quotes.first().unwrap();
         assert_eq!(btc.change_24h, None);
         assert_eq!(btc.sparkline.len(), 0);
-        let doge = quotes.get(1).unwrap();
+        let doge = &quotes[1];
         assert_eq!(doge.name, "DOGE");
     }
 

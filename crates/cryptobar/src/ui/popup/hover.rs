@@ -65,8 +65,8 @@ pub(super) fn attach_hover(
                 ));
             }
             area.queue_draw();
-        });
-    }
+        })
+    };
     {
         let area = area.clone();
         let readout = readout.clone();
@@ -75,8 +75,8 @@ pub(super) fn attach_hover(
             hover.set(None);
             readout.set_text(" ");
             area.queue_draw();
-        });
-    }
+        })
+    };
     area.add_controller(motion);
 }
 

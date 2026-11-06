@@ -339,11 +339,11 @@ fn donut(wallet: Option<&Portfolio>) -> gtk4::DrawingArea {
 }
 
 fn paint_ring(
-    ctx: &gtk4::cairo::Context,
+    ctx: &cairo::Context,
     width: i32,
     height: i32,
     slices: &[(f64, String)],
-) -> Result<(), gtk4::cairo::Error> {
+) -> Result<(), cairo::Error> {
     let size = f64::from(width.min(height));
     let center = size / 2.0;
     let radius = center - 8.0;
@@ -358,7 +358,7 @@ fn paint_ring(
         let sweep = (share.clamp(0.0, 1.0) * std::f64::consts::TAU - 0.04).max(0.01);
         let (red, green, blue) = rgb(color);
         ctx.set_source_rgb(red, green, blue);
-        ctx.set_line_cap(gtk4::cairo::LineCap::Round);
+        ctx.set_line_cap(cairo::LineCap::Round);
         ctx.arc(center, center, radius, start, start + sweep);
         ctx.stroke()?;
         start += share.clamp(0.0, 1.0) * std::f64::consts::TAU;

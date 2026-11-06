@@ -97,7 +97,7 @@ mod tests {
 
     #[test]
     fn clap_validates_the_bar_markup() {
-        assert!(Cli::try_parse_from(["cryptobar", "bar", "--markup", "bold"]).is_err());
+        Cli::try_parse_from(["cryptobar", "bar", "--markup", "bold"]).unwrap_err();
         let cli = Cli::try_parse_from(["cryptobar", "bar", "--markup", "none"]).unwrap();
         assert!(matches!(
             cli.command,
@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn the_chart_range_is_validated() {
-        assert!(Cli::try_parse_from(["cryptobar", "chart", "--range", "42x"]).is_err());
+        Cli::try_parse_from(["cryptobar", "chart", "--range", "42x"]).unwrap_err();
         let cli = Cli::try_parse_from(["cryptobar", "chart", "--range", "24h"]).unwrap();
         assert!(matches!(
             cli.command,

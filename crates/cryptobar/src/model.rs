@@ -333,9 +333,9 @@ mod tests {
     fn coin_id_rejects_what_is_not_an_id() {
         assert!(matches!(CoinId::parse(""), Err(ModelError::EmptyCoinId)));
         assert!(matches!(CoinId::parse("   "), Err(ModelError::EmptyCoinId)));
-        assert!(CoinId::parse("bit coin").is_err());
-        assert!(CoinId::parse("bitcoin;rm -rf /").is_err());
-        assert!(CoinId::parse("../etc/passwd").is_err());
+        CoinId::parse("bit coin").unwrap_err();
+        CoinId::parse("bitcoin;rm -rf /").unwrap_err();
+        CoinId::parse("../etc/passwd").unwrap_err();
     }
 
     #[test]
@@ -343,7 +343,7 @@ mod tests {
         assert_eq!(Currency::parse("EUR").unwrap().as_str(), "eur");
         assert_eq!(Currency::parse("eur").unwrap().symbol(), "€");
         assert_eq!(Currency::parse("usd").unwrap().symbol(), "$");
-        assert!(Currency::parse("xyz").is_err());
+        Currency::parse("xyz").unwrap_err();
     }
 
     #[test]
@@ -378,6 +378,6 @@ mod tests {
         assert_eq!("24H".parse::<Range>().unwrap(), Range::H24);
         assert_eq!(Range::H1.days(), "0.0417");
         assert_eq!(Range::Y1.days(), "365");
-        assert!("42d".parse::<Range>().is_err());
+        "42d".parse::<Range>().unwrap_err();
     }
 }

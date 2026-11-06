@@ -61,8 +61,8 @@ fn export_png(
     let path = export_path(symbol, range, "png")?;
     let width = CHART_WIDTH.saturating_mul(2);
     let height = CHART_HEIGHT.saturating_mul(2);
-    let surface = gtk4::cairo::ImageSurface::create(gtk4::cairo::Format::ARgb32, width, height)?;
-    let ctx = gtk4::cairo::Context::new(&surface)?;
+    let surface = cairo::ImageSurface::create(cairo::Format::ARgb32, width, height)?;
+    let ctx = cairo::Context::new(&surface)?;
     ctx.set_source_rgb(0.07, 0.08, 0.10);
     ctx.paint()?;
     draw_series(

@@ -80,14 +80,16 @@ mod tests {
     fn adding_a_duplicate_is_rejected() {
         let (_guard, editor) = editor();
         seed(&editor, "coins = [\"bitcoin\"]\n");
-        assert!(editor.add_coin(&CoinId::parse("bitcoin").unwrap()).is_err());
+        editor
+            .add_coin(&CoinId::parse("bitcoin").unwrap())
+            .unwrap_err();
     }
 
     #[test]
     fn removing_the_last_coin_is_rejected_and_leaves_the_file_alone() {
         let (_guard, editor) = editor();
         seed(&editor, "coins = [\"bitcoin\"]\n");
-        assert!(editor.remove_coin("bitcoin").is_err());
+        editor.remove_coin("bitcoin").unwrap_err();
         assert_eq!(
             std::fs::read_to_string(editor.path()).unwrap(),
             "coins = [\"bitcoin\"]\n"
@@ -98,7 +100,7 @@ mod tests {
     fn removing_a_missing_coin_is_rejected() {
         let (_guard, editor) = editor();
         seed(&editor, "coins = [\"bitcoin\", \"solana\"]\n");
-        assert!(editor.remove_coin("ethereum").is_err());
+        editor.remove_coin("ethereum").unwrap_err();
     }
 
     #[test]

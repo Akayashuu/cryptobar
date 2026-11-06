@@ -61,7 +61,7 @@ pub(super) fn report_frame(
 /// and filling the image surface of the PNG export, which guarantees the
 /// exported file is exactly what one sees.
 pub(super) fn draw_series(
-    ctx: &gtk4::cairo::Context,
+    ctx: &cairo::Context,
     points: &[f64],
     positive: bool,
     area_width: f64,
@@ -118,7 +118,7 @@ pub(super) fn draw_series(
     }
     ctx.line_to(area_width, area_height);
     ctx.close_path();
-    let gradient = gtk4::cairo::LinearGradient::new(0.0, 0.0, 0.0, area_height);
+    let gradient = cairo::LinearGradient::new(0.0, 0.0, 0.0, area_height);
     gradient.add_color_stop_rgba(0.0, red, green, blue, 0.32);
     gradient.add_color_stop_rgba(1.0, red, green, blue, 0.0);
     ctx.set_source(&gradient)?;
@@ -133,8 +133,8 @@ pub(super) fn draw_series(
     }
     ctx.set_source_rgb(red, green, blue);
     ctx.set_line_width(if detailed { 2.0 } else { 1.4 });
-    ctx.set_line_join(gtk4::cairo::LineJoin::Round);
-    ctx.set_line_cap(gtk4::cairo::LineCap::Round);
+    ctx.set_line_join(cairo::LineJoin::Round);
+    ctx.set_line_cap(cairo::LineCap::Round);
     ctx.stroke()?;
 
     if let Some((x, y)) = hover

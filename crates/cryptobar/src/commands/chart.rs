@@ -76,11 +76,7 @@ pub fn render(
 
     let last = series.points.last().copied().unwrap_or(0.0);
     let first = series.points.first().copied().unwrap_or(last);
-    let change = if first.abs() > f64::EPSILON {
-        Some((last - first) / first * 100.0)
-    } else {
-        None
-    };
+    let change = (first.abs() > f64::EPSILON).then(|| (last - first) / first * 100.0);
 
     let mut out = String::new();
     push_line(

@@ -93,7 +93,7 @@ mod tests {
         let (_guard, editor) = editor();
         seed(&editor, "coins = [\"bitcoin\"]\n");
         let id = CoinId::parse("bitcoin").unwrap();
-        assert!(editor.add_alert(&id, None, None, None).is_err());
+        editor.add_alert(&id, None, None, None).unwrap_err();
     }
 
     #[test]
@@ -102,7 +102,7 @@ mod tests {
         let original = "coins = [\"bitcoin\"]\n";
         seed(&editor, original);
         let id = CoinId::parse("solana").unwrap();
-        assert!(editor.add_alert(&id, Some(1.0), None, None).is_err());
+        editor.add_alert(&id, Some(1.0), None, None).unwrap_err();
         assert_eq!(std::fs::read_to_string(editor.path()).unwrap(), original);
     }
 
@@ -110,6 +110,6 @@ mod tests {
     fn removing_a_missing_alert_is_rejected() {
         let (_guard, editor) = editor();
         seed(&editor, "coins = [\"bitcoin\"]\n");
-        assert!(editor.remove_alert(0).is_err());
+        editor.remove_alert(0).unwrap_err();
     }
 }

@@ -118,7 +118,7 @@ mod tests {
     fn the_markup_parses_from_a_string() {
         assert_eq!("pango".parse(), Ok(Markup::Pango));
         assert_eq!("none".parse(), Ok(Markup::None));
-        assert!("bold".parse::<Markup>().is_err());
+        "bold".parse::<Markup>().unwrap_err();
     }
 
     #[test]
